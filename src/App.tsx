@@ -1,0 +1,582 @@
+import React, { useState } from 'react';
+import { Sidebar } from './components/layout/Sidebar';
+import { TopNavbar } from './components/layout/TopNavbar';
+import { LandingPage } from './components/landing/LandingPage';
+import { SignUpPage } from './components/auth/SignUpPage';
+import { LoginPage } from './components/auth/LoginPage';
+import { DashboardView } from './components/dashboard/DashboardView';
+import { ExploreCoursesView } from './components/courses/ExploreCoursesView';
+import { MyLearningView } from './components/learning/MyLearningView';
+import { CertificationsView } from './components/certifications/CertificationsView';
+import { LibraryView } from './components/library/LibraryView';
+import { CommunityView } from './components/community/CommunityView';
+import { BerryAiView } from './components/ai/BerryAiView';
+import { LiveTranscriptionView } from './components/transcription/LiveTranscriptionView';
+import { CalendarView } from './components/calendar/CalendarView';
+import { NotificationsView } from './components/notifications/NotificationsView';
+import { ProgressView } from './components/progress/ProgressView';
+import { ProfileView } from './components/profile/ProfileView';
+
+import {
+  COURSES,
+  INITIAL_LEARNER,
+  TASKS,
+  NOTIFICATIONS,
+  LIBRARY_RESOURCES,
+  TRANSCRIPT_SESSIONS,
+  SAMPLE_CERTIFICATES,
+} from './data/curriculumData';
+
+import {
+  Course,
+  LearnerProfile,
+  LearnerStage,
+  LessonMasteryState,
+  TaskItem,
+  AppNotification,
+  LibraryResource,
+  LiveTranscriptSession,
+  CertificateRecord,
+} from './types';
+import { isLiveTranscriptionAllowed, canNavigateBack, popNavigationHistory } from './utils/mastery';
+
+export default function App() {
+  const [learner, setLearner] = useState<LearnerProfile>(INITIAL_LEARNER);
+  const [courses, setCourses] = useState<Course[]>(COURSES);
+  const [tasks, setTasks] = useState<TaskItem[]>(TASKS);
+  const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS);
+  const [libraryResources, setLibraryResources] = useState<LibraryResource[]>(LIBRARY_RESOURCES);
+  const [transcriptSessions, setTranscriptSessions] = useState<LiveTranscriptSession[]>(TRANSCRIPT_SESSIONS);
+  const [certificates, setCertificates] = useState<CertificateRecord[]>(SAMPLE_CERTIFICATES);
+
+  // Auth / Session State (starts logged out on landing page as requested)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [signupStage, setSignupStage] = useState<LearnerStage>('junior');
+
+  // Requirement: "let the 1st always be the landing page"
+  const [currentView, setCurrentView] = useState<string>('landing');
+  const [history, setHistory] = useState<string[]>([]);
+
+  // Active course and lesson state
+  const [activeCourse, setActiveCourse] = useState<Course>(COURSES[0]);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+
+  // Lesson Mastery Records
+  const [masteryRecords, setMasteryRecords] = useState<Record<string, LessonMasteryState>>({
+    'cbc-g1-math-l1': {
+      lessonId: 'cbc-g1-math-l1',
+      isCompleted: true,
+      isMastered: true,
+      scorePercent: 100,
+      attemptsCount: 1,
+      lastAttemptDate: '2026-10-24T08:00:00Z',
+      identifiedMisconceptions: [],
+      remedialActivitiesCompleted: false,
+    },
+  });
+
+  // UI state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [logoutNotice, setLogoutNotice] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+
+  // Navigation handlers with historical tracking for Back arrow
+  const handleNavigate = (newView: string) => {
+    if (newView === currentView) return;
+    setHistory((prev) => [...prev, currentView]);
+    setCurrentView(newView);
+    setMobileMenuOpen(false);
+  };
+
+  // Requirement: "alway hava an arrow showing that can let you go back to the previous page"
+  const handleNavigateBack = () => {
+    const { targetView, nextHistory } = popNavigationHistory(history, 'landing');
+    setHistory(nextHistory);
+    setCurrentView(targetView);
+  };
+
+  // Navigation to auth pages
+  const handleGoToLogin = () => {
+    handleNavigate('login');
+  };
+
+  const handleGoToSignUp = (stage?: LearnerStage) => {
+    if (stage) {
+      setSignupStage(stage);
+    }
+    handleNavigate('signup');
+  };
+
+  // Requirement: "add the logout feature"
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setHistory([]);
+    setCurrentView('landing');
+    setLogoutNotice('You have successfully logged out of Berry.');
+    setTimeout(() => setLogoutNotice(null), 4000);
+  };
+
+  // Login handler
+  const handleLogin = (chosenProfile?: Partial<LearnerProfile>) => {
+    setIsLoggedIn(true);
+    if (chosenProfile) {
+      setLearner((prev) => ({
+        ...prev,
+        ...chosenProfile,
+      }));
+    }
+    const displayName = chosenProfile?.name || learner.name || 'Learner';
+    setAuthNotice(`Welcome back to Berry, ${displayName}!`);
+    setTimeout(() => setAuthNotice(null), 4000);
+    handleNavigate('dashboard');
+  };
+
+  // Complete sign up handler from registration
+  const handleCompleteSignUp = (registeredProfile: Partial<LearnerProfile>) => {
+    setIsLoggedIn(true);
+    setLearner((prev) => ({
+      ...prev,
+      ...registeredProfile,
+    }));
+    setAuthNotice(`Welcome to Berry, ${registeredProfile.name || 'Learner'}! Your account is active.`);
+    setTimeout(() => setAuthNotice(null), 4000);
+    handleNavigate('dashboard');
+  };
+
+  // Handler for stage changes
+  const handleUpdateStage = (newStage: LearnerStage) => {
+    const stageGradeDefaults: Record<string, string> = {
+      early: 'PP1',
+      junior: 'Grade 1',
+      senior: 'Grade 10',
+      advance: 'Bachelor Year 2',
+      university: 'Bachelor Year 2',
+      professionals: 'Professional',
+    };
+
+    setLearner((prev) => ({
+      ...prev,
+      stage: newStage,
+      gradeLevel: stageGradeDefaults[newStage] || 'Grade 1',
+    }));
+
+    // If on live transcription and switched to junior/senior/early, redirect to dashboard
+    if (currentView === 'transcription' && !isLiveTranscriptionAllowed(newStage)) {
+      handleNavigate('dashboard');
+    }
+  };
+
+  // Open a specific lesson
+  const handleOpenLesson = (course: Course, lessonId: string) => {
+    setActiveCourse(course);
+    setActiveLessonId(lessonId);
+    handleNavigate('my-learning');
+  };
+
+  // Save lesson mastery record
+  const handleSaveMastery = (record: LessonMasteryState) => {
+    setMasteryRecords((prev) => ({
+      ...prev,
+      [record.lessonId]: record,
+    }));
+
+    if (record.isMastered) {
+      const newNotif: AppNotification = {
+        id: `notif-${Date.now()}`,
+        title: 'Mastery Demonstrated! 🎉',
+        message: `You demonstrated genuine understanding with a score of ${record.scorePercent}%! Next lesson unlocked.`,
+        stage: learner.stage,
+        type: 'mastery',
+        date: 'Just now',
+        unread: true,
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+    }
+  };
+
+  // Claim verified certificate when exam is passed
+  const handleClaimCertificate = (course: Course, scorePercent: number) => {
+    const newCert: CertificateRecord = {
+      id: `cert-${Date.now()}`,
+      credentialId: `BERRY-CBC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      courseId: course.id,
+      courseTitle: course.title,
+      recipientName: learner.name,
+      stage: learner.stage,
+      gradeLevel: course.gradeLevel,
+      curriculum: course.curriculum,
+      issuedDate: new Date().toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+      scorePercent: scorePercent,
+      authority: 'Kenya CBC Digital Learning Directorate • Berry Ecosystem',
+      verified: true,
+    };
+
+    setCertificates((prev) => [newCert, ...prev]);
+
+    const newNotif: AppNotification = {
+      id: `notif-${Date.now()}`,
+      title: 'Verified Certificate Awarded! 🎓',
+      message: `You scored ${scorePercent}% on the ${course.subject} Final Exam! Your official CBC Certificate has been issued.`,
+      stage: learner.stage,
+      type: 'certification',
+      date: 'Just now',
+      unread: true,
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+  };
+
+  // Enroll in course
+  const handleEnrollCourse = (courseId: string) => {
+    if (!learner.enrolledCourseIds.includes(courseId)) {
+      setLearner((prev) => ({
+        ...prev,
+        enrolledCourseIds: [...prev.enrolledCourseIds, courseId],
+      }));
+    }
+  };
+
+  // Notification handlers
+  const handleMarkNotificationRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, unread: false } : n))
+    );
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  };
+
+  // Task handlers
+  const handleToggleTaskComplete = (taskId: string) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              status: t.status === 'completed' ? 'pending' : 'completed',
+            }
+          : t
+      )
+    );
+  };
+
+  const handleAddTask = (newTask: Omit<TaskItem, 'id'>) => {
+    const item: TaskItem = {
+      ...newTask,
+      id: `task-${Date.now()}`,
+    };
+    setTasks((prev) => [item, ...prev]);
+  };
+
+  // Library bookmark handler
+  const handleToggleBookmark = (resourceId: string) => {
+    setLibraryResources((prev) =>
+      prev.map((r) =>
+        r.id === resourceId ? { ...r, isSaved: !r.isSaved } : r
+      )
+    );
+  };
+
+  // Transcript session handler
+  const handleSaveTranscriptSession = (session: LiveTranscriptSession) => {
+    setTranscriptSessions((prev) => [session, ...prev]);
+  };
+
+  // Accessibility classes
+  const fontScaleClass = {
+    normal: 'text-base',
+    large: 'text-lg',
+    xlarge: 'text-xl',
+  }[learner.accessibility.fontSize];
+
+  const dyslexiaClass = learner.accessibility.dyslexiaFont ? 'font-mono' : 'font-sans';
+  const contrastClass = learner.accessibility.highContrast
+    ? 'contrast-125 saturate-150'
+    : '';
+
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  // View: Landing Page (Default 1st view)
+  if (currentView === 'landing') {
+    return (
+      <div className={`${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}>
+        {logoutNotice && (
+          <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+            <span>✓ {logoutNotice}</span>
+          </div>
+        )}
+        {authNotice && (
+          <div className="fixed top-4 right-4 z-50 bg-purple-600 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+            <span>✓ {authNotice}</span>
+          </div>
+        )}
+        <LandingPage
+          onStartLearning={(chosenProfile) => {
+            if (isLoggedIn) {
+              handleNavigate('dashboard');
+            } else {
+              handleLogin(chosenProfile);
+            }
+          }}
+          onLogin={handleGoToLogin}
+          onGoToSignUp={handleGoToSignUp}
+          onLogout={handleLogout}
+          learner={learner}
+          isLoggedIn={isLoggedIn}
+          onNavigateBack={handleNavigateBack}
+          canGoBack={canNavigateBack(history, currentView)}
+        />
+      </div>
+    );
+  }
+
+  // View: Dedicated Sign-Up Page
+  if (currentView === 'signup') {
+    return (
+      <div className={`${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}>
+        <SignUpPage
+          initialStage={signupStage}
+          onCompleteSignUp={handleCompleteSignUp}
+          onGoToLogin={handleGoToLogin}
+          onNavigateBack={handleNavigateBack}
+        />
+      </div>
+    );
+  }
+
+  // View: Dedicated Log-In Page
+  if (currentView === 'login') {
+    return (
+      <div className={`${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}>
+        <LoginPage
+          onLogin={handleLogin}
+          onGoToSignUp={() => handleGoToSignUp()}
+          onNavigateBack={handleNavigateBack}
+        />
+      </div>
+    );
+  }
+
+  // Fallback guard: If logged out and attempting to access internal views, prompt login
+  if (!isLoggedIn) {
+    return (
+      <div className={`${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}>
+        <LoginPage
+          onLogin={handleLogin}
+          onGoToSignUp={() => handleGoToSignUp()}
+          onNavigateBack={() => handleNavigate('landing')}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans ${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}
+    >
+      {/* Collapsible Stage-Aware Sidebar */}
+      <Sidebar
+        currentView={currentView}
+        onNavigate={handleNavigate}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        stage={learner.stage}
+        unreadNotificationsCount={unreadCount}
+        onLogout={handleLogout}
+      />
+
+      {/* Main Content Area */}
+      <div
+        className={`flex-1 flex flex-col transition-all duration-300 ease-in-out ${
+          sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
+        }`}
+      >
+        {/* Top Navbar with Always-Visible Back Arrow & Logout */}
+        <TopNavbar
+          currentView={currentView}
+          onNavigate={handleNavigate}
+          onNavigateBack={handleNavigateBack}
+          canGoBack={canNavigateBack(history, currentView)}
+          onLogout={handleLogout}
+          learner={learner}
+          onUpdateStage={handleUpdateStage}
+          unreadCount={unreadCount}
+          sidebarCollapsed={sidebarCollapsed}
+          onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
+        />
+
+        {/* Mobile Navigation Drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-xs flex">
+            <div className="w-64 bg-white h-full p-4 overflow-y-auto space-y-2">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="font-extrabold text-base text-slate-900">BERRY MENU</span>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-xs font-bold text-slate-500"
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              {[
+                { id: 'dashboard', label: 'Dashboard' },
+                { id: 'my-learning', label: 'My Learning' },
+                { id: 'courses', label: 'Explore Courses' },
+                { id: 'certifications', label: 'Certifications' },
+                { id: 'ai-tutor', label: 'Berry AI Tutor' },
+                { id: 'community', label: 'Berry Community' },
+                { id: 'library', label: 'Berry Library' },
+                ...(isLiveTranscriptionAllowed(learner.stage)
+                  ? [{ id: 'transcription', label: 'Live Transcription' }]
+                  : []),
+                { id: 'calendar', label: 'Calendar & Tasks' },
+                { id: 'notifications', label: 'Notifications' },
+                { id: 'progress', label: 'Mastery & Progress' },
+                { id: 'profile', label: 'Profile & Settings' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavigate(item.id)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold ${
+                    currentView === item.id
+                      ? 'bg-purple-600 text-white'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+
+              <div className="pt-3 border-t border-slate-100">
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50"
+                >
+                  Log Out
+                </button>
+              </div>
+            </div>
+            <div className="flex-1" onClick={() => setMobileMenuOpen(false)} />
+          </div>
+        )}
+
+        {/* View Router */}
+        <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
+          {currentView === 'dashboard' && (
+            <DashboardView
+              learner={learner}
+              courses={courses}
+              tasks={tasks}
+              notifications={notifications}
+              masteryRecords={masteryRecords}
+              onSelectCourse={setActiveCourse}
+              onOpenLesson={handleOpenLesson}
+              onNavigate={handleNavigate}
+            />
+          )}
+
+          {currentView === 'my-learning' && (
+            <MyLearningView
+              learner={learner}
+              courses={courses}
+              masteryRecords={masteryRecords}
+              onSaveMastery={handleSaveMastery}
+              onNavigateToCertificates={() => handleNavigate('certifications')}
+              onClaimCertificate={handleClaimCertificate}
+            />
+          )}
+
+          {currentView === 'courses' && (
+            <ExploreCoursesView
+              courses={courses}
+              learner={learner}
+              onSelectCourse={setActiveCourse}
+              onOpenLesson={handleOpenLesson}
+              onEnrollCourse={handleEnrollCourse}
+            />
+          )}
+
+          {currentView === 'certifications' && (
+            <CertificationsView
+              learner={learner}
+              courses={courses}
+              certificates={certificates}
+              onNavigateToCourses={() => handleNavigate('my-learning')}
+            />
+          )}
+
+          {currentView === 'library' && (
+            <LibraryView
+              resources={libraryResources}
+              learner={learner}
+              onToggleBookmark={handleToggleBookmark}
+            />
+          )}
+
+          {currentView === 'community' && (
+            <CommunityView learner={learner} />
+          )}
+
+          {currentView === 'ai-tutor' && (
+            <BerryAiView
+              learner={learner}
+              courses={courses}
+              onOpenLesson={handleOpenLesson}
+            />
+          )}
+
+          {currentView === 'transcription' && (
+            <LiveTranscriptionView
+              stage={learner.stage as 'advance' | 'university' | 'professionals'}
+              sessions={transcriptSessions}
+              onSaveSession={handleSaveTranscriptSession}
+            />
+          )}
+
+          {currentView === 'calendar' && (
+            <CalendarView
+              tasks={tasks}
+              learner={learner}
+              onAddTask={handleAddTask}
+              onToggleTaskComplete={handleToggleTaskComplete}
+            />
+          )}
+
+          {currentView === 'notifications' && (
+            <NotificationsView
+              notifications={notifications}
+              learner={learner}
+              onMarkRead={handleMarkNotificationRead}
+              onMarkAllRead={handleMarkAllNotificationsRead}
+              onNavigate={handleNavigate}
+            />
+          )}
+
+          {currentView === 'progress' && (
+            <ProgressView
+              learner={learner}
+              courses={courses}
+              masteryRecords={masteryRecords}
+            />
+          )}
+
+          {currentView === 'profile' && (
+            <ProfileView
+              learner={learner}
+              onUpdateProfile={(updated) =>
+                setLearner((prev) => ({ ...prev, ...updated }))
+              }
+              onLogout={handleLogout}
+            />
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}

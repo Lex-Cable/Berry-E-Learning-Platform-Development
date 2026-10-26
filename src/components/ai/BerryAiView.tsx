@@ -1,0 +1,615 @@
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Sparkles,
+  Send,
+  Plus,
+  Search,
+  MessageSquare,
+  Trash2,
+  Edit2,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  BookOpen,
+  ArrowRight,
+  Bot,
+  User,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
+import { LearnerProfile, Course, AiConversation, AiChatMessage } from '../../types';
+import { INITIAL_CONVERSATIONS } from '../../data/curriculumData';
+
+interface BerryAiViewProps {
+  learner: LearnerProfile;
+  courses: Course[];
+  onOpenLesson: (course: Course, lessonId: string) => void;
+}
+
+export const BerryAiView: React.FC<BerryAiViewProps> = ({
+  learner,
+  courses,
+  onOpenLesson,
+}) => {
+  // Find current active course for context
+  const activeCourse =
+    courses.find((c) => learner.enrolledCourseIds.includes(c.id)) || courses[0];
+
+  const [conversations, setConversations] = useState<AiConversation[]>(() => {
+    const saved = localStorage.getItem('berry_ai_conversations');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // fallback
+      }
+    }
+    return INITIAL_CONVERSATIONS;
+  });
+
+  const [activeConvId, setActiveConvId] = useState<string>(
+    conversations[0]?.id || 'conv-1'
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // In-line thread renaming
+  const [editingConvId, setEditingConvId] = useState<string | null>(null);
+  const [editTitleText, setEditTitleText] = useState('');
+
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sync to local storage
+  useEffect(() => {
+    localStorage.setItem('berry_ai_conversations', JSON.stringify(conversations));
+  }, [conversations]);
+
+  // Auto-scroll to bottom of conversation
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversations, activeConvId, loading]);
+
+  const activeConversation =
+    conversations.find((c) => c.id === activeConvId) || conversations[0];
+
+  // Stage-tailored prompt suggestions
+  const promptSuggestions = {
+    early: [
+      'Can you sing a number song about 1, 2, and 3 lions? 🦁',
+      'What sound does the letter /a/ make in Apple? 🍎',
+      'How do domestic animals help families in Kenya? 🐄',
+      'Can you tell me a playful story about counting zebras?',
+    ],
+    junior: [
+      'Why does 1/2 + 1/4 equal 3/4 instead of 2/6 in Grade 1 math?',
+      'Explain the difference between coarse and fine focus knobs on a microscope!',
+      'What are the key safety precautions when using tools in Pre-Technical studies?',
+      'Give me a real-world Kenyan example of calculating total magnification.',
+    ],
+    senior: [
+      'Explain Bohr electron configurations of Sodium vs Chlorine',
+      'Why does atomic radius decrease across Period 3 in the Periodic Table?',
+      'How does the accounting equation maintain balance when purchasing equipment?',
+      'Compare aerobic respiration and ATP-PC systems in endurance runners.',
+    ],
+    advance: [
+      'Explain Master Theorem Case 2 with divide-and-conquer recurrence intuition',
+      'How should I weight Precision vs Recall for credit card fraud detection?',
+      'What are the trade-offs between AVL tree height balancing and Red-Black trees?',
+      'How do enterprise ML pipelines remediate concept and covariate drift?',
+    ],
+    university: [
+      'Explain Master Theorem Case 2 with divide-and-conquer recurrence intuition',
+      'What are the trade-offs between AVL tree height balancing and Red-Black trees?',
+    ],
+    professionals: [
+      'How should I weight Precision vs Recall for credit card fraud detection?',
+      'How do enterprise ML pipelines remediate concept and covariate drift?',
+    ],
+  }[learner.stage] || [
+    'Help me understand the core concepts in my course.',
+    'Test my understanding with a guided question!',
+  ];
+
+  const handleCreateNewChat = () => {
+    const newId = `conv-${Date.now()}`;
+    const newConv: AiConversation = {
+      id: newId,
+      title: 'New Conversation',
+      createdAt: 'Just now',
+      updatedAt: 'Just now',
+      messages: [
+        {
+          id: `m-${Date.now()}`,
+          sender: 'assistant',
+          text: `Hello ${learner.name}! I am Berry AI, your Socratic study companion for **${
+            activeCourse?.title || 'your curriculum'
+          }**.\n\nI will help you build deep, genuine understanding step-by-step. What concept, homework problem, or curiosity would you like to explore?`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ],
+    };
+    setConversations([newConv, ...conversations]);
+    setActiveConvId(newId);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleDeleteConversation = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (conversations.length <= 1) {
+      alert('You must keep at least one conversation in history.');
+      return;
+    }
+    const filtered = conversations.filter((c) => c.id !== id);
+    setConversations(filtered);
+    if (activeConvId === id) {
+      setActiveConvId(filtered[0].id);
+    }
+  };
+
+  const handleStartRename = (conv: AiConversation, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingConvId(conv.id);
+    setEditTitleText(conv.title);
+  };
+
+  const handleSaveRename = (id: string, e: React.MouseEvent | React.FormEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!editTitleText.trim()) return;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title: editTitleText.trim() } : c))
+    );
+    setEditingConvId(null);
+  };
+
+  const handleSend = async (messageText?: string) => {
+    const textToSend = messageText || input;
+    if (!textToSend.trim() || loading || !activeConversation) return;
+
+    const userMessage: AiChatMessage = {
+      id: `usr-${Date.now()}`,
+      sender: 'user',
+      text: textToSend.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    const isFirstUserMessage =
+      activeConversation.messages.filter((m) => m.sender === 'user').length === 0;
+
+    const updatedTitle =
+      isFirstUserMessage && activeConversation.title === 'New Conversation'
+        ? textToSend.trim().slice(0, 32) + (textToSend.length > 32 ? '...' : '')
+        : activeConversation.title;
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeConversation.id
+          ? {
+              ...c,
+              title: updatedTitle,
+              updatedAt: 'Just now',
+              messages: [...c.messages, userMessage],
+            }
+          : c
+      )
+    );
+
+    setInput('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: textToSend,
+          stage: learner.stage,
+          courseTitle: activeCourse?.title,
+          currentTopic: activeCourse?.chapters[0]?.title,
+        }),
+      });
+
+      if (!res.ok) throw new Error('API request failed');
+      const data = await res.json();
+
+      const assistantMessage: AiChatMessage = {
+        id: `asst-${Date.now()}`,
+        sender: 'assistant',
+        text: data.reply,
+        source: data.source || 'Berry Socratic AI',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        suggestedFollowUps: data.followUps,
+      };
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversation.id
+            ? { ...c, messages: [...c.messages, assistantMessage] }
+            : c
+        )
+      );
+    } catch (err) {
+      // Local fallback with pedagogical reasoning
+      const fallbackReply = `Great inquiry on this concept! In our **${
+        activeCourse?.title || 'course'
+      }**, let's build the answer collaboratively:\n\n1. Let's look at the underlying definition.\n2. What is your current understanding of the initial condition?\n3. Tell me your initial step, and we will verify it together!`;
+
+      const assistantMessage: AiChatMessage = {
+        id: `asst-${Date.now()}`,
+        sender: 'assistant',
+        text: fallbackReply,
+        source: 'Berry Local Pedagogy',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversation.id
+            ? { ...c, messages: [...c.messages, assistantMessage] }
+            : c
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Filter conversations matching search query
+  const filteredConversations = conversations.filter(
+    (c) =>
+      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.messages.some((m) => m.text.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  return (
+    <div className="flex h-[calc(100vh-8.5rem)] bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+      {/* =========================================
+          LEFT COLLAPSIBLE SIDEBAR: CONVERSATION HISTORY
+          ========================================= */}
+      <div
+        className={`flex flex-col border-r border-slate-200 bg-slate-50 transition-all duration-300 ease-in-out ${
+          sidebarOpen ? 'w-80' : 'w-0 -translate-x-full lg:w-0'
+        } overflow-hidden`}
+      >
+        {/* Top Controls: New Chat & Search */}
+        <div className="p-4 border-b border-slate-200 space-y-3 bg-white">
+          <button
+            onClick={handleCreateNewChat}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow transition-all active:scale-95"
+          >
+            <Plus size={16} />
+            <span>New Chat</span>
+          </button>
+
+          {/* Search Conversation History */}
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="text"
+              placeholder="Search chat history..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-100 border border-transparent focus:border-purple-300 focus:bg-white focus:outline-none transition-all text-slate-800"
+            />
+          </div>
+        </div>
+
+        {/* Conversation Threads List */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Past Conversations ({filteredConversations.length})
+          </div>
+
+          {filteredConversations.length === 0 ? (
+            <div className="p-4 text-center text-xs text-slate-400">
+              No conversations found matching "{searchQuery}"
+            </div>
+          ) : (
+            filteredConversations.map((conv) => {
+              const isActive = conv.id === activeConvId;
+              const isEditing = editingConvId === conv.id;
+
+              return (
+                <div
+                  key={conv.id}
+                  onClick={() => setActiveConvId(conv.id)}
+                  className={`group relative flex items-center justify-between p-2.5 rounded-xl cursor-pointer text-xs transition-all ${
+                    isActive
+                      ? 'bg-purple-100/70 text-purple-950 font-bold border border-purple-200'
+                      : 'text-slate-700 hover:bg-slate-200/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 overflow-hidden flex-1 mr-2">
+                    <MessageSquare
+                      size={15}
+                      className={isActive ? 'text-purple-600 flex-shrink-0' : 'text-slate-400 flex-shrink-0'}
+                    />
+
+                    {isEditing ? (
+                      <form
+                        onSubmit={(e) => handleSaveRename(conv.id, e)}
+                        className="flex-1 flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="text"
+                          value={editTitleText}
+                          onChange={(e) => setEditTitleText(e.target.value)}
+                          className="w-full text-xs px-2 py-0.5 rounded bg-white border border-purple-400 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          type="submit"
+                          className="p-1 hover:text-emerald-600"
+                          title="Save"
+                        >
+                          <Check size={13} />
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="flex-1 truncate">
+                        <span className="truncate block">{conv.title}</span>
+                        <span className="text-[10px] font-normal text-slate-400 block truncate">
+                          {conv.updatedAt}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {!isEditing && (
+                    <div className="hidden group-hover:flex items-center gap-1">
+                      <button
+                        onClick={(e) => handleStartRename(conv, e)}
+                        title="Rename"
+                        className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-200"
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteConversation(conv.id, e)}
+                        title="Delete"
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Sidebar Footer: Model Specs */}
+        <div className="p-3 border-t border-slate-200 bg-white text-[11px] text-slate-500 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Sparkles size={13} className="text-purple-600" />
+            <span className="font-semibold text-slate-700">Berry Gemini Socratic</span>
+          </div>
+          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] font-bold text-slate-600 uppercase">
+            Active
+          </span>
+        </div>
+      </div>
+
+      {/* =========================================
+          MAIN CHAT AREA: CHATGPT STYLE
+          ========================================= */}
+      <div className="flex-1 flex flex-col bg-white overflow-hidden">
+        {/* Header Bar */}
+        <div className="h-14 border-b border-slate-200 px-4 flex items-center justify-between bg-white/80 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+              title={sidebarOpen ? 'Collapse conversation sidebar' : 'Expand conversation sidebar'}
+            >
+              {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+            </button>
+
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 line-clamp-1">
+                {activeConversation?.title || 'Berry AI Socratic Tutor'}
+              </h2>
+              <p className="text-[10px] text-slate-500">
+                Course: {activeCourse?.title} • {learner.stage.toUpperCase()} Mode
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCreateNewChat}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors"
+            >
+              <Plus size={13} />
+              <span>New Thread</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Messages Scroll View */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+          {activeConversation?.messages.map((msg) => {
+            const isUser = msg.sender === 'user';
+
+            return (
+              <div
+                key={msg.id}
+                className={`flex gap-3 max-w-3xl ${
+                  isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
+                }`}
+              >
+                {/* Avatar */}
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold shadow-xs ${
+                    isUser
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-400 text-white'
+                  }`}
+                >
+                  {isUser ? <User size={14} /> : <Bot size={15} />}
+                </div>
+
+                {/* Message Bubble */}
+                <div
+                  className={`space-y-1.5 max-w-2xl ${
+                    isUser ? 'text-right' : 'text-left'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 text-[10px] text-slate-400 px-1">
+                    <span className="font-semibold text-slate-600">
+                      {isUser ? learner.name : 'Berry AI Tutor'}
+                    </span>
+                    <span>•</span>
+                    <span>{msg.timestamp}</span>
+                  </div>
+
+                  <div
+                    className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-line text-left shadow-xs ${
+                      isUser
+                        ? 'bg-purple-600 text-white rounded-tr-xs font-medium'
+                        : 'bg-slate-50 text-slate-800 border border-slate-200/80 rounded-tl-xs'
+                    }`}
+                  >
+                    {msg.text}
+
+                    {/* Copy action on assistant response */}
+                    {!isUser && (
+                      <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
+                        <span className="text-[10px] font-semibold text-purple-600">
+                          {msg.source || 'Socratic Dialogue'}
+                        </span>
+                        <button
+                          onClick={() => handleCopy(msg.id, msg.text)}
+                          className="flex items-center gap-1 hover:text-slate-700 transition-colors"
+                        >
+                          {copiedId === msg.id ? (
+                            <>
+                              <Check size={12} className="text-emerald-600" />
+                              <span className="text-emerald-600">Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Socratic Follow-Up Chips */}
+                  {msg.suggestedFollowUps && msg.suggestedFollowUps.length > 0 && (
+                    <div className="pt-2 flex flex-wrap gap-1.5">
+                      {msg.suggestedFollowUps.map((prompt, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleSend(prompt)}
+                          className="px-2.5 py-1 rounded-full bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-[11px] font-medium transition-all text-left"
+                        >
+                          👉 {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Loading Indicator Bubble */}
+          {loading && (
+            <div className="flex gap-3 mr-auto max-w-xl">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-400 text-white flex items-center justify-center flex-shrink-0 text-xs">
+                <Bot size={15} />
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 rounded-tl-xs flex items-center gap-2 text-xs text-purple-700 font-semibold">
+                <Sparkles size={14} className="animate-spin text-purple-600" />
+                <span>Formulating Socratic guidance...</span>
+              </div>
+            </div>
+          )}
+
+          <div ref={chatBottomRef} />
+        </div>
+
+        {/* Suggested Prompts (when starting fresh chat) */}
+        {activeConversation?.messages.length <= 1 && (
+          <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+              Suggested Topics for {learner.stage.toUpperCase()}:
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {promptSuggestions.slice(0, 4).map((p, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSend(p)}
+                  className="text-left p-2 rounded-xl bg-white border border-slate-200 hover:border-purple-300 hover:bg-purple-50/50 text-xs text-slate-700 transition-all line-clamp-1"
+                >
+                  💡 {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Bottom Input Area */}
+        <div className="p-4 border-t border-slate-200 bg-white">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+            className="flex items-center gap-2 max-w-4xl mx-auto"
+          >
+            <div className="relative flex-1">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={`Ask Berry AI about ${activeCourse?.subject || 'your subjects'}... (Enter to send)`}
+                className="w-full pl-4 pr-10 py-3 text-xs sm:text-sm rounded-2xl bg-slate-50 border border-slate-200 focus:border-purple-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-100 resize-none transition-all text-slate-800"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!input.trim() || loading}
+              className="p-3 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white shadow transition-all active:scale-95 flex-shrink-0"
+              title="Send message"
+            >
+              <Send size={16} />
+            </button>
+          </form>
+          <p className="text-[10px] text-center text-slate-400 mt-2">
+            Berry AI guides learning through Socratic dialogue. Never replaces classroom teachers or official exams.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};

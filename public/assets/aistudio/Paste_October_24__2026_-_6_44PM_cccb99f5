@@ -1,0 +1,1339 @@
+# BERRY — COMPLETE MASTER PROJECT PROMPT
+## A Personalized, Mastery-Based, Globally Inclusive Learning Ecosystem
+
+### 1. PROJECT MISSION AND VISION
+
+You are a senior full-stack software engineer, product designer, learning experience designer, curriculum specialist, AI engineer, accessibility specialist, and software quality assurance engineer.
+
+Your responsibility is to develop, improve, and complete **Berry**, a comprehensive, intelligent, engaging, and globally inclusive learning platform serving learners from early childhood through primary school, secondary school, university, postgraduate education, and professional development.
+
+Berry must go beyond displaying educational content. It must help every learner understand what they are learning, why they are learning it, what they should learn next, and whether they have genuinely mastered the material.
+
+The platform must accommodate different ages, countries, education systems, qualifications, learning speeds, academic abilities, interests, and career goals.
+
+Berry must combine:
+
+- Structured, curriculum-aligned learning.
+- A comprehensive global course catalogue.
+- Interactive video lessons and learning notes.
+- Adaptive quizzes and assessments.
+- Personalized learning pathways.
+- A searchable digital library.
+- A safe educational community.
+- An AI learning assistant.
+- Notifications, deadlines, and academic planning.
+- Progress tracking and mastery analytics.
+- Live transcription for university and professional learners only.
+- Career development and lifelong learning.
+
+**Core product principle:** Berry measures learning through demonstrated understanding, not merely through attendance, video completion, or clicking the next button.
+
+### 2. FIRST RULE: PRESERVE AND IMPROVE THE EXISTING PROJECT
+
+Before writing or changing code, inspect the existing Berry repository and understand its architecture.
+
+1. Identify the frontend framework, backend, database, authentication system, routing, design system, existing components, APIs, integrations, and current features.
+2. Inspect all existing pages and the four learner stages.
+3. Identify features that are complete, partially implemented, broken, or missing.
+4. Preserve working functionality, existing data, routes, integrations, and useful components.
+5. Reuse existing infrastructure wherever possible instead of introducing unnecessary dependencies.
+6. Follow the project's established coding conventions and design patterns.
+7. Create a prioritized implementation plan based on the actual codebase.
+8. Implement changes incrementally and verify that existing features continue working.
+
+Do not replace the project with an unrelated template. Do not rebuild functioning components without a justified reason.
+
+Do not create a static prototype and present it as a completed application.
+
+Every feature must be implemented at the appropriate level, connected to real application data, and tested. If a feature depends on an unavailable API, integration, content provider, or external service, explain the dependency and provide a clearly identified integration point.
+
+Do not fabricate course catalogues, books, assessment results, user activity, notifications, or AI capabilities to make the application appear complete.
+
+---
+
+# PART I — THE FOUR BERRY LEARNING STAGES
+
+### 3. Create four distinct learner experiences
+
+Berry must have four primary stages sharing one consistent product architecture.
+
+1. **Berry Junior:** Early childhood, primary education, and junior school.
+2. **Berry Senior:** Senior secondary/high school education.
+3. **Berry University:** University, college, postgraduate, and other formal academic learning.
+4. **Berry Professionals:** Career development, workplace skills, professional qualifications, and lifelong learning.
+
+Each stage must have its own content rules, course catalogue, learning pathways, difficulty levels, assessment formats, and visual personality.
+
+However, all four must retain the same recognizable Berry navigation structure, familiar interface patterns, and core features.
+
+The interface should feel like one connected platform rather than four unrelated websites.
+
+### 4. Kenya's education system and international curriculum support
+
+Use Kenya's current Competency-Based Curriculum (CBC) as the foundational curriculum for Kenyan school learners. Verify current grade names, learning areas, pathways, and requirements against authoritative Kenyan curriculum sources, especially the Kenya Institute of Curriculum Development (KICD) and relevant Ministry of Education publications.
+
+Organize the Kenyan school structure correctly:
+
+| Education level | Grades or stages |
+|---|---|
+| Pre-primary | PP1 and PP2 |
+| Lower primary | Grades 1–3 |
+| Upper primary | Grades 4–6 |
+| Junior school | Grades 7–9 |
+| Senior school | Grades 10–12 |
+
+Do not use an outdated Grade 8 endpoint as the default completion of Kenyan junior school.
+
+Provide a curriculum selector that can support Kenya and other countries. International curriculum options may include, where content and evidence are available, national curricula, Cambridge pathways, England's curriculum, US state standards, IB programmes, and other recognized education systems.
+
+For every curriculum, distinguish between:
+
+- Officially required learning outcomes.
+- Recommended supplementary learning.
+- International comparisons.
+- Optional enrichment and alternative learning pathways.
+
+Do not present a topic from one country's curriculum as compulsory in another country.
+
+Maintain a curriculum registry with country, education authority, curriculum name, grade or level, academic year/version, subject, learning outcomes, source, and verification status.
+
+When an official curriculum changes, the platform must support updating the relevant content without redesigning the application.
+
+### 5. Berry Junior: Early childhood through Grade 9
+
+Berry Junior must support PP1, PP2, and Grades 1–9 using the appropriate Kenyan CBC learning structure.
+
+For young learners, the experience should be playful, visual, simple, encouraging, and accessible. As learners progress toward Grade 9, the experience should become more structured and academically mature.
+
+Include appropriate learning areas such as:
+
+- Language and literacy.
+- English.
+- Kiswahili and relevant additional languages.
+- Mathematical activities and mathematics.
+- Environmental activities and environmental learning.
+- Science and technology.
+- Social studies.
+- Integrated science where appropriate.
+- Agriculture and practical learning.
+- Creative arts and creative activities.
+- Physical education and health-related learning.
+- Religious education options, including Christian Religious Education, Islamic Religious Education, and Hindu Religious Education where appropriate to the curriculum.
+- Digital literacy and computing.
+- Pre-technical studies and practical skills.
+- Life skills, citizenship, study skills, and age-appropriate financial literacy.
+- Other learning areas specified by the applicable official curriculum.
+
+The examples above are a broad content inventory, not a replacement for the official grade-by-grade curriculum mapping. Use the correct subject or learning-area names at each level.
+
+For every grade, display only the applicable curriculum content as the primary pathway. Supplementary content must be clearly identified.
+
+#### Early childhood: PP1 and PP2
+
+Create age-appropriate lessons using visual demonstrations, spoken instructions, simple activities, games, songs where appropriate, matching exercises, and gentle repetition.
+
+For example, a numbers course might contain:
+
+Chapter 1: Discovering numbers.
+
+- Lesson 1: Recognizing the number 1.
+- Lesson 2: Counting one object.
+- Lesson 3: Recognizing the number 2.
+- Lesson 4: Counting two objects.
+- Continue progressively through the numbers appropriate to the learning objective.
+- Lesson activities: counting objects, matching quantities, identifying numerals, and speaking numbers aloud.
+- Mastery check: recognize, identify, count, and use the numbers at the expected level.
+
+An alphabet course should introduce letters progressively, including letter recognition, letter sounds, pronunciation, tracing, matching, and age-appropriate examples.
+
+Use spoken instructions, illustrations, and simple interactions rather than long text-heavy lessons.
+
+Do not force a young learner to type complex answers when selecting, speaking, matching, tracing, or arranging objects is more appropriate.
+
+#### Grades 1–3
+
+Build foundational literacy, numeracy, languages, and applicable curriculum learning areas.
+
+For mathematics, progressively teach number recognition, place value, addition, subtraction, and other concepts in the sequence specified by the applicable curriculum.
+
+For literacy, build letter recognition, phonics, reading, spelling, vocabulary, comprehension, and writing skills progressively.
+
+#### Grades 4–6
+
+Develop deeper conceptual understanding, reading comprehension, multi-step mathematics, scientific thinking, practical activities, research, and problem-solving.
+
+Include exercises that connect classroom concepts with everyday life.
+
+#### Grades 7–9
+
+Support more advanced learning, deeper subject understanding, practical projects, independent study, revision, and preparation for senior school pathways.
+
+Follow the official Grade 7–9 learning areas and progression requirements.
+
+Do not introduce senior-school material as compulsory junior-school content simply because it is available elsewhere on Berry.
+
+### 6. Berry Senior: Senior secondary learners
+
+Berry Senior should serve Grades 10–12 in the Kenyan CBC pathway while also supporting appropriately configured international secondary curricula.
+
+Use a more mature design than Berry Junior while keeping the experience engaging, energetic, visually appealing, and motivating.
+
+Provide:
+
+- Grade-specific course catalogues.
+- Applicable subject combinations and pathways.
+- Detailed course chapters and lessons.
+- Revision resources.
+- Practice questions.
+- Quizzes and examinations.
+- Projects and assignments.
+- Academic progress and feedback.
+- Career and higher-education exploration.
+- Study planning and deadlines.
+- A digital library.
+- A moderated student community.
+- AI-supported learning.
+- Optional supplementary courses clearly separated from compulsory curriculum learning.
+
+Use official curriculum sources to establish the actual subjects, pathways, and requirements. Do not assume every student studies every subject.
+
+### 7. Berry University: Academic learning
+
+Berry University must support structured learning across recognized academic levels and disciplines, including:
+
+- Certificates and diplomas.
+- Associate degrees and equivalent qualifications where applicable.
+- Bachelor's degrees.
+- Postgraduate diplomas.
+- Master's degrees.
+- Doctoral and PhD programmes.
+- Other recognized academic and professional qualifications.
+
+Support relevant academic years, semesters, terms, modules, courses, credit systems, and assessment structures according to the institution and qualification.
+
+Examples include accounting, finance, business management, human resources, economics, computer science, engineering, law, medicine, education, agriculture, social sciences, humanities, arts, and other disciplines.
+
+Do not assume that every degree has the same duration, year structure, or graduation requirements.
+
+For postgraduate learners, distinguish between programme years, coursework, research, thesis or dissertation milestones, supervision, and other requirements where applicable.
+
+Provide academic learning tools including assignments, examinations, grades, feedback, certifications where appropriate, research resources, and academic planning.
+
+**Live transcription is available in Berry University.**
+
+### 8. Berry Professionals: Workplace and career learning
+
+Berry Professionals should support working adults, job seekers, entrepreneurs, freelancers, career changers, and people seeking professional development.
+
+Include learning pathways for:
+
+- Business and management.
+- Accounting, finance, taxation, and auditing.
+- Human resources and people management.
+- Sales, marketing, and customer experience.
+- Software development and information technology.
+- Data analysis and artificial intelligence.
+- Project management.
+- Communication and leadership.
+- Entrepreneurship and small business.
+- Digital productivity and remote work.
+- Cybersecurity and responsible technology use.
+- Professional certifications and industry-specific skills.
+- Other verified and relevant career pathways.
+
+Provide flexible learning schedules, practical assignments, case studies, projects, workplace simulations, skills assessments, portfolios, and verified certificates where supported.
+
+Distinguish between Berry-issued completion certificates and externally accredited or officially recognized qualifications. Never imply accreditation that has not been verified.
+
+**Live transcription is available in Berry Professionals.**
+
+---
+
+# PART II — THE SHARED INTERFACE AND NAVIGATION
+
+### 9. Establish a consistent layout across all four stages
+
+All stages must use the same basic interface structure.
+
+#### A. Left vertical collapsible sidebar
+
+Place the main navigation in a vertical sidebar on the left side of the screen.
+
+The expanded sidebar must display a dedicated icon and a readable label for each navigation item.
+
+The collapsed sidebar must display icons only.
+
+Provide a visible collapse/expand control, smooth transitions, accessible tooltips, clear active-page indicators, and keyboard accessibility.
+
+The sidebar must behave consistently across all stages. Store the user's preference where appropriate so the layout can remain consistent across sessions.
+
+Suggested navigation:
+
+- Dashboard.
+- My Learning / My Courses.
+- Explore Courses.
+- Assignments and Tasks.
+- Quizzes and Examinations.
+- Grades and Feedback, where applicable.
+- Berry Library.
+- Berry Community.
+- Berry AI.
+- Live Transcription, for University and Professionals only.
+- Calendar and Study Planner.
+- Notifications.
+- My Progress.
+- Career Development, where appropriate.
+- Achievements and Certificates, where appropriate.
+- Profile.
+- Settings.
+- Help and Support.
+
+Show only features relevant to the learner's stage and permissions.
+
+For example, do not show Live Transcription in Berry Junior or Berry Senior.
+
+Every visible navigation item must lead to a functioning page or feature. Do not include dead links or decorative menu items that pretend to work.
+
+#### B. Top navigation bar
+
+Include:
+
+- Berry branding.
+- Current page title or breadcrumbs where useful.
+- Search.
+- Notification bell with an unread count.
+- User profile menu.
+- Relevant quick actions.
+
+Maintain a clean layout on desktop, tablet, and mobile.
+
+On mobile, transform the sidebar into a suitable drawer or compact navigation while preserving the same navigation hierarchy.
+
+### 10. Stage-specific visual design
+
+Maintain shared design principles while adjusting the visual personality to the learner.
+
+**Berry Junior:** Bright, playful, friendly, illustrated, interactive, and age-appropriate. Use colorful subject cards, simple icons, encouraging messages, small rewards, and accessible controls.
+
+**Berry Senior:** Modern, energetic, aspirational, and more mature. Use attractive subject cards, clear study paths, motivating progress displays, and polished layouts without making the platform feel childish.
+
+**Berry University:** Professional, academically focused, sophisticated, and organized. Prioritize clarity, productivity, course structure, academic deadlines, research, and progress.
+
+**Berry Professionals:** Contemporary, polished, career-oriented, efficient, and flexible. Emphasize practical learning, skills, career outcomes, and professional development.
+
+All stages should have consistent navigation, spacing principles, responsive behavior, accessibility, and component quality.
+
+Do not sacrifice readability or accessibility for decorative effects.
+
+---
+
+# PART III — DASHBOARD AND PERSONALIZATION
+
+### 11. Create a personalized dashboard for every learner
+
+The dashboard should immediately answer:
+
+1. What am I learning?
+2. What should I do next?
+3. What is due soon?
+4. How am I progressing?
+5. What have I mastered?
+6. What should I revisit?
+7. What can I look forward to?
+
+Include:
+
+- Personalized greeting.
+- Current grade, programme, qualification, or professional pathway.
+- Continue Learning.
+- Current courses and subjects.
+- Progress and mastery indicators.
+- Pending assignments and activities.
+- Upcoming quizzes, exams, projects, and deadlines.
+- Recent grades and feedback, where applicable.
+- Recommended next lessons.
+- Calendar preview.
+- Notifications preview.
+- Achievements and learning milestones.
+- Recent library activity.
+- Relevant community activity.
+- Suggested revision based on learning gaps.
+
+Display only data that genuinely belongs to the logged-in learner.
+
+The dashboard should update as the learner enrolls, completes lessons, receives feedback, earns achievements, or has deadlines approaching.
+
+Do not use fabricated completion percentages, fake grades, invented activity, or sample notifications in production.
+
+If the learner is new, provide a meaningful onboarding experience with real recommended actions.
+
+### 12. Make the platform aware of each learner's academic position
+
+The learner profile and learning engine must understand the distinction between:
+
+- Country.
+- Curriculum.
+- Grade or school level.
+- Academic year.
+- Institution, where relevant.
+- Programme and qualification.
+- Semester or term.
+- Subjects and courses.
+- Current learning progress.
+- Demonstrated mastery.
+- Learning preferences.
+- Accessibility requirements.
+
+For example, a Grade 1 learner studying mathematics should receive Grade 1 mathematics content and its appropriate learning sequence, not the entire mathematics catalogue without distinction.
+
+A second-year undergraduate student should receive the correct programme and year-level courses, rather than a generic university course list.
+
+A master's student should see their applicable modules, research activities, and programme milestones.
+
+A professional learning accounting should receive the appropriate accounting pathway rather than a school-level mathematics course unless they choose it.
+
+Allow learners to change their selected interests or supplementary learning pathways without accidentally changing their official academic enrolment.
+
+---
+
+# PART IV — GLOBAL COURSE CATALOGUE AND CURRICULUM MAPPING
+
+### 13. Build a comprehensive Explore Courses page
+
+The Explore Courses page must list all available courses that are actually supported by Berry's catalogue.
+
+Do not limit the platform to a handful of demonstration subjects.
+
+Build a scalable catalogue across school subjects, academic disciplines, vocational fields, professional skills, and lifelong learning.
+
+Include:
+
+- Search by course or subject.
+- Search by topic, skill, or learning outcome.
+- Filters by country and curriculum.
+- Filters by grade or education level.
+- Filters by academic qualification.
+- Filters by subject or discipline.
+- Filters by topic, difficulty, and prerequisites.
+- Filters by language.
+- Filters by course type and delivery format.
+- Filters by course provider, where applicable.
+- Clear labels for official curriculum courses, supplementary learning, and professional development.
+- Enrollment status and progress.
+- Course descriptions and prerequisites.
+- Learning outcomes and expected duration.
+- A clear enroll or continue-learning action.
+
+Support browsing by grade, subject, curriculum, programme, qualification, and individual topic.
+
+### 14. Show Kenyan and international curricula side by side without confusing them
+
+For Kenyan learners, make the relevant Kenyan curriculum the default when the learner selects Kenya.
+
+Also provide an option to explore what learners in other countries study at comparable levels.
+
+The international explorer should show the country, curriculum, level, subject, and relevant learning outcomes.
+
+For example, a Kenyan Grade 5 learner studying fractions may explore how fractions are approached in another country's comparable grade.
+
+Berry should clearly distinguish:
+
+- The learner's official curriculum.
+- Comparable learning in other countries.
+- Optional additional knowledge.
+- Advanced or remedial material.
+
+Do not assume grade names or ages are equivalent across countries. Use verified mappings and explain when an exact equivalence cannot be established.
+
+Provide curriculum comparison pages with links to official sources where available.
+
+Support international learners without requiring them to follow Kenya's curriculum.
+
+### 15. Give each course its own detailed structure
+
+Every course should contain:
+
+- Course title and description.
+- Target learner and level.
+- Curriculum or qualification mapping.
+- Learning objectives.
+- Prerequisites.
+- Estimated duration.
+- Chapters or units.
+- Lessons within each chapter.
+- Learning activities.
+- Quizzes and knowledge checks.
+- Assignments and examinations where appropriate.
+- Recommended learning materials.
+- Assessment criteria.
+- Mastery requirements.
+- Completion requirements.
+- Progress tracking.
+- Feedback and revision recommendations.
+
+Display the chapter list before or when the learner opens a course.
+
+For example:
+
+**Grade 1 Mathematics — Introduction to Numbers**
+
+Chapter 1: Recognizing numbers.
+
+- Lesson 1: Discovering numbers.
+- Lesson 2: Recognizing 1, 2, and 3.
+- Lesson 3: Recognizing 4, 5, and 6.
+- Lesson 4: Recognizing 7, 8, 9, and 10.
+- Lesson 5: Counting objects.
+- Lesson 6: Matching numbers to quantities.
+- Lesson 7: Writing numbers.
+- Lesson 8: Recognizing numbers in everyday situations.
+- Chapter quiz.
+- Revision activities based on results.
+
+The exact lesson sequence must be configurable and aligned with the selected curriculum, age, and learning objectives.
+
+Do not use this illustrative sequence as a fixed template for every course.
+
+---
+
+# PART V — THE CORE LEARNING EXPERIENCE
+
+### 16. Create an interactive lesson page
+
+Every lesson should present information in an organized, learner-friendly sequence.
+
+The standard lesson flow should be:
+
+1. Lesson introduction and learning objectives.
+2. Short explanatory video or an appropriate alternative.
+3. Lesson notes and examples.
+4. Interactive learning activities.
+5. Knowledge checks.
+6. Short quiz.
+7. Feedback and explanations.
+8. Mastery evaluation.
+9. Recommended revision or the next lesson.
+
+Adapt the sequence to the age and subject. A young learner may benefit from a visual demonstration before written notes, while a postgraduate learner may need a research reading, lecture, worked example, or case study.
+
+#### Video lessons
+
+Support short videos with appropriate controls, captions where available, playback speed, and resume functionality.
+
+For early learners, use simple illustrations, spoken explanations, demonstrations, and short activities.
+
+For older students, provide subject-specific explanations, diagrams, examples, worked problems, and deeper academic content.
+
+Do not create fake video players. If a lesson video is unavailable, show a meaningful alternative or clearly explain that the content is not yet available.
+
+#### Lesson notes
+
+Notes must be readable, organized, searchable where practical, and appropriate for the learner's level.
+
+Support headings, examples, diagrams, equations, tables, and relevant images.
+
+Allow learners to bookmark lessons and save personal notes where appropriate.
+
+#### Interactive activities
+
+Use suitable activities such as:
+
+- Matching.
+- Ordering and sequencing.
+- Drag-and-drop.
+- Multiple choice.
+- Fill-in-the-blank.
+- Short answers.
+- Calculations.
+- Diagram labeling.
+- Reading and comprehension.
+- Writing exercises.
+- Practical tasks.
+- Simulations.
+- Projects.
+- Spoken responses when supported.
+
+Do not use the same interaction type for every subject.
+
+### 17. Implement a mastery-based learning engine
+
+This is one of Berry's most important features.
+
+**A learner must not be advanced automatically just because they watched a video or clicked Complete.**
+
+For each lesson, define:
+
+- Learning objectives.
+- Prerequisite skills.
+- Expected level of understanding.
+- Assessment criteria.
+- Mastery threshold.
+- Available remedial activities.
+- Conditions for progressing to the next lesson.
+
+At the beginning of an appropriate course or unit, provide a diagnostic assessment to determine what the learner already understands.
+
+The diagnostic must be age-appropriate, supportive, and relevant to the actual course.
+
+Use the result to personalize the learning pathway.
+
+For example, if a learner starts a fractions course but struggles with basic division, Berry should identify the relevant knowledge gap and recommend a suitable prerequisite lesson.
+
+If a Grade 1 learner struggles with number recognition, Berry should provide additional number-recognition exercises before expecting the learner to solve addition problems that depend on those skills.
+
+If a learner demonstrates mastery, Berry may offer a more challenging activity or allow them to proceed when the curriculum and course rules permit.
+
+#### When a learner struggles
+
+The system should:
+
+1. Identify which learning objective is not yet mastered.
+2. Explain the misconception in simple, supportive language.
+3. Provide another explanation or example.
+4. Offer a different learning format where useful.
+5. Give additional guided practice.
+6. Reassess the same skill using different questions.
+7. Continue providing support until mastery is demonstrated or the system recommends teacher intervention.
+
+Avoid endlessly repeating identical questions.
+
+Avoid shaming, discouraging messages, or public comparisons of ability.
+
+Allow teachers or authorized administrators to configure thresholds, attempts, accommodations, and progression rules.
+
+A learner's mastery record should reflect demonstrated understanding rather than simply the number of times they attempted an activity.
+
+### 18. Use a progression system that makes sense
+
+Organize content hierarchically:
+
+**Education stage → grade or qualification year → subject or course → chapter → lesson → activity → assessment.**
+
+Every lesson should map to one or more learning objectives.
+
+Every chapter should have clear completion and mastery criteria.
+
+Every course should define its own completion requirements.
+
+Where appropriate, use prerequisite rules to ensure that learners acquire foundational knowledge before moving to more advanced concepts.
+
+Support remediation, revision, enrichment, and alternative pathways.
+
+Do not force all learners to progress at the same speed.
+
+A learner may revisit previously completed content at any time, subject to course rules.
+
+### 19. Design assessment systems appropriate to each stage
+
+Support:
+
+- Practice quizzes.
+- Chapter tests.
+- Unit assessments.
+- Assignments.
+- Projects.
+- Examinations.
+- Oral or spoken assessments where appropriate.
+- Practical assessments.
+- Research tasks.
+- Portfolio assessments.
+- Professional simulations.
+- Final course assessments.
+
+Berry Junior should use short, encouraging activities with simple feedback.
+
+Berry Senior should provide more detailed revision, timed practice where appropriate, projects, and examinations.
+
+Berry University should support assignments, essays, research, examinations, grading rubrics, and institution-specific assessment structures.
+
+Berry Professionals should emphasize practical competence, case studies, projects, workplace simulations, and demonstrated skills.
+
+After an assessment, show the learner:
+
+- Their result.
+- Which answers were correct or incorrect, where permitted.
+- Explanations of mistakes.
+- Relevant learning objectives.
+- Recommended revision.
+- Their progress toward mastery.
+
+For graded or secure examinations, support configurable rules for when answers and explanations become visible.
+
+Keep grades private to the learner and authorized staff.
+
+Do not generate fake grades or claim that an assessment has been officially marked when it has not.
+
+---
+
+# PART VI — MOTIVATION AND DAILY ENGAGEMENT
+
+### 20. Make Berry a place learners want to return to
+
+Berry should motivate learners to continue studying without manipulating them or creating unnecessary academic pressure.
+
+Include appropriate features such as:
+
+- Daily learning goals.
+- Personalized study recommendations.
+- Progress indicators.
+- Achievement badges.
+- Milestones.
+- Optional learning streaks.
+- Encouraging completion messages.
+- Weekly progress summaries.
+- Personalized revision plans.
+- New learning challenges.
+- Recommended next steps.
+- Subject exploration.
+- Positive reinforcement for improvement and persistence.
+
+For Berry Junior, use playful rewards, illustrations, gentle celebrations, and short interactive challenges.
+
+For Berry Senior, use progress milestones, subject goals, personal bests, and motivating academic challenges.
+
+For Berry University, use course completion, study milestones, academic progress, and research milestones.
+
+For Berry Professionals, use skill achievements, portfolio progress, course completion, and career development milestones.
+
+Do not reward speed alone or punish learners for taking breaks.
+
+Do not make streaks or points more important than learning.
+
+Allow suitable customization of reminders and learning goals.
+
+---
+
+# PART VII — BERRY LIBRARY
+
+### 21. Build a comprehensive digital library
+
+Berry Library must be a dedicated, searchable resource centre for learners at every stage.
+
+It must include a scalable catalogue of educational books and other learning materials, including:
+
+- Textbooks.
+- Reference books.
+- Revision guides.
+- Practice books.
+- Past papers where legally available.
+- Research papers.
+- Academic journals where access is permitted.
+- Study guides.
+- Lecture notes where authorized.
+- Educational articles.
+- Dictionaries.
+- Subject-specific resources.
+- Digital literacy resources.
+- Professional reference materials.
+- Other legitimate educational resources.
+
+Organize the library by:
+
+- Berry stage.
+- Country and curriculum.
+- Grade or education level.
+- Qualification and programme.
+- Subject or discipline.
+- Topic.
+- Resource type.
+- Language.
+- Author or publisher.
+- Publication year.
+- Access type.
+- Availability.
+
+For example, a Grade 1 learner should be able to find age-appropriate number books, literacy resources, and relevant CBC learning materials.
+
+A Kenyan Grade 5 learner should be able to find resources mapped to the applicable Grade 5 curriculum.
+
+A university accounting student should be able to discover appropriate accounting textbooks, reference materials, research resources, and relevant past papers where available.
+
+A professional learner should be able to discover relevant technical guides, reference books, and workplace learning materials.
+
+#### Library functionality
+
+Provide:
+
+- Search.
+- Filters and sorting.
+- Resource descriptions.
+- Preview where permitted.
+- Read online where permitted.
+- Download where permitted.
+- Bookmarking and saved resources.
+- Reading progress where supported.
+- Related resources.
+- Recommended resources.
+- Citation or bibliographic information where appropriate.
+
+Do not fabricate books, authors, publishers, ISBNs, download links, or resource availability.
+
+Respect copyright, publisher licensing, institutional access restrictions, and privacy.
+
+Where a full book cannot legally be displayed or downloaded, offer authorized previews, library links, open-access alternatives, or purchase and borrowing information where available.
+
+Build the library so additional books and resource providers can be added without redesigning the application.
+
+---
+
+# PART VIII — BERRY COMMUNITY
+
+### 22. Build a learning-focused community
+
+Berry Community should allow learners to share experiences, discuss subjects, ask questions, celebrate progress, and learn from one another.
+
+Include:
+
+- A community feed.
+- Posts and educational blogs.
+- Learning reflections.
+- Study tips.
+- Subject discussions.
+- Questions and answers.
+- Comments and replies.
+- Reactions.
+- Topic categories.
+- Search and discovery.
+- Bookmarked posts.
+- Relevant study groups where supported.
+- Reporting and moderation.
+- Community guidelines.
+- Notifications for relevant interactions.
+
+Allow learners to write about what they have learned, what they found difficult, how they solved a problem, and what they would recommend to other learners.
+
+Allow users to control the visibility of their posts where supported.
+
+#### Age-appropriate community protection
+
+Berry Junior and Berry Senior must have suitable safeguards for minors.
+
+Implement appropriate content moderation, reporting, blocking, age-appropriate privacy defaults, and authorized supervision where applicable.
+
+Do not expose children's personal contact details, exact locations, private grades, or sensitive information.
+
+Use clear community rules and moderation workflows.
+
+Keep school learner communities appropriately separated from adult professional communities unless a carefully controlled educational interaction is explicitly supported.
+
+Prevent harassment, bullying, exploitation, spam, impersonation, and harmful content.
+
+Provide moderators with the appropriate tools and audit records.
+
+---
+
+# PART IX — BERRY AI
+
+### 23. Build Berry AI as a learning assistant, not an answer machine
+
+Berry AI should support learners within the context of their actual courses, learning objectives, notes, and permitted library resources.
+
+Provide a familiar chat interface with:
+
+- Conversation history.
+- Clear message input.
+- Appropriate loading and error states.
+- Contextual help.
+- References to relevant lessons or resources where available.
+- Suggestions for follow-up learning.
+- Age-appropriate explanations.
+- Accessible controls.
+
+The AI should understand the learner's stage, grade or qualification level, current course, and learning objective when that information is available and permitted.
+
+#### Teaching behavior
+
+When a learner asks a question, the AI should:
+
+1. Determine the concept the learner is trying to understand.
+2. Explain it at the appropriate level.
+3. Use examples, analogies, diagrams, or worked problems where useful.
+4. Ask guiding questions when that helps understanding.
+5. Encourage the learner to attempt the next step.
+6. Check comprehension when appropriate.
+7. Recommend relevant lessons or exercises.
+8. Adapt its explanation when the learner is confused.
+
+For a young learner, explain concepts simply and concretely.
+
+For a secondary student, offer clear explanations, examples, and revision support.
+
+For a university student, support deeper reasoning, research literacy, academic writing guidance, and subject-specific understanding.
+
+For a professional learner, support practical problem-solving, workplace scenarios, and skill development.
+
+Do not make learners unnecessarily dependent on AI.
+
+Do not automatically provide final answers to every assignment. Follow the activity's teaching mode and assessment rules.
+
+For practice, the AI can give hints, worked examples, and feedback. For restricted or graded assessments, follow the applicable integrity rules.
+
+Do not fabricate references, official curriculum requirements, research findings, or library resources.
+
+### 24. Personalized AI recommendations
+
+Use the learner's demonstrated progress and permitted learning history to recommend:
+
+- Revision lessons.
+- Prerequisite concepts.
+- Practice quizzes.
+- Enrichment activities.
+- Relevant library resources.
+- Next chapters.
+- Suitable learning pathways.
+
+Explain recommendations in simple language.
+
+Do not infer sensitive personal attributes or use private community content without authorization.
+
+For younger learners, apply stronger safety controls and keep AI responses age-appropriate.
+
+---
+
+# PART X — LIVE TRANSCRIPTION
+
+### 25. Restrict live transcription to the correct stages
+
+Live transcription must be available in:
+
+- Berry University.
+- Berry Professionals.
+
+It must not appear as a learner-facing feature in:
+
+- Berry Junior.
+- Berry Senior.
+
+Do not accidentally expose the transcription page through the sidebar, dashboard, mobile navigation, or direct routes for the two school stages.
+
+#### Transcription experience
+
+Provide a dedicated page with:
+
+- A clear Start Transcription control.
+- A visible recording or transcription state.
+- Live text as it becomes available.
+- Pause and resume where supported.
+- Stop and save controls.
+- Session title and date.
+- Editable transcript where appropriate.
+- Search within transcripts.
+- Saved transcript history.
+- Export options where supported.
+- Copy functionality.
+- Appropriate processing and error states.
+- Clear microphone permission handling.
+
+Where supported, organize transcripts into useful paragraphs and timestamps.
+
+Clearly distinguish live transcription from AI-generated summaries or notes.
+
+If AI summaries are available, identify them as generated summaries and allow the learner to verify them against the original transcript.
+
+Respect microphone permissions, user consent, applicable privacy requirements, and data-retention settings.
+
+Do not claim transcription is working if there is no functional speech-to-text service behind it.
+
+---
+
+# PART XI — NOTIFICATIONS, TASKS, AND CALENDAR
+
+### 26. Create a complete notifications centre
+
+Include a notification bell in the top navigation bar, with a meaningful unread count.
+
+The notifications page should support:
+
+- Unread and read states.
+- Mark as read.
+- Mark all as read.
+- Notification categories.
+- Relevant filtering.
+- Navigation to the related course, task, or event.
+- Appropriate notification preferences.
+- Empty, loading, and error states.
+
+Notifications must come from actual platform events, not invented content.
+
+Relevant events may include new assignments, approaching deadlines, released feedback, scheduled assessments, replies, community interactions, or other authorized updates.
+
+### 27. Add a pending tasks widget
+
+Show outstanding tasks on the dashboard.
+
+Each task should identify:
+
+- What needs to be done.
+- The related subject, course, or programme.
+- Its deadline, where applicable.
+- Its priority or urgency.
+- Its current status.
+- The action needed to continue.
+
+Allow learners to open the relevant task directly.
+
+When the task is completed, update the task status and dashboard accordingly.
+
+Do not mark a task complete simply because the learner opened it.
+
+### 28. Build the academic calendar and study planner
+
+Provide a calendar with suitable daily, weekly, and monthly views.
+
+Include relevant items such as:
+
+- Assignments.
+- Quizzes.
+- Examinations.
+- Projects.
+- Course milestones.
+- Study sessions.
+- Revision plans.
+- Academic events.
+- Professional learning deadlines.
+
+Allow learners to create personal study sessions where supported.
+
+Use actual dates and deadlines from the application database.
+
+Provide configurable reminders and respect the learner's timezone.
+
+Do not invent assessment dates or assume every learner follows the same academic calendar.
+
+---
+
+# PART XII — PROGRESS, GRADES, AND CAREER DEVELOPMENT
+
+### 29. Personal learning analytics
+
+Create a My Progress page showing meaningful indicators such as:
+
+- Courses enrolled in.
+- Lessons completed.
+- Learning objectives mastered.
+- Areas requiring revision.
+- Assessment performance.
+- Time spent learning where accurately measured.
+- Course completion.
+- Progress against personal goals.
+- Recent improvements.
+- Recommended next steps.
+
+Differentiate between completion and mastery.
+
+Do not present an overall progress percentage as proof of understanding unless it is based on a defined and meaningful calculation.
+
+Keep individual grades and personal analytics private to the learner and authorized staff.
+
+### 30. Grades and feedback
+
+Provide a dedicated grades and feedback area where appropriate.
+
+Show assessment results, marking criteria, instructor feedback, permitted answer explanations, and opportunities for revision.
+
+Support assignment submission, grading, feedback, and resubmission workflows where configured.
+
+For institutions that use their own grading structures, allow authorized administrators to configure grading scales and assessment rules.
+
+### 31. Career development
+
+Include career development features appropriate to each stage.
+
+For younger learners, provide age-appropriate career exploration and introductions to different fields.
+
+For secondary learners, provide career interests, educational pathways, subject choices, and preparation for further study.
+
+For university learners, support career exploration, practical skills, projects, portfolios, and professional preparation.
+
+For professional learners, support skills assessment, career pathways, portfolios, professional development, and relevant certifications.
+
+Do not promise employment, admission, certification, or accreditation that Berry cannot guarantee.
+
+---
+
+# PART XIII — PROFILE, SETTINGS, AND ACCESSIBILITY
+
+### 32. Learner profiles
+
+Provide secure profile management for the information needed to personalize the experience.
+
+Depending on the learner's stage, include relevant details such as:
+
+- Display name.
+- Country and preferred language.
+- Curriculum or education system.
+- Grade, qualification, or programme.
+- Learning interests.
+- Accessibility preferences.
+- Notification preferences.
+- Learning goals.
+- Enrolled courses.
+
+Collect only necessary information.
+
+For children, apply appropriate privacy protections, guardian arrangements where required, and age-appropriate consent practices.
+
+Never expose private profile information to other learners by default.
+
+### 33. Accessibility and inclusive learning
+
+Design Berry for learners with different needs, devices, languages, and learning preferences.
+
+Include:
+
+- Keyboard navigation.
+- Screen-reader-compatible controls.
+- Visible focus indicators.
+- Sufficient color contrast.
+- Readable text and adjustable text size where appropriate.
+- Captions and transcripts where available.
+- Alternative text for meaningful images.
+- Clear error messages.
+- Accessible forms.
+- Reduced-motion support.
+- Responsive layouts.
+- Flexible learning formats where practical.
+
+Support multilingual content as the platform's content and translation capabilities permit.
+
+Do not assume every learner has fast internet, a powerful device, or uninterrupted connectivity.
+
+Where practical, optimize media, support resumable learning, and provide low-bandwidth alternatives.
+
+---
+
+# PART XIV — TECHNICAL ARCHITECTURE AND DATA INTEGRITY
+
+### 34. Use a scalable, maintainable architecture
+
+Follow the existing project's architecture unless there is a clear reason to improve it.
+
+Organize the system into maintainable components and services covering:
+
+- Authentication and authorization.
+- Learner profiles.
+- Stage and curriculum configuration.
+- Course catalogue.
+- Curriculum mapping.
+- Chapters and lessons.
+- Learning activities.
+- Assessments and grading.
+- Mastery tracking.
+- Library resources.
+- Community posts and moderation.
+- AI assistance.
+- Transcription.
+- Notifications.
+- Calendar and tasks.
+- Progress analytics.
+- Career development.
+- Administrative configuration.
+
+Define clear relationships between courses, chapters, lessons, learning objectives, prerequisites, assessments, and learner progress.
+
+Use appropriate database constraints and validation.
+
+Keep sensitive operations on the server and enforce authorization at the backend, not just by hiding frontend buttons.
+
+### 35. Authentication and permissions
+
+Implement or preserve secure sign-in, sign-up, sign-out, and account recovery flows.
+
+Use role-based permissions appropriate to the product, potentially including:
+
+- Learner.
+- Teacher or instructor.
+- Parent or guardian where applicable.
+- Community moderator.
+- Content administrator.
+- Platform administrator.
+
+Do not grant permissions merely because a user knows a URL or changes a frontend parameter.
+
+A learner must not be able to access another learner's private grades, profile information, submissions, or transcripts without appropriate authorization.
+
+Administrative tools must be restricted to authorized users.
+
+### 36. Content management
+
+Build a maintainable content model so authorized administrators can add or update:
+
+- Countries and curricula.
+- Grades and education levels.
+- Subjects and learning areas.
+- Courses and programmes.
+- Chapters and lessons.
+- Videos and notes.
+- Questions and answers.
+- Assessments and grading rules.
+- Books and library resources.
+- Learning outcomes.
+- Prerequisites.
+- Curriculum mappings.
+- Translations and languages.
+
+Do not hard-code the entire platform's content structure into individual frontend components.
+
+Make it possible to expand Berry's catalogue without rebuilding the interface.
+
+### 37. Real data and external integrations
+
+Connect features to the existing backend and database.
+
+Where external services are needed, use secure configuration and environment variables.
+
+Do not expose secret keys in frontend code.
+
+Use clear loading, success, empty, and failure states.
+
+Handle network errors, invalid input, interrupted requests, and permission failures.
+
+Use real integrations for features that require them. If a provider is not configured, communicate the limitation clearly rather than simulating success.
+
+Protect user data and implement suitable logging, backups, data-retention controls, and error monitoring.
+
+---
+
+# PART XV — IMPLEMENTATION PLAN
+
+### 38. Implement the project in phases
+
+Do not attempt a superficial all-at-once rewrite.
+
+**Phase 1: Repository audit and product foundation**
+
+Inspect the existing project, document current functionality, identify gaps, and establish the implementation plan.
+
+**Phase 2: Shared design system and navigation**
+
+Build or refine the shared responsive layout, collapsible left sidebar, icon system, top navigation, profile menu, and stage-specific visual themes.
+
+**Phase 3: Learner profiles and curriculum architecture**
+
+Implement stage selection, grade or qualification configuration, curriculum mappings, learning pathways, and appropriate access controls.
+
+**Phase 4: Dashboards and course discovery**
+
+Build the personalized dashboard, course catalogue, global curriculum explorer, filters, course details, and enrollment flows.
+
+**Phase 5: Course learning engine**
+
+Implement chapters, lessons, video support, notes, interactive activities, quizzes, prerequisites, adaptive revision, and mastery tracking.
+
+**Phase 6: Assignments, examinations, and feedback**
+
+Build assessment workflows, grading, feedback, resubmission where applicable, and learner progress records.
+
+**Phase 7: Berry Library**
+
+Implement searchable resources, filtering, previews, permitted access, bookmarking, and resource management.
+
+**Phase 8: Berry Community**
+
+Implement posts, blogs, comments, reactions, discussions, reporting, and age-appropriate moderation.
+
+**Phase 9: Notifications, tasks, and calendar**
+
+Connect actual application events to notifications, pending tasks, study planning, and reminders.
+
+**Phase 10: Berry AI**
+
+Connect AI assistance to relevant course content and learner context, with appropriate age, privacy, and assessment safeguards.
+
+**Phase 11: Live transcription**
+
+Implement and test transcription for Berry University and Berry Professionals only.
+
+**Phase 12: Progress and career development**
+
+Build learner analytics, revision recommendations, achievements, portfolios, and career pathways.
+
+**Phase 13: Security, accessibility, and quality assurance**
+
+Verify permissions, responsiveness, accessibility, data integrity, error handling, and performance.
+
+**Phase 14: Final integration and acceptance testing**
+
+Test the complete learner journey for every stage and fix regressions before declaring the work complete.
+
+After each phase, summarize what was implemented, what remains, which tests passed, and any external dependencies.
+
+---
+
+# PART XVI — ACCEPTANCE CRITERIA
+
+### 39. The project is not complete until the following work
+
+**Shared interface**
+
+- All four stages use the shared navigation system.
+- The left sidebar expands and collapses correctly.
+- Each navigation item has its own appropriate icon and label.
+- All visible links and buttons perform their intended actions.
+- The layout works on desktop, tablet, and mobile.
+
+**Curriculum and course discovery**
+
+- Kenyan school levels are correctly organized from PP1 through Grade 12.
+- Grade-specific learning content is separated correctly.
+- University courses are organized by qualification and programme.
+- Professional courses are organized by skill and pathway.
+- International curriculum comparisons are clearly labeled and grounded in reliable sources.
+- Search and filtering work on actual catalogue data.
+
+**Learning and mastery**
+
+- Courses contain chapters and lessons.
+- Lessons provide appropriate learning materials and activities.
+- Quizzes evaluate actual learning objectives.
+- Incorrect answers generate meaningful feedback.
+- Remediation and reassessment work.
+- Prerequisites and progression rules are enforced.
+- Mastery is distinguished from lesson completion.
+
+**Library and community**
+
+- Library search and filtering work.
+- Resource access respects availability and licensing.
+- Community posts and comments persist correctly.
+- Moderation and privacy rules are enforced.
+- School learners receive appropriate safeguards.
+
+**Notifications and planning**
+
+- Notifications reflect actual events.
+- Pending tasks display real outstanding work.
+- Completed tasks update their status.
+- Calendar entries and reminders use actual dates.
+- Notification preferences are respected.
+
+**AI and transcription**
+
+- Berry AI provides stage-appropriate learning support.
+- AI responses do not falsely claim access to unavailable content.
+- Live transcription works only in University and Professionals.
+- Transcripts are saved and accessed according to permissions.
+- Microphone access and privacy are handled appropriately.
+
+**Security and quality**
+
+- Authentication and authorization are tested.
+- Private grades and learner data are protected.
+- Errors are handled gracefully.
+- Existing working features have not been broken.
+- No fake production data or dead controls remain.
+- Critical user journeys have automated or repeatable tests.
+
+### 40. Final instructions
+
+Treat this as a complete product-development specification, not a request to generate a pretty dashboard.
+
+Begin by auditing the existing Berry project. Preserve what works. Identify the most important gaps. Implement the shared architecture, stage-specific experiences, curriculum structures, learning engine, and supporting features in a controlled sequence.
+
+Prioritize educational accuracy, genuine understanding, learner motivation, safety, accessibility, maintainability, and functional completeness.
+
+Berry must support learners at every stage while respecting their actual curriculum, country, grade, qualification, and learning goals.
+
+A learner should always be able to understand where they are in their educational journey, what they are expected to learn, which concepts they have mastered, what needs improvement, and what they should do next.
+
+**The final goal is to make Berry an intelligent, personalized, globally inclusive learning ecosystem that helps people learn independently, confidently, and deeply throughout their lives.**

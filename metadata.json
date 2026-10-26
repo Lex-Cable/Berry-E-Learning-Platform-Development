@@ -1,0 +1,11 @@
+{
+  "name": "Remix Berry - Personalized Mastery-Based Learning Ecosystem",
+  "description": "An intelligent, mastery-based global learning platform spanning Early Childhood, Secondary CBC, University, and Professional learning with adaptive pathways, digital library, and live transcription.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
