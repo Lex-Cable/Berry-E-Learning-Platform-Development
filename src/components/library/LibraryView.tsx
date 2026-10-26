@@ -1,21 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Search,
+  ArrowUpRight,
+  Bookmark,
   BookOpen,
   Filter,
-  Download,
-  Bookmark,
-  Share2,
-  FileText,
+  Search,
   ShieldCheck,
-  ExternalLink,
-  ChevronRight,
-  Eye,
-  Check,
-  X,
-  FileCheck2,
+  Sparkles,
 } from 'lucide-react';
-import { LibraryResource, LearnerProfile, LearnerStage, Curriculum } from '../../types';
+import type { LibraryCurriculumGroup, LibraryMaterialType, LibraryResource, LearnerProfile, LearnerStage } from '../../types';
 
 interface LibraryViewProps {
   resources: LibraryResource[];
@@ -23,277 +16,307 @@ interface LibraryViewProps {
   onToggleBookmark: (resourceId: string) => void;
 }
 
+type StageFilter = 'all' | 'early' | 'junior' | 'senior' | 'university' | 'advanced';
+type CurriculumFilter = 'all' | LibraryCurriculumGroup;
+type MaterialFilter = 'all' | LibraryMaterialType;
+
+const stageOptions: { id: StageFilter; label: string; emoji: string }[] = [
+  { id: 'all', label: 'Every level', emoji: '🌍' },
+  { id: 'early', label: 'Berry Early', emoji: '🌱' },
+  { id: 'junior', label: 'Berry Junior', emoji: '🧭' },
+  { id: 'senior', label: 'Berry Senior', emoji: '🚀' },
+  { id: 'university', label: 'University', emoji: '🎓' },
+  { id: 'advanced', label: 'Advanced', emoji: '✨' },
+];
+
+const curriculumOptions: { id: CurriculumFilter; label: string }[] = [
+  { id: 'all', label: 'All curriculum connections' },
+  { id: 'kenya_cbc', label: 'Kenya CBC / CBE' },
+  { id: 'african_curricula', label: 'African curricula' },
+  { id: 'international', label: 'International' },
+  { id: 'multi_curriculum', label: 'Multi-curriculum' },
+];
+
+const materialOptions: { id: MaterialFilter; label: string }[] = [
+  { id: 'all', label: 'Every resource type' },
+  { id: 'curriculum_guides', label: 'Curriculum guides' },
+  { id: 'textbooks', label: 'Textbooks' },
+  { id: 'stories', label: 'Storybooks & reading' },
+  { id: 'exam_samples', label: 'Exam samples & practice' },
+  { id: 'course_materials', label: 'Course materials' },
+  { id: 'open_catalog', label: 'Resource catalogs' },
+];
+
+const levelLabels: Record<LearnerStage, string> = {
+  early: 'Early years',
+  junior: 'Junior school',
+  senior: 'Senior school',
+  university: 'University',
+  advance: 'University',
+  professionals: 'Professional learning',
+};
+
+const typeLabels: Record<LibraryMaterialType, string> = {
+  curriculum_guides: 'Curriculum guides',
+  textbooks: 'Textbooks',
+  stories: 'Stories',
+  exam_samples: 'Exam samples',
+  course_materials: 'Course materials',
+  open_catalog: 'Open catalog',
+};
+
+const selectedStageFor = (stage: LearnerStage): StageFilter => {
+  if (stage === 'advance' || stage === 'professionals') return 'advanced';
+  return stage;
+};
+
+const matchesStage = (resource: LibraryResource, selectedStage: StageFilter) => {
+  if (selectedStage === 'all') return true;
+  if (selectedStage === 'advanced') {
+    return resource.levels.includes('advance') || resource.levels.includes('professionals');
+  }
+  return resource.levels.includes(selectedStage);
+};
+
 export const LibraryView: React.FC<LibraryViewProps> = ({
   resources,
   learner,
   onToggleBookmark,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStage, setSelectedStage] = useState<string>(learner.stage);
-  const [selectedType, setSelectedType] = useState<string>('all');
-  const [activePreviewResource, setActivePreviewResource] = useState<LibraryResource | null>(null);
-  const [citationCopied, setCitationCopied] = useState(false);
+  const [selectedStage, setSelectedStage] = useState<StageFilter>(() => selectedStageFor(learner.stage));
+  const [selectedCurriculum, setSelectedCurriculum] = useState<CurriculumFilter>('all');
+  const [selectedMaterial, setSelectedMaterial] = useState<MaterialFilter>('all');
+  const [savedOnly, setSavedOnly] = useState(false);
 
-  // Filtered resources
-  const filtered = resources.filter((r) => {
-    if (selectedStage !== 'all' && r.stage !== selectedStage) return false;
-    if (selectedType !== 'all' && r.type !== selectedType) return false;
-    if (
-      searchQuery &&
-      !r.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !r.author.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !r.subject.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !r.description.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return resources.filter((resource) => {
+      if (!matchesStage(resource, selectedStage)) return false;
+      if (selectedCurriculum !== 'all' && resource.curriculumGroup !== selectedCurriculum) return false;
+      if (selectedMaterial !== 'all' && !resource.materialTypes.includes(selectedMaterial)) return false;
+      if (savedOnly && !resource.isSaved) return false;
+      if (!query) return true;
 
-  const handleCopyCitation = (resource: LibraryResource) => {
-    const citation = `${resource.author} (${resource.year}). ${resource.title}. ${resource.publisher}. Berry Educational Digital Library.`;
-    navigator.clipboard?.writeText(citation);
-    setCitationCopied(true);
-    setTimeout(() => setCitationCopied(false), 2000);
+      const searchable = [
+        resource.title,
+        resource.provider,
+        resource.description,
+        resource.curriculumLabel,
+        resource.accessLabel,
+        resource.accessNote,
+        resource.licenseLabel,
+        ...resource.subjects,
+      ].join(' ').toLocaleLowerCase();
+      return searchable.includes(query);
+    });
+  }, [resources, searchQuery, selectedStage, selectedCurriculum, selectedMaterial, savedOnly]);
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setSelectedStage('all');
+    setSelectedCurriculum('all');
+    setSelectedMaterial('all');
+    setSavedOnly(false);
   };
 
+  const savedCount = resources.filter((resource) => resource.isSaved).length;
+
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header Banner */}
-      <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-bold mb-2">
-            <BookOpen size={14} />
-            <span>Digital Repository & Verified Textbooks</span>
+    <div className="mx-auto max-w-7xl space-y-6 pb-12">
+      <section className="relative overflow-hidden rounded-[2rem] bg-linear-to-br from-violet-700 via-purple-700 to-indigo-800 p-6 text-white shadow-xl shadow-purple-200 md:p-9">
+        <div className="pointer-events-none absolute -right-10 -top-16 h-64 w-64 rounded-full bg-fuchsia-400/20 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-24 right-1/3 h-56 w-56 rounded-full bg-amber-300/15 blur-2xl" />
+        <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-purple-50">
+              <Sparkles size={14} />
+              Trusted places to learn, all in one Berry
+            </div>
+            <h2 className="text-3xl font-black tracking-tight md:text-4xl">Berry Learning Library</h2>
+            <p className="mt-2 text-sm leading-relaxed text-purple-100 md:text-base">
+              Discover books, stories, curriculum guides, and practice materials from trusted learning providers.
+              Each collection opens at its original source.
+            </p>
           </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            Berry Digital Library
-          </h2>
-          <p className="text-xs text-slate-500 mt-1 max-w-xl">
-            Access authorized curriculum textbooks, KICD pupil guides, academic monographs, past papers, and research documents.
-          </p>
+          <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+            <div className="text-2xl font-black">{resources.length}</div>
+            <div className="text-xs font-semibold text-purple-100">curated learning collections</div>
+          </div>
         </div>
+      </section>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-2 rounded-xl border border-slate-200">
-            {filtered.length} Resources Available
-          </span>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        {/* Stage Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
-          <span className="text-xs font-bold text-slate-400 mr-2 uppercase tracking-wider">
-            Stage:
-          </span>
-          {[
-            { id: 'all', label: 'All Stages' },
-            { id: 'junior', label: 'Berry Junior (PP1-G9)' },
-            { id: 'senior', label: 'Berry Senior (G10-G12)' },
-            { id: 'university', label: 'Berry University' },
-            { id: 'professionals', label: 'Berry Professionals' },
-          ].map((st) => (
-            <button
-              key={st.id}
-              onClick={() => setSelectedStage(st.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                selectedStage === st.id
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+      <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5" aria-label="Filter library collections">
+        <div className="flex flex-col gap-3 lg:flex-row">
+          <label className="relative min-w-0 flex-1">
+            <span className="sr-only">Search collections</span>
+            <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              placeholder="Search books, subjects, providers, or exams…"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-purple-300 focus:bg-white focus:ring-4 focus:ring-purple-100"
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <Filter size={16} className="shrink-0 text-slate-500" />
+            <span className="sr-only">Filter by resource type</span>
+            <select
+              value={selectedMaterial}
+              onChange={(event) => setSelectedMaterial(event.target.value as MaterialFilter)}
+              className="min-w-52 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-purple-300 focus:ring-4 focus:ring-purple-100"
             >
-              {st.label}
+              {materialOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="sr-only">Filter by curriculum</span>
+            <select
+              value={selectedCurriculum}
+              onChange={(event) => setSelectedCurriculum(event.target.value as CurriculumFilter)}
+              className="w-full min-w-56 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:border-purple-300 focus:ring-4 focus:ring-purple-100"
+            >
+              {curriculumOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <span className="mr-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Learning level</span>
+          {stageOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={selectedStage === option.id}
+              onClick={() => setSelectedStage(option.id)}
+              className={'rounded-full px-3 py-2 text-xs font-bold transition ' + (
+                selectedStage === option.id
+                  ? 'bg-purple-700 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-purple-50 hover:text-purple-700'
+              )}
+            >
+              <span aria-hidden="true">{option.emoji}</span> {option.label}
             </button>
           ))}
-        </div>
-
-        {/* Search & Resource Type */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by title, author, KICD guide, or subject..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Filter size={14} className="text-slate-400 flex-shrink-0" />
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
-            >
-              <option value="all">All Document Types</option>
-              <option value="cbc_guide">Official CBC Curriculum Guides</option>
-              <option value="textbook">Textbooks & Workbooks</option>
-              <option value="past_paper">Past Examination Papers</option>
-              <option value="research_paper">Academic & White Papers</option>
-              <option value="reference">Comprehensive Reference</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Resource Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.map((resource) => (
-          <div
-            key={resource.id}
-            className="bg-white rounded-3xl border border-slate-200/80 hover:border-purple-300 hover:shadow-lg transition-all p-5 flex flex-col justify-between space-y-4 group"
+          <button
+            type="button"
+            aria-pressed={savedOnly}
+            onClick={() => setSavedOnly((current) => !current)}
+            className={'ml-auto rounded-full px-3 py-2 text-xs font-bold transition ' + (
+              savedOnly ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600 hover:bg-amber-50'
+            )}
           >
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                  {resource.gradeLevel} • {resource.subject}
-                </span>
+            <Bookmark size={13} className="mr-1 inline" />
+            Saved {savedCount}
+          </button>
+        </div>
+      </section>
 
-                <button
-                  onClick={() => onToggleBookmark(resource.id)}
-                  aria-label={resource.isSaved ? 'Remove bookmark' : 'Bookmark resource'}
-                  className="p-1 text-slate-400 hover:text-purple-600 transition-colors"
-                >
-                  <Bookmark
-                    size={16}
-                    className={resource.isSaved ? 'fill-purple-600 text-purple-600' : ''}
-                  />
-                </button>
-              </div>
-
-              {resource.verifiedOfficialCBC && (
-                <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md w-fit">
-                  <ShieldCheck size={13} />
-                  <span>KICD Verified Material</span>
-                </div>
-              )}
-
-              <h4 className="font-extrabold text-slate-900 text-sm leading-snug group-hover:text-purple-700 transition-colors line-clamp-2">
-                {resource.title}
-              </h4>
-
-              <p className="text-xs text-slate-500 line-clamp-1">
-                By {resource.author} • {resource.publisher} ({resource.year})
-              </p>
-
-              <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                {resource.description}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 space-y-3">
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>{resource.pages} pages</span>
-                <span>~{resource.readTimeMinutes} mins read</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setActivePreviewResource(resource)}
-                  className="flex-1 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Eye size={13} />
-                  <span>Preview & Read</span>
-                </button>
-
-                {resource.downloadPermitted && (
-                  <button
-                    onClick={() => alert(`Starting authorized download for: ${resource.title}`)}
-                    aria-label="Download resource"
-                    className="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors"
-                    title="Download PDF"
-                  >
-                    <Download size={15} />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-center justify-between px-1">
+        <p className="text-sm font-bold text-slate-700">
+          {filtered.length} {filtered.length === 1 ? 'collection' : 'collections'} to explore
+        </p>
+        {(searchQuery || selectedStage !== 'all' || selectedCurriculum !== 'all' || selectedMaterial !== 'all' || savedOnly) && (
+          <button type="button" onClick={resetFilters} className="text-xs font-bold text-purple-700 hover:text-purple-900">
+            Clear filters
+          </button>
+        )}
       </div>
 
-      {/* Reader / Document Preview Modal */}
-      {activePreviewResource && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+      {filtered.length > 0 ? (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((resource) => (
+            <article key={resource.id} className="group flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-xl hover:shadow-purple-100/70">
               <div>
-                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">
-                  {activePreviewResource.subject} • {activePreviewResource.gradeLevel}
-                </span>
-                <h3 className="font-bold text-slate-900 text-base line-clamp-1">
-                  {activePreviewResource.title}
-                </h3>
-              </div>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {resource.isOfficial ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800">
+                        <ShieldCheck size={12} /> Official source
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-extrabold text-violet-800">
+                        Curated collection
+                      </span>
+                    )}
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-900">
+                      {resource.accessLabel}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onToggleBookmark(resource.id)}
+                    aria-label={resource.isSaved ? 'Remove saved collection' : 'Save collection'}
+                    aria-pressed={Boolean(resource.isSaved)}
+                    title={resource.isSaved ? 'Remove from saved collections' : 'Save collection'}
+                    className="shrink-0 rounded-xl p-2 text-slate-400 transition hover:bg-purple-50 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                  >
+                    <Bookmark size={17} className={resource.isSaved ? 'fill-purple-600 text-purple-600' : ''} />
+                  </button>
+                </div>
 
-              <button
-                onClick={() => setActivePreviewResource(null)}
-                className="p-1.5 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
-                aria-label="Close reader preview"
-              >
-                <X size={20} />
-              </button>
-            </div>
+                <p className="mb-1 text-xs font-bold text-slate-500">{resource.provider}</p>
+                <h3 className="text-lg font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{resource.description}</p>
 
-            {/* Modal Body: Reader View */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-800 text-xs md:text-sm">
-              <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200">
-                <h4 className="font-bold text-purple-950 mb-1">Bibliographic Metadata & Access</h4>
-                <p className="text-xs text-purple-800">
-                  Author: {activePreviewResource.author} • Publisher: {activePreviewResource.publisher} • Pages: {activePreviewResource.pages}
-                </p>
-                <p className="text-[11px] text-purple-700 mt-1">
-                  License: {activePreviewResource.accessType === 'full_open_access' ? 'Open Educational Resource (OER)' : 'Institutional Protected Access'}
-                </p>
-              </div>
-
-              {/* Table of Contents */}
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm mb-2">Table of Contents</h4>
-                <ul className="space-y-1.5 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  {activePreviewResource.tableOfContents.map((toc, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-slate-700">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
-                      <span>{toc}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Sample Excerpt */}
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm mb-2">Excerpt Preview</h4>
-                <div className="p-4 rounded-xl border border-slate-200 bg-white leading-relaxed text-slate-700 text-xs font-serif italic">
-                  "{activePreviewResource.sampleContent}"
+                <div className="mt-4 space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {resource.materialTypes.map((materialType) => (
+                      <span key={materialType} className="rounded-lg bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-800">
+                        {typeLabels[materialType]}
+                      </span>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Subjects</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {resource.subjects.slice(0, 4).map((subject) => (
+                        <span key={subject} className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">{subject}</span>
+                      ))}
+                      {resource.subjects.length > 4 && (
+                        <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">+{resource.subjects.length - 4}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-800">{resource.curriculumLabel}</span>
+                    {resource.levels.map((level) => (
+                      <span key={level} className="rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-800">{levelLabels[level]}</span>
+                    ))}
+                  </div>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-[11px] font-extrabold text-slate-700">{resource.licenseLabel}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{resource.accessNote}</p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-              <button
-                onClick={() => handleCopyCitation(activePreviewResource)}
-                className="text-xs font-semibold text-slate-600 hover:text-purple-700 flex items-center gap-1.5"
+              <a
+                href={resource.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-700 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-purple-800 focus:outline-none focus:ring-4 focus:ring-purple-200"
               >
-                {citationCopied ? <Check size={14} className="text-emerald-600" /> : <FileCheck2 size={14} />}
-                <span>{citationCopied ? 'Citation Copied!' : 'Copy Citation (APA/MLA)'}</span>
-              </button>
-
-              <button
-                onClick={() => setActivePreviewResource(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-all"
-              >
-                Done Reading
-              </button>
-            </div>
-          </div>
+                Open collection at source <ArrowUpRight size={16} />
+              </a>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+          <BookOpen className="mx-auto mb-3 text-slate-300" size={34} />
+          <h3 className="text-lg font-black text-slate-800">No collections match those filters</h3>
+          <p className="mt-1 text-sm text-slate-500">Try another level, subject, or resource type.</p>
+          <button type="button" onClick={resetFilters} className="mt-4 rounded-xl bg-purple-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-purple-800">
+            Show all collections
+          </button>
         </div>
       )}
+
+      <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-900">
+        Berry links to the provider’s original collection. Free access does not always mean a resource can be copied, modified, or redistributed; check the license on the provider’s page.
+      </p>
     </div>
   );
 };

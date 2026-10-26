@@ -179,25 +179,35 @@ export interface AppNotification {
   actionUrl?: string;
 }
 
+export type LibraryMaterialType =
+  | 'curriculum_guides'
+  | 'textbooks'
+  | 'stories'
+  | 'exam_samples'
+  | 'course_materials'
+  | 'open_catalog';
+
+export type LibraryCurriculumGroup =
+  | 'kenya_cbc'
+  | 'african_curricula'
+  | 'international'
+  | 'multi_curriculum';
+
 export interface LibraryResource {
   id: string;
   title: string;
-  author: string;
-  publisher: string;
-  stage: LearnerStage;
-  curriculum: Curriculum;
-  gradeLevel: string;
-  subject: string;
-  type: 'textbook' | 'cbc_guide' | 'past_paper' | 'research_paper' | 'revision_guide' | 'reference';
-  year: number;
-  pages: number;
-  readTimeMinutes: number;
+  provider: string;
+  url: string;
+  levels: LearnerStage[];
+  curriculumGroup: LibraryCurriculumGroup;
+  curriculumLabel: string;
+  subjects: string[];
+  materialTypes: LibraryMaterialType[];
   description: string;
-  tableOfContents: string[];
-  sampleContent: string;
-  accessType: 'full_open_access' | 'institutional_access' | 'preview_only';
-  downloadPermitted: boolean;
-  verifiedOfficialCBC?: boolean;
+  accessLabel: string;
+  accessNote: string;
+  licenseLabel: string;
+  isOfficial: boolean;
   isSaved?: boolean;
 }
 
