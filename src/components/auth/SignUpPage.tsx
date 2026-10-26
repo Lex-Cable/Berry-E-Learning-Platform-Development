@@ -139,9 +139,10 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
     };
 
     setIsSubmitting(true);
+    
     try {
       await onRegister(emailOrUsername.trim(), password, newProfile);
-      setRegisteredProfile(newProfile);
+      onCompleteSignUp(newProfile);
     } catch (error) {
       setErrorMessage(getFirebaseAuthErrorMessage(error));
     } finally {

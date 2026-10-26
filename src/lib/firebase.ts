@@ -18,4 +18,6 @@ export const firebaseApp = isFirebaseConfigured
   : null;
 
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null;
-export const firestoreDb = firebaseApp ? getFirestore(firebaseApp) : null;
+export const firestoreDb = firebaseApp
+  ? getFirestore(firebaseApp, 'ai-studio-ddb6caff-168f-4ec5-bd05-da5d7d64fc04')
+  : null;

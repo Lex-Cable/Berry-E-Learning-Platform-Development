@@ -113,7 +113,7 @@ export async function getOrCreateLearnerProfile(
   });
 }
 
-export function getLearnerProfileErrorMessage(error: unknown): string {
+/*export function getLearnerProfileErrorMessage(error: unknown): string {
   const code = (error as { code?: string })?.code;
   if (code === 'permission-denied') {
     return 'Berry could not access this learner profile. Check that the Firestore security rules have been published.';
@@ -122,4 +122,17 @@ export function getLearnerProfileErrorMessage(error: unknown): string {
     return 'Berry could not reach the learner profile database. Check your connection and Firebase setup.';
   }
   return error instanceof Error ? error.message : 'Could not save the learner profile. Please try again.';
+}*/export function getLearnerProfileErrorMessage(error: unknown): string {
+  console.error('Full learner profile error:', error);
+
+  if (error instanceof Error) {
+    const firebaseError = error as Error & {
+      code?: string;
+      customData?: unknown;
+    };
+
+    return `${firebaseError.code ?? 'unknown'}: ${firebaseError.message}`;
+  }
+
+  return String(error);
 }
