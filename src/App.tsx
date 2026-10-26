@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopNavbar } from './components/layout/TopNavbar';
 import { LandingPage } from './components/landing/LandingPage';
@@ -41,6 +41,7 @@ import {
 } from './types';
 import { isLiveTranscriptionAllowed, canNavigateBack, popNavigationHistory } from './utils/mastery';
 import { firebaseAuth } from './lib/firebase';
+import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
   requestBerryPasswordReset,
@@ -96,13 +97,36 @@ export default function App() {
       return;
     }
 
-    return onAuthStateChanged(firebaseAuth, (user) => {
+    let active = true;
+    let authChangeVersion = 0;
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+      if (!active) return;
+      const currentVersion = ++authChangeVersion;
       setIsLoggedIn(Boolean(user));
-      if (user?.displayName) {
-        setLearner((previous) => ({ ...previous, name: user.displayName || previous.name }));
+      if (!user) {
+        setLearner(INITIAL_LEARNER);
+        setAuthStateReady(true);
+        return;
       }
-      setAuthStateReady(true);
+
+      setAuthStateReady(false);
+      try {
+        const profile = await getOrCreateLearnerProfile(user.uid, user.displayName);
+        if (active && currentVersion === authChangeVersion) setLearner(profile);
+      } catch (error) {
+        if (active && currentVersion === authChangeVersion) {
+          setAuthNotice(getLearnerProfileErrorMessage(error));
+          setTimeout(() => setAuthNotice(null), 6000);
+        }
+      } finally {
+        if (active && currentVersion === authChangeVersion) setAuthStateReady(true);
+      }
     });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -157,12 +181,20 @@ export default function App() {
   const handleLogin = async (email: string, password: string) => {
     const user = await signInBerryUser(email, password);
     setIsLoggedIn(true);
-    if (user.displayName) {
-      setLearner((prev) => ({ ...prev, name: user.displayName || prev.name }));
+    let profileLoaded = false;
+    try {
+      const profile = await getOrCreateLearnerProfile(user.uid, user.displayName);
+      setLearner(profile);
+      profileLoaded = true;
+    } catch (error) {
+      setAuthNotice(getLearnerProfileErrorMessage(error));
+      setTimeout(() => setAuthNotice(null), 6000);
     }
     const displayName = user.displayName || user.email?.split('@')[0] || 'Learner';
-    setAuthNotice(`Welcome back to Berry, ${displayName}!`);
-    setTimeout(() => setAuthNotice(null), 4000);
+    if (profileLoaded) {
+      setAuthNotice(`Welcome back to Berry, ${displayName}!`);
+      setTimeout(() => setAuthNotice(null), 4000);
+    }
     handleNavigate('dashboard');
   };
 
@@ -182,10 +214,23 @@ export default function App() {
     setLearner((prev) => ({
       ...prev,
       ...registeredProfile,
+      id: firebaseAuth?.currentUser?.uid || prev.id,
     }));
     setAuthNotice(`Welcome to Berry, ${registeredProfile.name || 'Learner'}! Your account is active.`);
     setTimeout(() => setAuthNotice(null), 4000);
     handleNavigate('dashboard');
+  };
+
+  const handlePersistLearnerProfile = async (updates: Partial<LearnerProfile>) => {
+    const user = firebaseAuth?.currentUser;
+    if (!user) throw new Error('Please sign in again before saving learner profile changes.');
+
+    const updatedProfile = { ...learner, ...updates, id: user.uid };
+    if (updates.name && updates.name !== user.displayName) {
+      await updateProfile(user, { displayName: updates.name.trim() });
+    }
+    const savedProfile = await saveLearnerProfile(user.uid, updatedProfile, user.displayName);
+    setLearner(savedProfile);
   };
 
   // Handler for stage changes
@@ -199,11 +244,12 @@ export default function App() {
       professionals: 'Professional',
     };
 
-    setLearner((prev) => ({
-      ...prev,
-      stage: newStage,
-      gradeLevel: stageGradeDefaults[newStage] || 'Grade 1',
-    }));
+    const updates = { stage: newStage, gradeLevel: stageGradeDefaults[newStage] || 'Grade 1' };
+    setLearner((prev) => ({ ...prev, ...updates }));
+    void handlePersistLearnerProfile(updates).catch((error) => {
+      setAuthNotice(getLearnerProfileErrorMessage(error));
+      setTimeout(() => setAuthNotice(null), 6000);
+    });
 
     // If on live transcription and switched to junior/senior/early, redirect to dashboard
     if (currentView === 'transcription' && !isLiveTranscriptionAllowed(newStage)) {
@@ -277,10 +323,12 @@ export default function App() {
   // Enroll in course
   const handleEnrollCourse = (courseId: string) => {
     if (!learner.enrolledCourseIds.includes(courseId)) {
-      setLearner((prev) => ({
-        ...prev,
-        enrolledCourseIds: [...prev.enrolledCourseIds, courseId],
-      }));
+      const enrolledCourseIds = [...learner.enrolledCourseIds, courseId];
+      setLearner((prev) => ({ ...prev, enrolledCourseIds }));
+      void handlePersistLearnerProfile({ enrolledCourseIds }).catch((error) => {
+        setAuthNotice(getLearnerProfileErrorMessage(error));
+        setTimeout(() => setAuthNotice(null), 6000);
+      });
     }
   };
 
@@ -344,6 +392,17 @@ export default function App() {
     : '';
 
   const unreadCount = notifications.filter((n) => n.unread).length;
+
+  if (!authStateReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-amber-50 text-slate-700">
+        <div className="rounded-3xl bg-white px-8 py-6 text-center shadow-lg border border-amber-100">
+          <div className="text-3xl mb-2" aria-hidden="true">🍓</div>
+          <p className="text-sm font-bold">Loading your Berry learning space…</p>
+        </div>
+      </div>
+    );
+  }
 
   // View: Landing Page (Default 1st view)
   if (currentView === 'landing') {
@@ -616,9 +675,7 @@ export default function App() {
           {currentView === 'profile' && (
             <ProfileView
               learner={learner}
-              onUpdateProfile={(updated) =>
-                setLearner((prev) => ({ ...prev, ...updated }))
-              }
+              onUpdateProfile={handlePersistLearnerProfile}
               onLogout={handleLogout}
             />
           )}

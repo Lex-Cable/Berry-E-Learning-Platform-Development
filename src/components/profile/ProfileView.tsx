@@ -15,10 +15,11 @@ import {
   LogOut,
 } from 'lucide-react';
 import { LearnerProfile, LearnerStage, Curriculum } from '../../types';
+import { getLearnerProfileErrorMessage } from '../../services/learnerProfile';
 
 interface ProfileViewProps {
   learner: LearnerProfile;
-  onUpdateProfile: (updated: Partial<LearnerProfile>) => void;
+  onUpdateProfile: (updated: Partial<LearnerProfile>) => Promise<void>;
   onLogout?: () => void;
 }
 
@@ -43,26 +44,36 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [dyslexiaFont, setDyslexiaFont] = useState(learner.accessibility.dyslexiaFont);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateProfile({
-      name,
-      stage,
-      country,
-      curriculum,
-      gradeLevel,
-      dailyGoalMinutes,
-      accessibility: {
-        fontSize,
-        highContrast,
-        reduceMotion,
-        dyslexiaFont,
-      },
-    });
-
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    setSaveError(null);
+    setSavedSuccess(false);
+    setIsSaving(true);
+    try {
+      await onUpdateProfile({
+        name,
+        stage,
+        country,
+        curriculum,
+        gradeLevel,
+        dailyGoalMinutes,
+        accessibility: {
+          fontSize,
+          highContrast,
+          reduceMotion,
+          dyslexiaFont,
+        },
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (error) {
+      setSaveError(getLearnerProfileErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -91,6 +102,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
+        {saveError && (
+          <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
+            {saveError}
+          </p>
+        )}
         {/* Academic Profile Settings */}
         <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm space-y-4">
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -281,10 +297,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           <button
             type="submit"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm shadow transition-all active:scale-95 w-full sm:w-auto justify-center"
+            disabled={isSaving}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm shadow transition-all active:scale-95 w-full sm:w-auto justify-center disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Save size={16} />
-            <span>Save Preferences & Academic Standing</span>
+            <span>{isSaving ? 'Saving Profile…' : 'Save Preferences & Academic Standing'}</span>
           </button>
         </div>
       </form>

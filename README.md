@@ -155,9 +155,11 @@ npm install
 
 If dependency installation fails, consult the project's current dependency configuration before applying alternative installation options.
 
- 3. Configure Firebase Authentication
+ 3. Configure Firebase Authentication and Cloud Firestore
 
 Create a Firebase project, register Berry as a Web app, and enable **Email/Password** in Authentication → Sign-in method. Add your local and deployed app domains to Authentication → Settings → Authorized domains.
+
+Create a **Cloud Firestore** database in Firebase Console. The app stores each learner at `users/{Firebase Auth UID}`. Publish the included `firestore.rules` before testing signup or profile saving; the rules let a signed-in learner read and update only their own profile. You can publish them with the Firebase CLI using `firebase deploy --only firestore:rules` after selecting the correct Firebase project, or copy the rules into the Firestore Rules editor in Firebase Console and click **Publish**.
 
 Copy `.env.example` to `.env.local`, then fill in the Firebase web app values from Firebase Console → Project settings → Your apps:
 
@@ -186,7 +188,7 @@ Open the local development URL displayed in your terminal. In the current projec
 http://localhost:3000
 ```
 
-Firebase Auth stores the account and display name. Berry’s learner stage, curriculum, and other onboarding preferences are still held in frontend state and will need a profile database integration to persist across devices and sessions.
+Firebase Auth stores the account and display name. Cloud Firestore stores learner stage, country, curriculum, grade, pathway, school or institution, course enrollments, study goal, and accessibility preferences. Existing Auth accounts without a profile document receive a safe default profile at their next sign-in. Lesson mastery, tasks, notifications, certificates, and other learning activity are still local demo state and are not synchronized yet.
 
  5. Start Developing
 

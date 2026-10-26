@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function validProfile(userId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'id', 'name', 'stage', 'country', 'curriculum', 'gradeLevel',
+          'seniorPathway', 'advanceTrack', 'institutionOrCompany', 'avatarUrl',
+          'enrolledCourseIds', 'learningStreakDays', 'dailyGoalMinutes',
+          'completedMinutesToday', 'accessibility', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'id', 'name', 'stage', 'country', 'curriculum', 'gradeLevel',
+          'avatarUrl', 'enrolledCourseIds', 'learningStreakDays',
+          'dailyGoalMinutes', 'completedMinutesToday', 'accessibility', 'updatedAt'
+        ])
+        && data.id == userId
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.stage in ['early', 'junior', 'senior', 'advance', 'university', 'professionals']
+        && data.country is string && data.country.size() <= 100
+        && data.curriculum in ['kenya_cbc', 'cambridge', 'uk_national', 'us_common_core', 'ib']
+        && data.gradeLevel is string && data.gradeLevel.size() <= 100
+        && data.avatarUrl is string && data.avatarUrl.size() <= 2048
+        && data.enrolledCourseIds is list && data.enrolledCourseIds.size() <= 100
+        && data.learningStreakDays is int && data.learningStreakDays >= 0
+        && data.dailyGoalMinutes is int && data.dailyGoalMinutes >= 5 && data.dailyGoalMinutes <= 300
+        && data.completedMinutesToday is int && data.completedMinutesToday >= 0
+        && data.accessibility is map
+        && data.accessibility.keys().hasOnly(['fontSize', 'highContrast', 'reduceMotion', 'dyslexiaFont'])
+        && data.accessibility.keys().hasAll(['fontSize', 'highContrast', 'reduceMotion', 'dyslexiaFont'])
+        && data.accessibility.fontSize in ['normal', 'large', 'xlarge']
+        && data.accessibility.highContrast is bool
+        && data.accessibility.reduceMotion is bool
+        && data.accessibility.dyslexiaFont is bool
+        && data.updatedAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create, update: if isOwner(userId) && validProfile(userId);
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

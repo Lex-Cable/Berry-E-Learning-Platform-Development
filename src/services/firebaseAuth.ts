@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { firebaseAuth } from '../lib/firebase';
 import type { LearnerProfile } from '../types';
+import { saveLearnerProfile } from './learnerProfile';
 
 function requireAuth() {
   if (!firebaseAuth) {
@@ -32,6 +33,7 @@ export async function registerBerryUser(
   if (profile.name?.trim()) {
     await updateProfile(credential.user, { displayName: profile.name.trim() });
   }
+  await saveLearnerProfile(credential.user.uid, profile, credential.user.displayName);
   return credential.user;
 }
 
@@ -69,6 +71,12 @@ export function getFirebaseAuthErrorMessage(error: unknown): string {
       return 'Could not connect. Check your internet connection and try again.';
     case 'auth/operation-not-allowed':
       return 'Email and password sign-in is not enabled for this Firebase project yet.';
+    case 'permission-denied':
+      return 'Your account was created, but Berry could not save its learner profile. Publish firestore.rules in Firebase Console, then sign in again.';
+    case 'failed-precondition':
+      return 'Cloud Firestore is not ready yet. Create a Firestore database in Firebase Console, then try again.';
+    case 'unavailable':
+      return 'Berry could not reach Cloud Firestore. Check your connection and try again.';
     default:
       return error instanceof Error ? error.message : 'Authentication failed. Please try again.';
   }
