@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopNavbar } from './components/layout/TopNavbar';
 import { LandingPage } from './components/landing/LandingPage';
@@ -39,6 +40,13 @@ import {
   CertificateRecord,
 } from './types';
 import { isLiveTranscriptionAllowed, canNavigateBack, popNavigationHistory } from './utils/mastery';
+import { firebaseAuth } from './lib/firebase';
+import {
+  registerBerryUser,
+  requestBerryPasswordReset,
+  signInBerryUser,
+  signOutBerryUser,
+} from './services/firebaseAuth';
 
 export default function App() {
   const [learner, setLearner] = useState<LearnerProfile>(INITIAL_LEARNER);
@@ -51,6 +59,7 @@ export default function App() {
 
   // Auth / Session State (starts logged out on landing page as requested)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [authStateReady, setAuthStateReady] = useState(false);
   const [signupStage, setSignupStage] = useState<LearnerStage>('junior');
 
   // Requirement: "let the 1st always be the landing page"
@@ -81,6 +90,27 @@ export default function App() {
   const [logoutNotice, setLogoutNotice] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!firebaseAuth) {
+      setAuthStateReady(true);
+      return;
+    }
+
+    return onAuthStateChanged(firebaseAuth, (user) => {
+      setIsLoggedIn(Boolean(user));
+      if (user?.displayName) {
+        setLearner((previous) => ({ ...previous, name: user.displayName || previous.name }));
+      }
+      setAuthStateReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (authStateReady && isLoggedIn && currentView === 'landing') {
+      setCurrentView('dashboard');
+    }
+  }, [authStateReady, currentView, isLoggedIn]);
+
   // Navigation handlers with historical tracking for Back arrow
   const handleNavigate = (newView: string) => {
     if (newView === currentView) return;
@@ -109,8 +139,14 @@ export default function App() {
   };
 
   // Requirement: "add the logout feature"
-  const handleLogout = () => {
-    setIsLoggedIn(false);
+  const handleLogout = async () => {
+    try {
+      await signOutBerryUser();
+    } catch {
+      setLogoutNotice('We could not sign you out. Please try again.');
+      setTimeout(() => setLogoutNotice(null), 4000);
+      return;
+    }
     setHistory([]);
     setCurrentView('landing');
     setLogoutNotice('You have successfully logged out of Berry.');
@@ -118,19 +154,27 @@ export default function App() {
   };
 
   // Login handler
-  const handleLogin = (chosenProfile?: Partial<LearnerProfile>) => {
+  const handleLogin = async (email: string, password: string) => {
+    const user = await signInBerryUser(email, password);
     setIsLoggedIn(true);
-    if (chosenProfile) {
-      setLearner((prev) => ({
-        ...prev,
-        ...chosenProfile,
-      }));
+    if (user.displayName) {
+      setLearner((prev) => ({ ...prev, name: user.displayName || prev.name }));
     }
-    const displayName = chosenProfile?.name || learner.name || 'Learner';
+    const displayName = user.displayName || user.email?.split('@')[0] || 'Learner';
     setAuthNotice(`Welcome back to Berry, ${displayName}!`);
     setTimeout(() => setAuthNotice(null), 4000);
     handleNavigate('dashboard');
   };
+
+  const handleRegister = async (
+    email: string,
+    password: string,
+    profile: Partial<LearnerProfile>
+  ) => {
+    await registerBerryUser(email, password, profile);
+  };
+
+  const handlePasswordReset = (email: string) => requestBerryPasswordReset(email);
 
   // Complete sign up handler from registration
   const handleCompleteSignUp = (registeredProfile: Partial<LearnerProfile>) => {
@@ -320,7 +364,7 @@ export default function App() {
             if (isLoggedIn) {
               handleNavigate('dashboard');
             } else {
-              handleLogin(chosenProfile);
+              handleGoToSignUp(chosenProfile?.stage);
             }
           }}
           onLogin={handleGoToLogin}
@@ -341,6 +385,7 @@ export default function App() {
       <div className={`${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}>
         <SignUpPage
           initialStage={signupStage}
+          onRegister={handleRegister}
           onCompleteSignUp={handleCompleteSignUp}
           onGoToLogin={handleGoToLogin}
           onNavigateBack={handleNavigateBack}
@@ -355,6 +400,7 @@ export default function App() {
       <div className={`${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}>
         <LoginPage
           onLogin={handleLogin}
+          onPasswordReset={handlePasswordReset}
           onGoToSignUp={() => handleGoToSignUp()}
           onNavigateBack={handleNavigateBack}
         />
@@ -368,6 +414,7 @@ export default function App() {
       <div className={`${fontScaleClass} ${dyslexiaClass} ${contrastClass}`}>
         <LoginPage
           onLogin={handleLogin}
+          onPasswordReset={handlePasswordReset}
           onGoToSignUp={() => handleGoToSignUp()}
           onNavigateBack={() => handleNavigate('landing')}
         />

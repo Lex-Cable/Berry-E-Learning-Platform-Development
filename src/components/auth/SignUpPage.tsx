@@ -19,8 +19,10 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { LearnerStage, LearnerProfile, Curriculum, SeniorPathway, AdvanceTrack } from '../../types';
+import { getFirebaseAuthErrorMessage } from '../../services/firebaseAuth';
 
 interface SignUpPageProps {
+  onRegister: (email: string, password: string, profile: Partial<LearnerProfile>) => Promise<void>;
   onCompleteSignUp: (profile: Partial<LearnerProfile>) => void;
   onGoToLogin: () => void;
   onNavigateBack: () => void;
@@ -28,6 +30,7 @@ interface SignUpPageProps {
 }
 
 export const SignUpPage: React.FC<SignUpPageProps> = ({
+  onRegister,
   onCompleteSignUp,
   onGoToLogin,
   onNavigateBack,
@@ -60,6 +63,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
   // UI state: Registration success screen
   const [registeredProfile, setRegisteredProfile] = useState<Partial<LearnerProfile> | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Update defaults when stage changes
   const handleStageSelect = (newStage: LearnerStage) => {
@@ -77,7 +81,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -86,7 +90,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
       return;
     }
     if (!emailOrUsername.trim()) {
-      setErrorMessage('Please enter your email or username.');
+      setErrorMessage('Please enter your email address.');
       return;
     }
     if (!country.trim()) {
@@ -134,7 +138,15 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
       institutionOrCompany: institution.trim() || undefined,
     };
 
-    setRegisteredProfile(newProfile);
+    setIsSubmitting(true);
+    try {
+      await onRegister(emailOrUsername.trim(), password, newProfile);
+      setRegisteredProfile(newProfile);
+    } catch (error) {
+      setErrorMessage(getFirebaseAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Stage display info
@@ -200,7 +212,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
           </div>
 
           <span className="text-xs font-bold tracking-widest text-purple-700 uppercase bg-purple-100 px-3.5 py-1 rounded-full inline-block mb-3">
-            Registration Complete
+            Account Created
           </span>
 
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">
@@ -208,7 +220,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
           </h1>
 
           <p className="text-slate-600 text-sm md:text-base leading-relaxed mb-6">
-            Hello, <strong className="text-purple-700 font-bold">{registeredProfile.name}</strong>! Your personalized learning workspace has been configured according to your curriculum and stage.
+            Hello, <strong className="text-purple-700 font-bold">{registeredProfile.name}</strong>! Your Berry account is ready. You can continue to your learning space now.
           </p>
 
           {/* Profile Overview Card */}
@@ -216,7 +228,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 text-xs text-slate-500">
               <span className="font-semibold uppercase tracking-wider">Account Summary</span>
               <span className="text-emerald-700 font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+                <CheckCircle2 className="w-3.5 h-3.5" /> Ready
               </span>
             </div>
 
@@ -698,12 +710,13 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                 {/* Email / Username */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Email Address or Username <span className="text-rose-500">*</span>
+                    Email Address <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
-                      type="text"
+                      type="email"
+                      autoComplete="email"
                       required
                       placeholder="learner@example.com"
                       value={emailOrUsername}
@@ -848,10 +861,11 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-4 px-6 rounded-2xl bg-linear-to-r from-purple-600 via-indigo-600 to-purple-700 text-white font-extrabold text-sm md:text-base shadow-xl shadow-purple-300 hover:shadow-2xl hover:scale-[1.005] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="w-full py-4 px-6 rounded-2xl bg-linear-to-r from-purple-600 via-indigo-600 to-purple-700 text-white font-extrabold text-sm md:text-base shadow-xl shadow-purple-300 hover:shadow-2xl hover:scale-[1.005] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Create Account</span>
-                <Sparkles className="w-4 h-4" />
+                <span>{isSubmitting ? 'Creating Account…' : 'Create Account'}</span>
+                {!isSubmitting && <Sparkles className="w-4 h-4" />}
               </button>
             </div>
 

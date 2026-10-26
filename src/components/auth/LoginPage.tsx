@@ -8,81 +8,42 @@ import {
   EyeOff,
   CheckCircle2,
   AlertCircle,
-  Smile,
-  BookOpen,
-  GraduationCap,
-  Briefcase,
   X,
 } from 'lucide-react';
-import { LearnerProfile, LearnerStage } from '../../types';
+import { getFirebaseAuthErrorMessage } from '../../services/firebaseAuth';
 
 interface LoginPageProps {
-  onLogin: (chosenProfile?: Partial<LearnerProfile>) => void;
+  onLogin: (email: string, password: string) => Promise<void>;
+  onPasswordReset: (email: string) => Promise<void>;
   onGoToSignUp: () => void;
   onNavigateBack: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
+  onPasswordReset,
   onGoToSignUp,
   onNavigateBack,
 }) => {
-  const [emailOrUsername, setEmailOrUsername] = useState('zawadi.mutua@berry.edu');
-  const [password, setPassword] = useState('berry123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Forgot Password Modal State
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [isResetSubmitting, setIsResetSubmitting] = useState(false);
 
-  // Pre-configured Quick Demo Profiles for instant testing
-  const demoAccounts = [
-    {
-      stage: 'early' as LearnerStage,
-      name: 'Amani Wanjiru',
-      stageLabel: 'Kindergarten (PP2)',
-      curriculumLabel: 'CBC Pre-Primary 2',
-      school: 'Little Acorns Academy, Nairobi',
-      icon: Smile,
-      color: 'bg-amber-50 text-amber-900 border-amber-200 hover:border-amber-400',
-    },
-    {
-      stage: 'junior' as LearnerStage,
-      name: 'Zawadi Mutua',
-      stageLabel: 'Junior (Grade 7)',
-      curriculumLabel: 'CBC Junior Secondary',
-      school: 'Nairobi Central Academy',
-      icon: BookOpen,
-      color: 'bg-blue-50 text-blue-900 border-blue-200 hover:border-blue-400',
-    },
-    {
-      stage: 'senior' as LearnerStage,
-      name: 'Kevin Mwangi',
-      stageLabel: 'Senior (Grade 11)',
-      curriculumLabel: 'CBC STEM Pathway',
-      school: 'Alliance High School',
-      icon: GraduationCap,
-      color: 'bg-indigo-50 text-indigo-900 border-indigo-200 hover:border-indigo-400',
-    },
-    {
-      stage: 'advance' as LearnerStage,
-      name: 'Dr. Faith Kiprop',
-      stageLabel: 'University & Professional',
-      curriculumLabel: 'Degree & Cloud AI Track',
-      school: 'University of Nairobi',
-      icon: Briefcase,
-      color: 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:border-emerald-400',
-    },
-  ];
-
-  const handleStandardLogin = (e: React.FormEvent) => {
+  const handleStandardLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!emailOrUsername.trim()) {
-      setErrorMessage('Please enter your email or username.');
+    if (!email.trim()) {
+      setErrorMessage('Please enter your email address.');
       return;
     }
     if (!password) {
@@ -90,36 +51,29 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    // Authenticate and log in
-    onLogin({
-      name: emailOrUsername.includes('@')
-        ? emailOrUsername.split('@')[0].replace('.', ' ')
-        : emailOrUsername,
-    });
+    setIsSubmitting(true);
+    try {
+      await onLogin(email, password);
+    } catch (error) {
+      setErrorMessage(getFirebaseAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSelectDemo = (demo: typeof demoAccounts[0]) => {
-    onLogin({
-      name: demo.name,
-      stage: demo.stage,
-      gradeLevel:
-        demo.stage === 'early'
-          ? 'PP2'
-          : demo.stage === 'junior'
-          ? 'Grade 7'
-          : demo.stage === 'senior'
-          ? 'Grade 11'
-          : 'Bachelor Year 2',
-      seniorPathway: demo.stage === 'senior' ? 'stem' : undefined,
-      advanceTrack: demo.stage === 'advance' ? 'university' : undefined,
-      institutionOrCompany: demo.school,
-    });
-  };
-
-  const handleSendPasswordReset = (e: React.FormEvent) => {
+  const handleSendPasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail.trim()) return;
-    setForgotSubmitted(true);
+    setForgotError(null);
+    setIsResetSubmitting(true);
+    try {
+      await onPasswordReset(forgotEmail);
+      setForgotSubmitted(true);
+    } catch (error) {
+      setForgotError(getFirebaseAuthErrorMessage(error));
+    } finally {
+      setIsResetSubmitting(false);
+    }
   };
 
   return (
@@ -182,19 +136,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           )}
 
           <form onSubmit={handleStandardLogin} className="space-y-4">
-            {/* Email or Username */}
+            {/* Email */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Email or Username
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="text"
+                  type="email"
                   required
                   placeholder="name@example.com"
-                  value={emailOrUsername}
-                  onChange={(e) => setEmailOrUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-3.5 py-2.5 text-xs font-medium rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
@@ -208,7 +162,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   type="button"
                   onClick={() => {
                     setForgotSubmitted(false);
-                    setForgotEmail(emailOrUsername);
+                    setForgotError(null);
+                    setForgotEmail(email);
                     setShowForgotModal(true);
                   }}
                   className="text-xs text-purple-700 hover:text-purple-800 hover:underline font-semibold cursor-pointer"
@@ -240,38 +195,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             {/* Log In Button */}
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full py-3.5 px-4 rounded-xl bg-linear-to-r from-purple-600 via-indigo-600 to-purple-700 text-white font-extrabold text-sm shadow-lg shadow-purple-300 hover:shadow-xl hover:scale-[1.005] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Log In</span>
-              <Sparkles className="w-4 h-4" />
+              <span>{isSubmitting ? 'Signing In…' : 'Log In'}</span>
+              {!isSubmitting && <Sparkles className="w-4 h-4" />}
             </button>
           </form>
-
-          {/* Quick Demo Accounts for Instant Review */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center mb-2.5">
-              Or Instant Sign In as Demo Learner:
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              {demoAccounts.map((d) => {
-                const Icon = d.icon;
-                return (
-                  <button
-                    key={d.stage}
-                    type="button"
-                    onClick={() => handleSelectDemo(d)}
-                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${d.color}`}
-                  >
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span className="font-bold text-xs truncate">{d.name}</span>
-                    </div>
-                    <span className="text-[10px] block opacity-80 font-medium truncate">{d.stageLabel}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           {/* Bottom link: Don't have an account yet? Sign Up */}
           <div className="text-center pt-5 mt-5 border-t border-slate-100 text-xs text-slate-600">
@@ -322,8 +252,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             ) : (
               <form onSubmit={handleSendPasswordReset} className="space-y-4">
                 <p className="text-xs text-slate-600">
-                  Enter your registered email address or learner ID. We will generate an instant verification link to reset your credentials.
+                  Enter your email address. If it is connected to a Berry account, we&apos;ll send a secure password reset link.
                 </p>
+                {forgotError && (
+                  <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+                    {forgotError}
+                  </p>
+                )}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Email Address
@@ -347,9 +282,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 shadow-md shadow-purple-200 cursor-pointer"
+                    disabled={isResetSubmitting}
+                    className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 shadow-md shadow-purple-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Send Reset Link
+                    {isResetSubmitting ? 'Sending…' : 'Send Reset Link'}
                   </button>
                 </div>
               </form>

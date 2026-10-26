@@ -155,17 +155,22 @@ npm install
 
 If dependency installation fails, consult the project's current dependency configuration before applying alternative installation options.
 
- 3. Configure Environment Variables
+ 3. Configure Firebase Authentication
 
-Create a `.env` file in the project root if the application requires environment variables.
+Create a Firebase project, register Berry as a Web app, and enable **Email/Password** in Authentication → Sign-in method. Add your local and deployed app domains to Authentication → Settings → Authorized domains.
 
-Add your Gemini API key:
+Copy `.env.example` to `.env.local`, then fill in the Firebase web app values from Firebase Console → Project settings → Your apps:
 
 ```env
-GEMINI_API_KEY=your_api_key_here
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_APP_ID=...
 ```
 
-Replace the placeholder with your own API key. Never commit `.env` files, API keys, or other secrets to GitHub.
+The Firebase web configuration identifies the project; authorization is enforced by Firebase Authentication and its security controls. Do not place service-account credentials or private server keys in `VITE_*` variables. Keep `.env.local` out of Git.
+
+If using Berry AI locally, also set `GEMINI_API_KEY` in `.env.local`. Never commit API keys or other server secrets to GitHub.
 
  4. Start the Development Server
 
@@ -180,6 +185,8 @@ Open the local development URL displayed in your terminal. In the current projec
 ```text
 http://localhost:3000
 ```
+
+Firebase Auth stores the account and display name. Berry’s learner stage, curriculum, and other onboarding preferences are still held in frontend state and will need a profile database integration to persist across devices and sessions.
 
  5. Start Developing
 
