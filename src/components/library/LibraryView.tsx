@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUpRight,
   Bookmark,
   BookOpen,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   Search,
   ShieldCheck,
@@ -82,11 +84,34 @@ const matchesStage = (resource: LibraryResource, selectedStage: StageFilter) => 
 const ResourceCover: React.FC<{ resource: LibraryResource }> = ({ resource }) => {
   const [failed, setFailed] = useState(false);
   if (resource.coverImageUrl && !failed) {
-    return <img src={resource.coverImageUrl} alt={`Cover of ${resource.title}`} loading="lazy" onError={() => setFailed(true)} className="h-20 w-14 shrink-0 rounded-lg object-cover shadow-sm" />;
+    return <img src={resource.coverImageUrl} alt={`Cover of ${resource.title}`} loading="lazy" onError={() => setFailed(true)} className="h-28 w-20 shrink-0 rounded-xl object-cover shadow-sm" />;
   }
   return (
-    <div aria-hidden="true" className="grid h-20 w-14 shrink-0 place-items-center rounded-lg bg-purple-50 text-purple-500">
+    <div aria-hidden="true" className="grid h-28 w-20 shrink-0 place-items-center rounded-xl bg-linear-to-br from-violet-100 via-fuchsia-50 to-amber-50 text-purple-500 shadow-sm">
       <BookOpen size={21} />
+    </div>
+  );
+};
+
+const ResourceShelf: React.FC<{ provider: string; children: React.ReactNode }> = ({ provider, children }) => {
+  const shelfRef = useRef<HTMLDivElement>(null);
+  const scroll = (direction: -1 | 1) => {
+    const shelf = shelfRef.current;
+    if (!shelf) return;
+    shelf.scrollBy({ left: direction * Math.max(280, shelf.clientWidth * 0.8), behavior: 'smooth' });
+  };
+
+  return (
+    <div className="relative">
+      <button type="button" aria-label={`Scroll ${provider} books left`} onClick={() => scroll(-1)} className="absolute -left-2 top-1/2 z-10 grid -translate-y-1/2 rounded-full border border-slate-200 bg-white/95 p-2 text-slate-700 shadow-lg transition hover:scale-105 hover:bg-purple-700 hover:text-white focus:outline-none focus:ring-4 focus:ring-purple-200 sm:-left-3 sm:p-2.5" >
+        <ChevronLeft size={20} />
+      </button>
+      <div ref={shelfRef} className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label={`${provider} book shelf`}>
+        {children}
+      </div>
+      <button type="button" aria-label={`Scroll ${provider} books right`} onClick={() => scroll(1)} className="absolute -right-2 top-1/2 z-10 grid -translate-y-1/2 rounded-full border border-slate-200 bg-white/95 p-2 text-slate-700 shadow-lg transition hover:scale-105 hover:bg-purple-700 hover:text-white focus:outline-none focus:ring-4 focus:ring-purple-200 sm:-right-3 sm:p-2.5" >
+        <ChevronRight size={20} />
+      </button>
     </div>
   );
 };
@@ -321,12 +346,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-black text-slate-900">{provider}</h3>
-                  <p className="text-xs font-semibold text-slate-500">{providerResources.length} {providerResources.length === 1 ? 'item' : 'items'} from this source</p>
+                  <p className="text-xs font-semibold text-slate-500">{providerResources.length} {providerResources.length === 1 ? 'item' : 'items'} in this collection</p>
                 </div>
+                <div className="ml-auto flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-slate-400 md:hidden" aria-hidden="true">Swipe <ChevronRight size={14} /></div>
               </div>
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <ResourceShelf provider={provider}>
                 {providerResources.map((resource) => (
-            <article key={resource.id} className="group flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-xl hover:shadow-purple-100/70">
+            <article key={resource.id} className="group flex h-[530px] w-[270px] shrink-0 snap-start flex-col justify-between rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-xl hover:shadow-purple-100/70 sm:w-[285px]">
               <div>
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <div className="flex flex-wrap gap-1.5">
@@ -360,13 +386,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <div className="flex items-start gap-3">
                   <ResourceCover resource={resource} />
                   <div className="min-w-0">
-                    <h3 className="text-lg font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
-                    {(resource.author || resource.publisher) && <p className="mt-1 text-xs font-semibold text-slate-500">{resource.author ? `By ${resource.author}` : ''}{resource.author && resource.publisher ? ' · ' : ''}{resource.publisher ? `Published by ${resource.publisher}` : ''}</p>}
-                    {resource.description && <p className="mt-2 text-sm leading-relaxed text-slate-600">{resource.description}</p>}
+                    <h3 className="line-clamp-3 text-base font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
+                    {(resource.author || resource.publisher) && <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">{resource.author ? `By ${resource.author}` : ''}{resource.author && resource.publisher ? ' · ' : ''}{resource.publisher ? `Published by ${resource.publisher}` : ''}</p>}
+                    {resource.description && <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-slate-600">{resource.description}</p>}
                   </div>
                 </div>
-                {resource.language && <p className="mt-2 text-xs font-semibold text-slate-500">Language: {resource.language}</p>}
-                {(resource.intendedAudience || resource.gradeLabel) && <p className="mt-1 text-xs font-semibold text-slate-500">{[resource.intendedAudience, resource.gradeLabel].filter(Boolean).join(' · ')}</p>}
+                {(resource.language || resource.intendedAudience || resource.gradeLabel) && <p className="mt-2 line-clamp-1 text-xs font-semibold text-slate-500">{[resource.language && `Language: ${resource.language}`, resource.intendedAudience, resource.gradeLabel].filter(Boolean).join(' · ')}</p>}
 
                 <div className="mt-4 space-y-3">
                   <div className="flex flex-wrap gap-1.5">
@@ -393,9 +418,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       <span key={level} className="rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-800">{levelLabels[level]}</span>
                     ))}
                   </div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                    <p className="text-[11px] font-extrabold text-slate-700">{resource.licenseLabel}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{resource.accessNote}</p>
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-2.5">
+                    <p className="line-clamp-1 text-[11px] font-extrabold text-slate-700">{resource.licenseLabel}</p>
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500">{resource.accessNote}</p>
                   </div>
                 </div>
               </div>
@@ -413,7 +438,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               )}
             </article>
                 ))}
-              </div>
+              </ResourceShelf>
             </section>
           ))}
           {apiHasMore && (
@@ -436,7 +461,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       )}
 
       <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-900">
-        Berry combines a small curated catalogue with live Open Textbook Library search results. The other sources are curated listings. Availability and reuse rights vary by item; follow the licence and access terms on the linked resource page.
+        Berry shows its verified catalogue records alongside paginated live Open Textbook Library results. Other providers are represented by individually verified records; Berry does not claim to reproduce a provider’s complete catalogue unless that provider offers a supported complete feed. Availability and reuse rights vary by item; follow the licence and access terms on the linked resource page.
       </p>
     </div>
   );
