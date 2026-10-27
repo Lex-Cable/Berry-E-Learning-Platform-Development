@@ -304,6 +304,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Collection-group queries need a recursive match in rules version 2.
+    // Each learner can read only likes whose userId matches their Firebase UID.
+    match /{path=**}/likes/{likeId} {
+      allow get, list: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

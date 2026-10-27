@@ -64,7 +64,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
   }, [uid]);
   useEffect(() => {
     if (!uid) return;
-    return subscribeToUserLikes(uid, (ids) => setLikedIds((current) => current.size === ids.size && [...current].every((id) => ids.has(id)) ? current : ids), (cause) => setError(messageOf(cause)));
+    return subscribeToUserLikes(uid, (ids) => setLikedIds((current) => current.size === ids.size && [...current].every((id) => ids.has(id)) ? current : ids), (cause) => setError('Could not load your likes: ' + messageOf(cause)));
   }, [uid, retryKey]);
   useEffect(() => {
     if (!uid) return;
@@ -78,9 +78,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
       });
       setCursor((current) => current ?? page.cursor);
       setHasMore((current) => loadedAllPosts.current ? current : page.hasMore);
-      setLoading(false); setError('');
-    }, (cause) => { setLoading(false); setError(messageOf(cause)); });
-    const stopDrafts = subscribeToLearnerDrafts(uid, uid, new Set(), setDrafts, (cause) => setError(messageOf(cause)));
+      setLoading(false);
+    }, (cause) => { setLoading(false); setError('Could not load the community feed: ' + messageOf(cause)); });
+    const stopDrafts = subscribeToLearnerDrafts(uid, uid, new Set(), setDrafts, (cause) => setError('Could not load your drafts: ' + messageOf(cause)));
     return () => { stopFeed(); stopDrafts(); };
   }, [uid, retryKey]);
   useEffect(() => {
@@ -93,18 +93,18 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
       });
       setCommentCursor((current) => current ?? nextCursor);
       setMoreComments(hasNext);
-    }, (cause) => setError(messageOf(cause)));
+    }, (cause) => setError('Could not load comments: ' + messageOf(cause)));
   }, [readingId, retryKey]);
   useEffect(() => {
     if (!moderator || !moderation) return;
-    return subscribeToOpenCommunityReports(setReports, (cause) => setError(messageOf(cause)));
+    return subscribeToOpenCommunityReports(setReports, (cause) => setError('Could not load reports for moderation: ' + messageOf(cause)));
   }, [moderator, moderation, retryKey]);
   useEffect(() => {
     if (!moderator || !moderation || reports.length === 0) return;
     let active = true;
     void Promise.all(reports.slice(0, 30).map(async (item) => [item.id, await loadCommunityReportContext(item)] as const))
       .then((entries) => { if (active) setReportContext(Object.fromEntries(entries)); })
-      .catch((cause: unknown) => { if (active) setError(messageOf(cause)); });
+      .catch((cause: unknown) => { if (active) setError('Could not load reported content: ' + messageOf(cause)); });
     return () => { active = false; };
   }, [moderator, moderation, reports]);
 
@@ -213,7 +213,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
           </div>
         </article>)}
       </div>{view === 'feed' && hasMore && <div className="text-center"><button type="button" disabled={loadingMore} onClick={() => void loadMore()} className="rounded-xl border border-purple-200 bg-white px-5 py-3 text-xs font-bold text-purple-800 hover:bg-purple-50 disabled:opacity-50">{loadingMore ? 'Loading more…' : 'Load more articles'}</button></div>}</>}
-    {error && <div className="flex justify-center"><button type="button" onClick={() => setRetryKey((key) => key + 1)} className="text-xs font-bold text-purple-700">Retry loading Community</button></div>}
+    {error && <div className="flex justify-center"><button type="button" onClick={() => { setError(''); setRetryKey((key) => key + 1); }} className="text-xs font-bold text-purple-700">Retry loading Community</button></div>}
 
     {readingPost && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setReadingId(null); }}><section role="dialog" aria-modal="true" aria-labelledby="blog-title" className="my-6 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-y-auto rounded-3xl border border-slate-200 bg-white shadow-2xl">
       <header className={'relative bg-gradient-to-tr ' + readingPost.coverGradient + ' p-6 text-white sm:p-8'} style={readingPost.imageUrl ? { backgroundImage: 'linear-gradient(20deg, rgba(30,20,55,.78), rgba(30,20,55,.2)), url("' + readingPost.imageUrl + '")', backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}><button type="button" onClick={() => setReadingId(null)} aria-label="Close article" className="absolute right-4 top-4 rounded-full bg-black/20 p-2"><X size={18} /></button><div className="mb-3 flex items-center gap-2"><span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase">{readingPost.category}</span><span className="text-xs">{readingPost.readTimeMinutes} min · {readingPost.subjectTag}</span></div><h2 id="blog-title" className="max-w-2xl pr-8 text-2xl font-black leading-tight">{readingPost.title}</h2><div className="mt-4 flex items-center gap-3 text-xs">{readingPost.authorAvatarUrl ? <img src={readingPost.authorAvatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="grid h-9 w-9 place-items-center rounded-full bg-white/25 font-bold">{readingPost.authorName.charAt(0).toUpperCase()}</span>}<span><b className="block">{readingPost.authorName}</b>{readingPost.authorGrade} · {readingPost.timestamp}</span></div></header>
