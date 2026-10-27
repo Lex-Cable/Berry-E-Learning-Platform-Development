@@ -228,7 +228,12 @@ service cloud.firestore {
       allow delete: if ownsBlog() && resource.data.status == 'deleted';
 
       match /likes/{userId} {
-        allow get, list: if signedIn()
+        // A learner must be able to read their own deterministic like document
+        // even when it does not exist yet; transactions need that read to toggle safely.
+        allow get: if isOwner(userId)
+          || (signedIn() && get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
+            && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted');
+        allow list: if signedIn()
           && (resource.data.userId == request.auth.uid
             || (get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
               && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted'));

@@ -3,7 +3,7 @@ import { ArrowRight, BookOpen, Clock, Edit3, Flag, Heart, MessageCircle, PlusCir
 import { onAuthStateChanged } from 'firebase/auth';
 import type { BlogPost, BlogPostComment, LearnerProfile } from '../../types';
 import { firebaseAuth } from '../../lib/firebase';
-import { addBlogComment, createBlog, deleteBlog, deleteBlogComment, loadCommunityReportContext, loadMoreBlogComments, loadMorePublishedBlogs, reportCommunityItem, reviewCommunityReport, subscribeToBlogComments, subscribeToLearnerDrafts, subscribeToOpenCommunityReports, subscribeToPublishedBlogs, subscribeToUserLikes, toggleBlogLike, updateBlog, updateBlogComment, type BlogPostInput, type CommunityPage, type CommunityReport } from '../../services/community';
+import { addBlogComment, createBlog, deleteBlog, deleteBlogComment, getCommunityStorageMode, loadCommunityReportContext, loadMoreBlogComments, loadMorePublishedBlogs, reportCommunityItem, reviewCommunityReport, subscribeToBlogComments, subscribeToCommunityStorageMode, subscribeToLearnerDrafts, subscribeToOpenCommunityReports, subscribeToPublishedBlogs, subscribeToUserLikes, toggleBlogLike, updateBlog, updateBlogComment, type BlogPostInput, type CommunityPage, type CommunityReport } from '../../services/community';
 
 interface CommunityViewProps { learner: LearnerProfile; }
 type ReportTarget = { targetType: 'post' | 'comment'; postId: string; targetId: string };
@@ -24,6 +24,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [retryKey, setRetryKey] = useState(0);
+  const [storageMode, setStorageMode] = useState<'cloud' | 'local'>('cloud');
   const [moderator, setModerator] = useState(false);
   const [view, setView] = useState<'feed' | 'drafts'>('feed');
   const [category, setCategory] = useState('all');
@@ -55,6 +56,12 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
     if (!firebaseAuth) { setLoading(false); setError('Berry Community needs Firebase Authentication and Firestore configuration.'); return; }
     return onAuthStateChanged(firebaseAuth, (user) => { setUid(user?.uid ?? null); setLoading(Boolean(user)); setError(user ? '' : 'Sign in to browse and participate in Berry Community.'); });
   }, []);
+  useEffect(() => subscribeToCommunityStorageMode(setStorageMode), []);
+  useEffect(() => {
+    if (storageMode !== 'local') return;
+    const retryTimer = window.setInterval(() => setRetryKey((key) => key + 1), 30_000);
+    return () => window.clearInterval(retryTimer);
+  }, [storageMode]);
   useEffect(() => {
     const user = firebaseAuth?.currentUser;
     if (!uid || !user) { setModerator(false); return; }
@@ -139,7 +146,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
     try {
       if (editingPost) await updateBlog(editingPost.id, input);
       else await createBlog(input, { uid, name: learner.name, stage: learner.stage, gradeLevel: learner.gradeLevel, avatarUrl: learner.avatarUrl });
-      setNotice(status === 'draft' ? 'Draft saved privately.' : 'Your blog is published in Berry Community.'); setComposer(false); setEditingPost(null); setForm(blankForm());
+      const localOnly = getCommunityStorageMode() === 'local';
+      setNotice(localOnly ? 'Saved on this device. It will sync to Berry Community when Firebase access is enabled.' : status === 'draft' ? 'Draft saved privately.' : 'Your blog is published in Berry Community.'); setComposer(false); setEditingPost(null); setForm(blankForm());
       if (status === 'draft') setView('drafts');
     } catch (cause) { setError(messageOf(cause)); }
   };
@@ -165,7 +173,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
   };
   const sendReport = async (event: React.FormEvent) => {
     event.preventDefault(); if (!report || !uid) return; setReportBusy(true);
-    try { await reportCommunityItem({ ...report, reporterId: uid, reason, details: details.trim() }); setReport(null); setDetails(''); setNotice('Your report was sent privately to Berry moderators.'); } catch (cause) { setError(messageOf(cause)); } finally { setReportBusy(false); }
+    try { const queuedLocally = await reportCommunityItem({ ...report, reporterId: uid, reason, details: details.trim() }); setReport(null); setDetails(''); setNotice(queuedLocally ? 'Report saved on this device. It will be sent to Berry moderators after Firebase access is enabled.' : 'Your report was sent privately to Berry moderators.'); } catch (cause) { setError(messageOf(cause)); } finally { setReportBusy(false); }
   };
   const reviewReport = async (item: CommunityReport, action: 'dismiss' | 'hide') => {
     if (!uid) return; setModerationBusy(item.id);
@@ -187,6 +195,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({ learner }) => {
   };
 
   return <div className="mx-auto max-w-7xl space-y-6 pb-12">
+    {storageMode === 'local' && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-950"><p><b>Device-only mode:</b> The Community is usable on this browser while Firebase access is being set up. Posts, drafts, likes, comments, and reports are saved here and will sync when Firebase allows them. Other learners will see your posts after that sync.</p><button type="button" onClick={() => setRetryKey((key) => key + 1)} className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold text-amber-900 hover:bg-amber-100">Retry cloud sync</button></div>}
     <header className="flex flex-col justify-between gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:p-8">
       <div><div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1 text-xs font-bold text-purple-800"><Sparkles size={14} /> Berry Community Blog & Articles</div><h2 className="text-2xl font-black tracking-tight text-slate-900">Knowledge Sharing & Academic Blogs</h2><p className="mt-1 max-w-xl text-xs text-slate-500">Share learning ideas, study strategies, academic experiences, and projects with other learners.</p><button type="button" onClick={() => setGuidelines(true)} className="mt-2 text-xs font-bold text-purple-700 hover:underline">Community guidelines</button></div>
       <div className="flex flex-wrap gap-2">{moderator && <button type="button" onClick={() => setModeration(true)} className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900"><ShieldCheck size={15} /> Review reports</button>}<button type="button" disabled={!uid} onClick={() => openComposer()} className="inline-flex items-center gap-2 rounded-2xl bg-purple-600 px-5 py-3 text-xs font-bold text-white shadow-md hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"><PlusCircle size={16} /> Write a Blog Post</button></div>
