@@ -208,8 +208,14 @@ service cloud.firestore {
     }
 
     match /blogs/{blogId} {
-      allow get, list: if signedIn()
+      allow get: if signedIn()
         && (resource.data.status == 'published' || resource.data.authorId == request.auth.uid || isModerator());
+      // Keep feed and draft query permissions as separate constraints so Firestore
+      // can prove each query is safe from its where clauses.
+      allow list: if signedIn() && resource.data.status == 'published';
+      allow list: if signedIn()
+        && resource.data.authorId == request.auth.uid
+        && resource.data.status == 'draft';
       allow create: if signedIn() && validBlog(request.resource.data, request.auth.uid);
       allow update: if validBlogContentUpdate()
         || validLikeCountUpdate(blogId)
@@ -239,13 +245,21 @@ service cloud.firestore {
       }
 
       match /comments/{commentId} {
-        allow get, list: if signedIn()
+        allow get: if signedIn()
           && ((get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'published'
               && resource.data.status == 'published')
             || resource.data.authorId == request.auth.uid
             || isModerator()
             || (get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
               && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted'));
+        allow list: if signedIn()
+          && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'published'
+          && resource.data.status == 'published';
+        allow list: if signedIn() && resource.data.authorId == request.auth.uid;
+        allow list: if isModerator();
+        allow list: if signedIn()
+          && get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
+          && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted';
         allow create: if signedIn()
           && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'published'
           && request.resource.data.keys().hasOnly([
