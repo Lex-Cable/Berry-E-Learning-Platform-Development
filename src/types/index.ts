@@ -196,6 +196,19 @@ export type LibraryCurriculumGroup =
 export interface LibraryResource {
   id: string;
   title: string;
+  author?: string;
+  publisher?: string;
+  description?: string;
+  coverImageUrl?: string;
+  language?: string;
+  accessType?: 'read_online' | 'download' | 'external';
+  verifiedAt?: string;
+  catalogueUpdatedAt?: string;
+  recordUrl?: string;
+  keywords?: string[];
+  catalogueSource?: 'curated' | 'api';
+  gradeLabel?: string;
+  intendedAudience?: string;
   provider: string;
   url: string;
   levels: LearnerStage[];
@@ -203,7 +216,6 @@ export interface LibraryResource {
   curriculumLabel: string;
   subjects: string[];
   materialTypes: LibraryMaterialType[];
-  description: string;
   accessLabel: string;
   accessNote: string;
   licenseLabel: string;

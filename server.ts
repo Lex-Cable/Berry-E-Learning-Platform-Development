@@ -11,8 +11,115 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const openTextbookCache = new Map<string, { expiresAt: number; payload: unknown }>();
 
 app.use(express.json({ limit: '10mb' }));
+
+// Open Textbook Library's public JSON API proxy. Keep the upstream request on
+// the existing Express server and cache query results briefly for resilience.
+app.get('/api/library/open-textbooks', async (req, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+  const requestedPage = Number.parseInt(typeof req.query.page === 'string' ? req.query.page : '1', 10);
+  const page = Number.isFinite(requestedPage) ? Math.max(1, Math.min(requestedPage, 100)) : 1;
+  const cacheKey = `${query.toLocaleLowerCase()}|${page}`;
+  const cached = openTextbookCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.setHeader('X-Berry-Catalogue', 'cache');
+    return res.json(cached.payload);
+  }
+
+  try {
+    const apiUrl = new URL('https://open.umn.edu/opentextbooks/textbooks.json');
+    apiUrl.searchParams.set('page', String(page));
+    if (query) apiUrl.searchParams.set('q', query);
+
+    const response = await fetch(apiUrl, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      throw new Error(`Open Textbook Library returned ${response.status}`);
+    }
+
+    const body = await response.json() as {
+      data?: Array<Record<string, any>>;
+      links?: { next?: string | null };
+    };
+    if (!Array.isArray(body.data)) throw new Error('Unexpected Open Textbook Library response');
+
+    const licenseLabels: Record<string, string> = {
+      Attribution: 'CC BY',
+      'Attribution-ShareAlike': 'CC BY-SA',
+      'Attribution-NonCommercial': 'CC BY-NC',
+      'Attribution-NonCommercial-ShareAlike': 'CC BY-NC-SA',
+      'Attribution-NoDerivs': 'CC BY-ND',
+      'Attribution-NonCommercial-NoDerivs': 'CC BY-NC-ND',
+      'No Rights Reserved': 'CC0',
+      'Free Documentation License (GNU)': 'GNU Free Documentation License',
+    };
+    const languageNames: Record<string, string> = { eng: 'English', spa: 'Spanish', fre: 'French', fra: 'French', por: 'Portuguese', deu: 'German', ger: 'German', ita: 'Italian', ara: 'Arabic', zho: 'Chinese', rus: 'Russian' };
+    const now = new Date().toISOString();
+    const data = body.data.map((book) => {
+      const contributors = Array.isArray(book.contributors) ? book.contributors : [];
+      const authors = contributors
+        .filter((person: Record<string, any>) => !person.contribution || /author/i.test(person.contribution))
+        .map((person: Record<string, any>) => [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ').trim() || person.name)
+        .filter(Boolean);
+      const subjects = Array.isArray(book.subjects) ? book.subjects.map((subject: Record<string, any>) => subject.name).filter(Boolean) : [];
+      const publishers = Array.isArray(book.publishers) ? book.publishers.map((publisher: Record<string, any>) => publisher.name).filter(Boolean) : [];
+      const formats = Array.isArray(book.formats) ? book.formats : [];
+      const onlineFormat = formats.find((format: Record<string, any>) => /online/i.test(format.type || ''));
+      const pdfFormat = formats.find((format: Record<string, any>) => /pdf/i.test(format.type || ''));
+      const chosenFormat = onlineFormat || pdfFormat || formats.find((format: Record<string, any>) => format.url);
+      const formatNames = [...new Set(formats.map((format: Record<string, any>) => format.type).filter(Boolean))];
+      const recordUrl = typeof book.url === 'string' && book.url.startsWith('https://open.umn.edu/')
+        ? book.url
+        : `https://open.umn.edu/opentextbooks/textbooks/${book.id}`;
+
+      return {
+        id: `otl-${book.id}`,
+        title: book.title,
+        author: authors.length ? authors.join(', ') : undefined,
+        publisher: publishers.length ? publishers.join(', ') : undefined,
+        description: typeof book.description === 'string' ? book.description : undefined,
+        language: languageNames[book.language] || (typeof book.language === 'string' ? book.language : undefined),
+        accessType: pdfFormat && chosenFormat === pdfFormat ? 'download' : 'read_online',
+        provider: 'Open Textbook Library',
+        url: typeof chosenFormat?.url === 'string' && /^https?:\/\//i.test(chosenFormat.url) ? chosenFormat.url : recordUrl,
+        recordUrl,
+        levels: ['university'],
+        curriculumGroup: 'international',
+        curriculumLabel: 'University • international supplemental',
+        subjects,
+        keywords: subjects,
+        materialTypes: ['textbooks'],
+        accessLabel: pdfFormat ? 'Free • online and PDF options' : 'Free online textbook',
+        accessNote: formatNames.length ? `Available formats listed by the library: ${formatNames.join(', ')}.` : 'Open the library record to check available formats.',
+        licenseLabel: licenseLabels[book.license] || (typeof book.license === 'string' ? book.license : 'Check the library record'),
+        isOfficial: false,
+        verifiedAt: now,
+        catalogueUpdatedAt: typeof book.updated_at === 'string' ? book.updated_at : undefined,
+        catalogueSource: 'api',
+      };
+    });
+
+    const payload = { data, nextPageAvailable: Boolean(body.links?.next), page, source: 'Open Textbook Library API' };
+    openTextbookCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60 * 1000, payload });
+    if (openTextbookCache.size > 50) {
+      const oldestKey = openTextbookCache.keys().next().value;
+      if (oldestKey) openTextbookCache.delete(oldestKey);
+    }
+    res.setHeader('X-Berry-Catalogue', 'live');
+    return res.json(payload);
+  } catch (error) {
+    console.error('Open Textbook Library catalogue error:', error);
+    if (cached) {
+      res.setHeader('X-Berry-Catalogue', 'stale-cache');
+      return res.json(cached.payload);
+    }
+    return res.status(502).json({ error: 'The Open Textbook Library is temporarily unavailable.' });
+  }
+});
 
 // Server-side Gemini initialization
 let aiClient: GoogleGenAI | null = null;

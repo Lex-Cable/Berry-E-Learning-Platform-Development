@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   Bookmark,
@@ -13,7 +13,7 @@ import type { LibraryCurriculumGroup, LibraryMaterialType, LibraryResource, Lear
 interface LibraryViewProps {
   resources: LibraryResource[];
   learner: LearnerProfile;
-  onToggleBookmark: (resourceId: string) => void;
+  onToggleBookmark: (resourceId: string, resource?: LibraryResource) => void;
 }
 
 type StageFilter = 'all' | 'early' | 'junior' | 'senior' | 'university' | 'advanced';
@@ -72,10 +72,23 @@ const selectedStageFor = (stage: LearnerStage): StageFilter => {
 
 const matchesStage = (resource: LibraryResource, selectedStage: StageFilter) => {
   if (selectedStage === 'all') return true;
+  if (resource.levels.length === 0) return true;
   if (selectedStage === 'advanced') {
     return resource.levels.includes('advance') || resource.levels.includes('professionals');
   }
   return resource.levels.includes(selectedStage);
+};
+
+const ResourceCover: React.FC<{ resource: LibraryResource }> = ({ resource }) => {
+  const [failed, setFailed] = useState(false);
+  if (resource.coverImageUrl && !failed) {
+    return <img src={resource.coverImageUrl} alt={`Cover of ${resource.title}`} loading="lazy" onError={() => setFailed(true)} className="h-20 w-14 shrink-0 rounded-lg object-cover shadow-sm" />;
+  }
+  return (
+    <div aria-hidden="true" className="grid h-20 w-14 shrink-0 place-items-center rounded-lg bg-purple-50 text-purple-500">
+      <BookOpen size={21} />
+    </div>
+  );
 };
 
 export const LibraryView: React.FC<LibraryViewProps> = ({
@@ -84,14 +97,67 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onToggleBookmark,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [apiResources, setApiResources] = useState<LibraryResource[]>([]);
+  const [apiLoading, setApiLoading] = useState(true);
+  const [apiError, setApiError] = useState(false);
+  const [apiHasMore, setApiHasMore] = useState(false);
+  const [apiPage, setApiPage] = useState(1);
   const [selectedStage, setSelectedStage] = useState<StageFilter>(() => selectedStageFor(learner.stage));
   const [selectedCurriculum, setSelectedCurriculum] = useState<CurriculumFilter>('all');
   const [selectedMaterial, setSelectedMaterial] = useState<MaterialFilter>('all');
   const [savedOnly, setSavedOnly] = useState(false);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    setApiLoading(true);
+    setApiError(false);
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) params.set('q', searchQuery.trim());
+      params.set('page', String(apiPage));
+      fetch(`/api/library/open-textbooks?${params.toString()}`, { signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) throw new Error('Open Textbook Library request failed');
+          return response.json() as Promise<{ data?: LibraryResource[]; nextPageAvailable?: boolean }>;
+        })
+        .then((payload) => {
+          const nextPage = Array.isArray(payload.data) ? payload.data : [];
+          setApiResources((current) => apiPage === 1 ? nextPage : [...current, ...nextPage]);
+          setApiHasMore(Boolean(payload.nextPageAvailable));
+        })
+        .catch((error: unknown) => {
+          if (error instanceof Error && error.name === 'AbortError') return;
+          setApiError(true);
+          if (apiPage === 1) setApiResources([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setApiLoading(false);
+        });
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery, apiPage]);
+
+  useEffect(() => {
+    setApiPage(1);
+  }, [searchQuery]);
+
+  const availableResources = useMemo(() => {
+    const seen = new Set<string>();
+    return [...resources, ...apiResources].filter((resource) => {
+      const key = `${resource.provider.toLocaleLowerCase()}|${resource.title.trim().toLocaleLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [resources, apiResources]);
+
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return resources.filter((resource) => {
+    return availableResources.filter((resource) => {
       if (!matchesStage(resource, selectedStage)) return false;
       if (selectedCurriculum !== 'all' && resource.curriculumGroup !== selectedCurriculum) return false;
       if (selectedMaterial !== 'all' && !resource.materialTypes.includes(selectedMaterial)) return false;
@@ -100,8 +166,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
       const searchable = [
         resource.title,
+        resource.author,
+        resource.publisher,
         resource.provider,
         resource.description,
+        resource.language,
+        resource.gradeLabel,
+        resource.intendedAudience,
+        ...(resource.keywords ?? []),
         resource.curriculumLabel,
         resource.accessLabel,
         resource.accessNote,
@@ -110,7 +182,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       ].join(' ').toLocaleLowerCase();
       return searchable.includes(query);
     });
-  }, [resources, searchQuery, selectedStage, selectedCurriculum, selectedMaterial, savedOnly]);
+  }, [availableResources, searchQuery, selectedStage, selectedCurriculum, selectedMaterial, savedOnly]);
 
   const resetFilters = () => {
     setSearchQuery('');
@@ -120,7 +192,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     setSavedOnly(false);
   };
 
-  const savedCount = resources.filter((resource) => resource.isSaved).length;
+  const savedCount = availableResources.filter((resource) => resource.isSaved).length;
   const groupedResources = useMemo(() => {
     const groups = new Map<string, LibraryResource[]>();
     filtered.forEach((resource) => {
@@ -149,16 +221,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             </p>
           </div>
           <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-            <div className="text-2xl font-black">{resources.length}</div>
+            <div className="text-2xl font-black">{availableResources.length}</div>
             <div className="text-xs font-semibold text-purple-100">individual resources</div>
           </div>
         </div>
       </section>
 
-      <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5" aria-label="Filter library collections">
+      {(apiLoading || apiError) && (
+        <p role={apiError ? 'status' : undefined} aria-live="polite" className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-900">
+          {apiLoading ? 'Connecting to the Open Textbook Library catalogue… Curated Berry resources remain available.' : 'The live Open Textbook Library catalogue is unavailable right now. Showing Berry’s curated resources instead.'}
+        </p>
+      )}
+
+      <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5" aria-label="Filter library resources">
         <div className="flex flex-col gap-3 lg:flex-row">
           <label className="relative min-w-0 flex-1">
-            <span className="sr-only">Search collections</span>
+            <span className="sr-only">Search resources</span>
             <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
@@ -256,9 +334,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800">
                         <ShieldCheck size={12} /> Official source
                       </span>
+                    ) : resource.catalogueSource === 'api' ? (
+                      <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-extrabold text-sky-800">Live API listing</span>
                     ) : (
                       <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-extrabold text-violet-800">
-                        Curated collection
+                        Verified listing
                       </span>
                     )}
                     <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-900">
@@ -267,18 +347,26 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => onToggleBookmark(resource.id)}
-                    aria-label={resource.isSaved ? 'Remove saved collection' : 'Save collection'}
+                    onClick={() => onToggleBookmark(resource.id, resource)}
+                    aria-label={resource.isSaved ? 'Remove saved resource' : 'Save resource'}
                     aria-pressed={Boolean(resource.isSaved)}
-                    title={resource.isSaved ? 'Remove from saved collections' : 'Save collection'}
+                    title={resource.isSaved ? 'Remove from saved resources' : 'Save resource'}
                     className="shrink-0 rounded-xl p-2 text-slate-400 transition hover:bg-purple-50 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300"
                   >
                     <Bookmark size={17} className={resource.isSaved ? 'fill-purple-600 text-purple-600' : ''} />
                   </button>
                 </div>
 
-                <h3 className="text-lg font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">{resource.description}</p>
+                <div className="flex items-start gap-3">
+                  <ResourceCover resource={resource} />
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
+                    {(resource.author || resource.publisher) && <p className="mt-1 text-xs font-semibold text-slate-500">{resource.author ? `By ${resource.author}` : ''}{resource.author && resource.publisher ? ' · ' : ''}{resource.publisher ? `Published by ${resource.publisher}` : ''}</p>}
+                    {resource.description && <p className="mt-2 text-sm leading-relaxed text-slate-600">{resource.description}</p>}
+                  </div>
+                </div>
+                {resource.language && <p className="mt-2 text-xs font-semibold text-slate-500">Language: {resource.language}</p>}
+                {(resource.intendedAudience || resource.gradeLabel) && <p className="mt-1 text-xs font-semibold text-slate-500">{[resource.intendedAudience, resource.gradeLabel].filter(Boolean).join(' · ')}</p>}
 
                 <div className="mt-4 space-y-3">
                   <div className="flex flex-wrap gap-1.5">
@@ -318,13 +406,23 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 rel="noopener noreferrer"
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-700 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-purple-800 focus:outline-none focus:ring-4 focus:ring-purple-200"
               >
-                Open this resource <ArrowUpRight size={16} />
+                {resource.accessType === 'download' ? 'Open PDF / download' : resource.accessType === 'external' ? 'Open resource' : 'Read online'} <ArrowUpRight size={16} />
               </a>
+              {resource.recordUrl && resource.recordUrl !== resource.url && (
+                <a href={resource.recordUrl} target="_blank" rel="noopener noreferrer" className="mt-2 text-center text-xs font-bold text-purple-700 hover:text-purple-900">View catalogue record and full licence details</a>
+              )}
             </article>
                 ))}
               </div>
             </section>
           ))}
+          {apiHasMore && (
+            <div className="text-center">
+              <button type="button" disabled={apiLoading} onClick={() => setApiPage((page) => page + 1)} className="rounded-2xl border border-purple-200 bg-white px-5 py-3 text-sm font-extrabold text-purple-800 shadow-sm transition hover:bg-purple-50 disabled:cursor-wait disabled:opacity-60">
+                {apiLoading ? 'Loading more books…' : 'Load more Open Textbook Library books'}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
@@ -338,7 +436,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       )}
 
       <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-900">
-        Berry’s starter catalog lists specific resources grouped by their provider. Availability and reuse rights vary by item; follow the license and access terms on the linked resource page.
+        Berry combines a small curated catalogue with live Open Textbook Library search results. The other sources are curated listings. Availability and reuse rights vary by item; follow the licence and access terms on the linked resource page.
       </p>
     </div>
   );

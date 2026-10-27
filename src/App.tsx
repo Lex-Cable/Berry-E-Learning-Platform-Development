@@ -366,12 +366,14 @@ export default function App() {
   };
 
   // Library bookmark handler
-  const handleToggleBookmark = (resourceId: string) => {
-    setLibraryResources((prev) =>
-      prev.map((r) =>
-        r.id === resourceId ? { ...r, isSaved: !r.isSaved } : r
-      )
-    );
+  const handleToggleBookmark = (resourceId: string, resource?: LibraryResource) => {
+    setLibraryResources((prev) => {
+      const exists = prev.some((item) => item.id === resourceId);
+      if (exists) {
+        return prev.map((item) => item.id === resourceId ? { ...item, isSaved: !item.isSaved } : item);
+      }
+      return resource ? [...prev, { ...resource, isSaved: true }] : prev;
+    });
   };
 
   // Transcript session handler
