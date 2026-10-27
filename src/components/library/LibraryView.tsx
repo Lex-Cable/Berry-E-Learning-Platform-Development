@@ -352,10 +352,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </div>
               <ResourceShelf provider={provider}>
                 {providerResources.map((resource) => (
-            <article key={resource.id} className="group flex h-[530px] w-[270px] shrink-0 snap-start flex-col justify-between rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-xl hover:shadow-purple-100/70 sm:w-[285px]">
-              <div>
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div className="flex flex-wrap gap-1.5">
+            <article key={resource.id} className="group flex h-[560px] w-[270px] shrink-0 snap-start flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-xl hover:shadow-purple-100/70 sm:w-[285px]">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="mb-3 flex h-11 shrink-0 items-start justify-between gap-2 overflow-hidden">
+                  <div className="flex min-w-0 flex-wrap gap-1.5 overflow-hidden">
                     {resource.isOfficial ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800">
                         <ShieldCheck size={12} /> Official source
@@ -367,7 +367,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                         Verified listing
                       </span>
                     )}
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-900">
+                    <span className="max-w-full truncate rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-extrabold text-amber-900">
                       {resource.accessLabel}
                     </span>
                   </div>
@@ -383,18 +383,18 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   </button>
                 </div>
 
-                <div className="flex items-start gap-3">
+                <div className="flex h-28 shrink-0 items-start gap-3 overflow-hidden">
                   <ResourceCover resource={resource} />
                   <div className="min-w-0">
-                    <h3 className="line-clamp-3 text-base font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
+                    <h3 className="line-clamp-2 text-base font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
                     {(resource.author || resource.publisher) && <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">{resource.author ? `By ${resource.author}` : ''}{resource.author && resource.publisher ? ' · ' : ''}{resource.publisher ? `Published by ${resource.publisher}` : ''}</p>}
-                    {resource.description && <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-slate-600">{resource.description}</p>}
+                    {resource.description && <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-600">{resource.description}</p>}
                   </div>
                 </div>
-                {(resource.language || resource.intendedAudience || resource.gradeLabel) && <p className="mt-2 line-clamp-1 text-xs font-semibold text-slate-500">{[resource.language && `Language: ${resource.language}`, resource.intendedAudience, resource.gradeLabel].filter(Boolean).join(' · ')}</p>}
+                <p className="mt-2 h-4 shrink-0 truncate text-xs font-semibold text-slate-500">{[resource.language && `Language: ${resource.language}`, resource.intendedAudience, resource.gradeLabel].filter(Boolean).join(' · ')}</p>
 
-                <div className="mt-4 space-y-3">
-                  <div className="flex flex-wrap gap-1.5">
+                <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-hidden">
+                  <div className="flex h-7 flex-nowrap gap-1.5 overflow-hidden">
                     {resource.materialTypes.map((materialType) => (
                       <span key={materialType} className="rounded-lg bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-800">
                         {typeLabels[materialType]}
@@ -402,8 +402,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     ))}
                   </div>
                   <div>
-                    <p className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Subjects</p>
-                    <div className="flex flex-wrap gap-1.5">
+                    <p className="mb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Subjects</p>
+                    <div className="flex h-10 flex-wrap content-start gap-1.5 overflow-hidden">
                       {resource.subjects.slice(0, 4).map((subject) => (
                         <span key={subject} className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">{subject}</span>
                       ))}
@@ -412,30 +412,32 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-800">{resource.curriculumLabel}</span>
-                    {resource.levels.map((level) => (
-                      <span key={level} className="rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-800">{levelLabels[level]}</span>
+                  <div className="flex h-6 flex-nowrap gap-1.5 overflow-hidden">
+                    <span className="truncate rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-800">{resource.curriculumLabel}</span>
+                    {resource.levels.slice(0, 1).map((level) => (
+                      <span key={level} className="shrink-0 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-800">{levelLabels[level]}</span>
                     ))}
                   </div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50 p-2.5">
+                  <div className="h-[62px] overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 p-2.5">
                     <p className="line-clamp-1 text-[11px] font-extrabold text-slate-700">{resource.licenseLabel}</p>
                     <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500">{resource.accessNote}</p>
                   </div>
                 </div>
               </div>
 
+              <div className="mt-3 shrink-0 border-t border-slate-100 pt-3">
               <a
                 href={resource.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-700 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-purple-800 focus:outline-none focus:ring-4 focus:ring-purple-200"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-700 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-purple-800 focus:outline-none focus:ring-4 focus:ring-purple-200"
               >
                 {resource.accessType === 'download' ? 'Open PDF / download' : resource.accessType === 'external' ? 'Open resource' : 'Read online'} <ArrowUpRight size={16} />
               </a>
               {resource.recordUrl && resource.recordUrl !== resource.url && (
-                <a href={resource.recordUrl} target="_blank" rel="noopener noreferrer" className="mt-2 text-center text-xs font-bold text-purple-700 hover:text-purple-900">View catalogue record and full licence details</a>
-              )}
+                <a href={resource.recordUrl} target="_blank" rel="noopener noreferrer" className="mt-2 block h-4 truncate text-center text-xs font-bold leading-4 text-purple-700 hover:text-purple-900">View catalogue record and full licence details</a>
+              ) || <span aria-hidden="true" className="mt-2 block h-4" />}
+              </div>
             </article>
                 ))}
               </ResourceShelf>
