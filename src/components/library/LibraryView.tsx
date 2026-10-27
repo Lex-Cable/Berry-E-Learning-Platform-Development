@@ -121,6 +121,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   };
 
   const savedCount = resources.filter((resource) => resource.isSaved).length;
+  const groupedResources = useMemo(() => {
+    const groups = new Map<string, LibraryResource[]>();
+    filtered.forEach((resource) => {
+      const items = groups.get(resource.provider) ?? [];
+      items.push(resource);
+      groups.set(resource.provider, items);
+    });
+    return Array.from(groups.entries());
+  }, [filtered]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
@@ -131,17 +140,17 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           <div className="max-w-2xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-purple-50">
               <Sparkles size={14} />
-              Trusted places to learn, all in one Berry
+              Real books and learning materials, organized by source
             </div>
             <h2 className="text-3xl font-black tracking-tight md:text-4xl">Berry Learning Library</h2>
             <p className="mt-2 text-sm leading-relaxed text-purple-100 md:text-base">
-              Discover books, stories, curriculum guides, and practice materials from trusted learning providers.
-              Each collection opens at its original source.
+              Find specific books, stories, curriculum documents, and practice materials. Every item opens directly
+              at its provider’s page, with the source and access details shown clearly.
             </p>
           </div>
           <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
             <div className="text-2xl font-black">{resources.length}</div>
-            <div className="text-xs font-semibold text-purple-100">curated learning collections</div>
+            <div className="text-xs font-semibold text-purple-100">individual resources</div>
           </div>
         </div>
       </section>
@@ -215,7 +224,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
       <div className="flex items-center justify-between px-1">
         <p className="text-sm font-bold text-slate-700">
-          {filtered.length} {filtered.length === 1 ? 'collection' : 'collections'} to explore
+          {filtered.length} {filtered.length === 1 ? 'resource' : 'resources'} across {groupedResources.length} {groupedResources.length === 1 ? 'source' : 'sources'}
         </p>
         {(searchQuery || selectedStage !== 'all' || selectedCurriculum !== 'all' || selectedMaterial !== 'all' || savedOnly) && (
           <button type="button" onClick={resetFilters} className="text-xs font-bold text-purple-700 hover:text-purple-900">
@@ -225,8 +234,20 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       </div>
 
       {filtered.length > 0 ? (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((resource) => (
+        <div className="space-y-8">
+          {groupedResources.map(([provider, providerResources]) => (
+            <section key={provider} aria-label={`Resources from ${provider}`}>
+              <div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-purple-100 text-purple-800">
+                  <BookOpen size={19} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-black text-slate-900">{provider}</h3>
+                  <p className="text-xs font-semibold text-slate-500">{providerResources.length} {providerResources.length === 1 ? 'item' : 'items'} from this source</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                {providerResources.map((resource) => (
             <article key={resource.id} className="group flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-purple-300 hover:shadow-xl hover:shadow-purple-100/70">
               <div>
                 <div className="mb-4 flex items-start justify-between gap-3">
@@ -256,7 +277,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   </button>
                 </div>
 
-                <p className="mb-1 text-xs font-bold text-slate-500">{resource.provider}</p>
                 <h3 className="text-lg font-black leading-snug text-slate-900 group-hover:text-purple-800">{resource.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-slate-600">{resource.description}</p>
 
@@ -298,24 +318,27 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 rel="noopener noreferrer"
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-purple-700 px-4 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-purple-800 focus:outline-none focus:ring-4 focus:ring-purple-200"
               >
-                Open collection at source <ArrowUpRight size={16} />
+                Open this resource <ArrowUpRight size={16} />
               </a>
             </article>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       ) : (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
           <BookOpen className="mx-auto mb-3 text-slate-300" size={34} />
-          <h3 className="text-lg font-black text-slate-800">No collections match those filters</h3>
+          <h3 className="text-lg font-black text-slate-800">No resources match those filters</h3>
           <p className="mt-1 text-sm text-slate-500">Try another level, subject, or resource type.</p>
           <button type="button" onClick={resetFilters} className="mt-4 rounded-xl bg-purple-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-purple-800">
-            Show all collections
+            Show all resources
           </button>
         </div>
       )}
 
       <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-900">
-        Berry links to the provider’s original collection. Free access does not always mean a resource can be copied, modified, or redistributed; check the license on the provider’s page.
+        Berry’s starter catalog lists specific resources grouped by their provider. Availability and reuse rights vary by item; follow the license and access terms on the linked resource page.
       </p>
     </div>
   );
