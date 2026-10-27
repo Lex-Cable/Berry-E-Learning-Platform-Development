@@ -225,16 +225,23 @@ export interface LibraryResource {
 
 export interface BlogPostComment {
   id: string;
+  authorId?: string;
   authorName: string;
   authorRole: string;
+  authorAvatarUrl?: string;
   content: string;
   timestamp: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  status?: 'published' | 'hidden';
   likesCount: number;
   hasLiked?: boolean;
 }
 
 export interface BlogPost {
   id: string;
+  authorId?: string;
+  authorAvatarUrl?: string;
   title: string;
   excerpt: string;
   content: string;
@@ -245,13 +252,20 @@ export interface BlogPost {
   category: 'Subject Insights' | 'Study Hacks' | 'CBC Guides' | 'Tech & Innovation' | 'Career & University';
   stage: LearnerStage;
   subjectTag: string;
+  tags?: string[];
+  imageUrl?: string;
+  status?: 'draft' | 'published' | 'hidden';
   coverGradient: string;
   readTimeMinutes: number;
   timestamp: string;
   likesCount: number;
+  commentsCount?: number;
   hasLiked?: boolean;
   comments: BlogPostComment[];
   isUserPost?: boolean;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  publishedAt?: unknown;
 }
 
 export interface AiChatMessage {

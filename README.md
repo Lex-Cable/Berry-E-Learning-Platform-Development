@@ -188,7 +188,19 @@ Open the local development URL displayed in your terminal. In the current projec
 http://localhost:3000
 ```
 
-Firebase Auth stores the account and display name. Cloud Firestore stores learner stage, country, curriculum, grade, pathway, school or institution, course enrollments, study goal, and accessibility preferences. Existing Auth accounts without a profile document receive a safe default profile at their next sign-in. Lesson mastery, tasks, notifications, certificates, and other learning activity are still local demo state and are not synchronized yet.
+Firebase Auth stores the account and display name. Cloud Firestore stores learner stage, country, curriculum, grade, pathway, school or institution, course enrollments, study goal, and accessibility preferences. Existing Auth accounts without a profile document receive a safe default profile at their next sign-in. Community blog posts, private drafts, likes, comments, and reports are stored in Firestore; lesson mastery, tasks, notifications, certificates, and other learning activity are still local demo state and are not synchronized yet.
+
+#### Berry Community setup
+
+The Community feature uses the signed-in Firebase UID as the author identity. Posts and comments are checked against the matching `users/{uid}` profile. Drafts are private to their author, and like/comment counters are changed in the same Firestore transactions as their associated records. User-provided post images are secure HTTPS URLs; Berry does not upload or host image files. The Firebase CLI configuration targets the named Firestore database already selected in `src/lib/firebase.ts`.
+
+Before testing Community in a Firebase project, publish the updated Firestore rules and indexes after confirming that the Firebase CLI points at the intended project:
+
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+Reports can only be reviewed by accounts with the Firebase custom claim `moderator: true`. Set that claim from a trusted Admin SDK environment; never grant it from Berry's client or learner profile. Sign out and back in (or refresh the ID token) after the claim is applied. The Community UI provides the moderation queue only to those accounts, and records the reviewer, action, report, and review time.
 
  5. Start Developing
 

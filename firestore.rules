@@ -5,6 +5,28 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Moderation access must be granted through Firebase custom claims by a trusted
+    // administrator. A learner profile field can never grant this permission.
+    function isModerator() {
+      return signedIn() && request.auth.token.moderator == true;
+    }
+
+    function validTags(tags) {
+      return tags is list && tags.size() <= 8
+        && (tags.size() < 1 || (tags[0] is string && tags[0].size() > 0 && tags[0].size() <= 40))
+        && (tags.size() < 2 || (tags[1] is string && tags[1].size() > 0 && tags[1].size() <= 40))
+        && (tags.size() < 3 || (tags[2] is string && tags[2].size() > 0 && tags[2].size() <= 40))
+        && (tags.size() < 4 || (tags[3] is string && tags[3].size() > 0 && tags[3].size() <= 40))
+        && (tags.size() < 5 || (tags[4] is string && tags[4].size() > 0 && tags[4].size() <= 40))
+        && (tags.size() < 6 || (tags[5] is string && tags[5].size() > 0 && tags[5].size() <= 40))
+        && (tags.size() < 7 || (tags[6] is string && tags[6].size() > 0 && tags[6].size() <= 40))
+        && (tags.size() < 8 || (tags[7] is string && tags[7].size() > 0 && tags[7].size() <= 40));
+    }
+
     function validProfile(userId) {
       let data = request.resource.data;
       return data.keys().hasOnly([
@@ -43,6 +65,242 @@ service cloud.firestore {
       allow get: if isOwner(userId);
       allow list: if false;
       allow create, update: if isOwner(userId) && validProfile(userId);
+      allow delete: if false;
+    }
+
+    function validBlog(data, userId) {
+      return data.keys().hasOnly([
+          'authorId', 'authorName', 'authorAvatarUrl', 'authorRole', 'authorStage',
+          'authorGrade', 'title', 'excerpt', 'content', 'category', 'subjectTag',
+          'tags', 'imageUrl', 'readTimeMinutes', 'status', 'coverGradient',
+          'likeCount', 'commentCount', 'commentAction', 'commentActionId',
+          'createdAt', 'updatedAt', 'publishedAt'
+        ])
+        && data.keys().hasAll([
+          'authorId', 'authorName', 'authorRole', 'authorStage', 'authorGrade',
+          'title', 'excerpt', 'content', 'category', 'subjectTag', 'tags',
+          'imageUrl', 'readTimeMinutes', 'status', 'coverGradient', 'likeCount',
+          'commentCount', 'commentAction', 'commentActionId', 'createdAt',
+          'updatedAt', 'publishedAt'
+        ])
+        && data.authorId == userId
+        && data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 100
+        && data.authorName == get(/databases/$(database)/documents/users/$(userId)).data.name
+        && data.authorRole == 'learner'
+        && data.authorStage in ['early', 'junior', 'senior', 'advance', 'university', 'professionals']
+        && data.authorStage == get(/databases/$(database)/documents/users/$(userId)).data.stage
+        && data.authorGrade is string && data.authorGrade.size() <= 100
+        && data.authorGrade == get(/databases/$(database)/documents/users/$(userId)).data.gradeLevel
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 140
+        && data.excerpt is string && data.excerpt.size() <= 400
+        && data.content is string && data.content.size() > 0 && data.content.size() <= 20000
+        && data.category in ['Subject Insights', 'Study Hacks', 'CBC Guides', 'Tech & Innovation', 'Career & University']
+        && data.subjectTag is string && data.subjectTag.size() <= 60
+        && validTags(data.tags)
+        && data.imageUrl is string && data.imageUrl.size() <= 2048
+        && (data.imageUrl == '' || data.imageUrl.matches('https://.*'))
+        && data.readTimeMinutes is int && data.readTimeMinutes >= 1 && data.readTimeMinutes <= 30
+        && data.status in ['draft', 'published']
+        && data.coverGradient is string && data.coverGradient.size() <= 100
+        && data.likeCount == 0 && data.commentCount == 0
+        && data.commentAction == null && data.commentActionId == null
+        && data.createdAt == request.time && data.updatedAt == request.time
+        && ((data.status == 'draft' && data.publishedAt == null)
+          || (data.status == 'published' && data.publishedAt == request.time))
+        && (!('authorAvatarUrl' in data)
+          || (data.authorAvatarUrl is string && data.authorAvatarUrl.size() <= 2048
+            && data.authorAvatarUrl == get(/databases/$(database)/documents/users/$(userId)).data.avatarUrl));
+    }
+
+    function ownsBlog() {
+      return signedIn() && resource.data.authorId == request.auth.uid;
+    }
+
+    function validBlogContentUpdate() {
+      return ownsBlog()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'excerpt', 'content', 'category', 'subjectTag', 'tags',
+          'imageUrl', 'readTimeMinutes', 'status', 'updatedAt', 'publishedAt'
+        ])
+        && request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'title', 'excerpt', 'content', 'category', 'subjectTag', 'tags',
+          'imageUrl', 'readTimeMinutes', 'status'
+        ])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.authorId == resource.data.authorId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.likeCount == resource.data.likeCount
+        && request.resource.data.commentCount == resource.data.commentCount
+        && request.resource.data.status in ['draft', 'published']
+        && request.resource.data.category in ['Subject Insights', 'Study Hacks', 'CBC Guides', 'Tech & Innovation', 'Career & University']
+        && request.resource.data.subjectTag is string && request.resource.data.subjectTag.size() <= 60
+        && validTags(request.resource.data.tags)
+        && request.resource.data.readTimeMinutes is int && request.resource.data.readTimeMinutes >= 1 && request.resource.data.readTimeMinutes <= 30
+        && (request.resource.data.publishedAt == resource.data.publishedAt
+          || (resource.data.status == 'draft' && request.resource.data.status == 'published'
+            && request.resource.data.publishedAt == request.time))
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 140
+        && request.resource.data.excerpt is string && request.resource.data.excerpt.size() <= 400
+        && request.resource.data.content is string && request.resource.data.content.size() > 0 && request.resource.data.content.size() <= 20000
+        && validTags(request.resource.data.tags)
+        && request.resource.data.imageUrl is string && request.resource.data.imageUrl.size() <= 2048
+        && (request.resource.data.imageUrl == '' || request.resource.data.imageUrl.matches('https://.*'));
+    }
+
+    function validLikeCountUpdate(blogId) {
+      let likePath = /databases/$(database)/documents/blogs/$(blogId)/likes/$(request.auth.uid);
+      return signedIn()
+        && resource.data.status == 'published'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+        && request.resource.data.likeCount is int
+        && request.resource.data.likeCount >= 0
+        && ((request.resource.data.likeCount == resource.data.likeCount + 1
+            && !exists(likePath) && existsAfter(likePath)
+            && getAfter(likePath).data.userId == request.auth.uid)
+          || (request.resource.data.likeCount == resource.data.likeCount - 1
+            && exists(likePath) && !existsAfter(likePath)
+            && get(likePath).data.userId == request.auth.uid));
+    }
+
+    function validCommentCountUpdate(blogId) {
+      let commentPath = /databases/$(database)/documents/blogs/$(blogId)/comments/$(request.resource.data.commentActionId);
+      return signedIn()
+        && resource.data.status == 'published'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'commentCount', 'commentAction', 'commentActionId', 'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.commentCount is int
+        && request.resource.data.commentCount >= 0
+        && request.resource.data.commentActionId is string
+        && ((request.resource.data.commentAction == 'create'
+            && request.resource.data.commentCount == resource.data.commentCount + 1
+            && !exists(commentPath) && existsAfter(commentPath)
+            && getAfter(commentPath).data.authorId == request.auth.uid
+            && getAfter(commentPath).data.createdAt == request.time)
+          || (request.resource.data.commentAction == 'delete'
+            && request.resource.data.commentCount == resource.data.commentCount - 1
+            && exists(commentPath) && !existsAfter(commentPath)
+            && get(commentPath).data.authorId == request.auth.uid)
+          || (request.resource.data.commentAction == 'hide'
+            && isModerator()
+            && request.resource.data.commentCount == resource.data.commentCount - 1
+            && exists(commentPath) && existsAfter(commentPath)
+            && get(commentPath).data.status == 'published'
+            && getAfter(commentPath).data.status == 'hidden'
+            && getAfter(commentPath).data.moderation.moderatorId == request.auth.uid
+            && getAfter(commentPath).data.updatedAt == request.time));
+    }
+
+    function validModerationUpdate() {
+      return isModerator()
+        && resource.data.status in ['published', 'draft']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'moderation', 'updatedAt'])
+        && request.resource.data.status == 'hidden'
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.moderation is map
+        && request.resource.data.moderation.moderatorId == request.auth.uid
+        && request.resource.data.moderation.action == 'hide'
+        && request.resource.data.moderation.reportId is string
+        && request.resource.data.moderation.reviewedAt == request.time
+        && request.resource.data.moderation.notes is string
+        && request.resource.data.moderation.notes.size() <= 500;
+    }
+
+    match /blogs/{blogId} {
+      allow get, list: if signedIn()
+        && (resource.data.status == 'published' || resource.data.authorId == request.auth.uid || isModerator());
+      allow create: if signedIn() && validBlog(request.resource.data, request.auth.uid);
+      allow update: if validBlogContentUpdate()
+        || validLikeCountUpdate(blogId)
+        || validCommentCountUpdate(blogId)
+        || validModerationUpdate()
+        || (ownsBlog()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+          && request.resource.data.status == 'deleted'
+          && request.resource.data.updatedAt == request.time);
+      allow delete: if ownsBlog() && resource.data.status == 'deleted';
+
+      match /likes/{userId} {
+        allow get, list: if signedIn()
+          && (resource.data.userId == request.auth.uid
+            || (get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
+              && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted'));
+        allow create: if isOwner(userId)
+          && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'published'
+          && request.resource.data.keys().hasOnly(['userId', 'createdAt'])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isOwner(userId)
+          || (signedIn()
+            && get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
+            && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted');
+        allow update: if false;
+      }
+
+      match /comments/{commentId} {
+        allow get, list: if signedIn()
+          && ((get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'published'
+              && resource.data.status == 'published')
+            || resource.data.authorId == request.auth.uid
+            || isModerator()
+            || (get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
+              && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted'));
+        allow create: if signedIn()
+          && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'published'
+          && request.resource.data.keys().hasOnly([
+            'authorId', 'authorName', 'authorAvatarUrl', 'authorRole', 'content',
+            'status', 'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasAll(['authorId', 'authorName', 'authorRole', 'content', 'status', 'createdAt', 'updatedAt'])
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorName is string && request.resource.data.authorName.size() > 0 && request.resource.data.authorName.size() <= 100
+          && request.resource.data.authorName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+          && request.resource.data.authorRole is string && request.resource.data.authorRole.size() <= 100
+          && request.resource.data.authorRole == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.gradeLevel + ' learner'
+          && request.resource.data.content is string && request.resource.data.content.size() > 0 && request.resource.data.content.size() <= 2000
+          && request.resource.data.status == 'published'
+          && request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time
+          && (!('authorAvatarUrl' in request.resource.data)
+            || (request.resource.data.authorAvatarUrl is string && request.resource.data.authorAvatarUrl.size() <= 2048
+              && request.resource.data.authorAvatarUrl == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.avatarUrl));
+        allow update: if (signedIn()
+            && resource.data.authorId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['content', 'updatedAt'])
+            && request.resource.data.content is string && request.resource.data.content.size() > 0 && request.resource.data.content.size() <= 2000
+            && request.resource.data.updatedAt == request.time)
+          || validModerationUpdate();
+        allow delete: if (signedIn() && resource.data.authorId == request.auth.uid)
+          || (signedIn()
+            && get(/databases/$(database)/documents/blogs/$(blogId)).data.authorId == request.auth.uid
+            && get(/databases/$(database)/documents/blogs/$(blogId)).data.status == 'deleted');
+      }
+    }
+
+    match /communityReports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'targetType', 'targetId', 'postId', 'reporterId', 'reason', 'details', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'targetType', 'targetId', 'postId', 'reporterId', 'reason', 'details', 'status', 'createdAt'
+        ])
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.targetType in ['post', 'comment']
+        && request.resource.data.targetId is string && request.resource.data.targetId.size() <= 150
+        && request.resource.data.postId is string && request.resource.data.postId.size() <= 150
+        && request.resource.data.reason in ['Bullying or harassment', 'Private information', 'Copyright concern', 'Spam or scam', 'Unsafe or harmful content', 'Other']
+        && request.resource.data.details is string && request.resource.data.details.size() <= 1000
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
+      allow get, list: if signedIn() && (resource.data.reporterId == request.auth.uid || isModerator());
+      allow update: if isModerator()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'action', 'notes', 'reviewedBy', 'reviewedAt'])
+        && request.resource.data.status == 'reviewed'
+        && request.resource.data.action in ['dismiss', 'hide']
+        && request.resource.data.reviewedBy == request.auth.uid
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.notes is string && request.resource.data.notes.size() <= 500;
       allow delete: if false;
     }
 
