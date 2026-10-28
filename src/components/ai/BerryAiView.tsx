@@ -55,6 +55,8 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [loadedForLearner, setLoadedForLearner] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // In-line thread renaming
@@ -64,10 +66,39 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync to local storage
+  // Load and save each learner's chat history separately on this device.
+  // The loading guard prevents a profile switch from overwriting another learner's history.
   useEffect(() => {
-    localStorage.setItem('berry_ai_conversations', JSON.stringify(conversations));
-  }, [conversations]);
+    const storageKey = `berry_ai_conversations_${learner.id}`;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (Array.isArray(parsed) && parsed.every((item) =>
+        item && typeof item.id === 'string' && Array.isArray(item.messages)
+      )) {
+        setConversations(parsed as AiConversation[]);
+        setActiveConvId(parsed[0]?.id || '');
+      } else {
+        setConversations(INITIAL_CONVERSATIONS);
+        setActiveConvId(INITIAL_CONVERSATIONS[0]?.id || '');
+      }
+    } catch (error) {
+      console.warn('Could not load Berry AI chat history:', error);
+      setConversations(INITIAL_CONVERSATIONS);
+      setActiveConvId(INITIAL_CONVERSATIONS[0]?.id || '');
+    }
+    setLoadedForLearner(learner.id);
+  }, [learner.id]);
+
+  useEffect(() => {
+    if (loadedForLearner !== learner.id) return;
+    try {
+      localStorage.setItem(`berry_ai_conversations_${learner.id}`, JSON.stringify(conversations));
+    } catch (error) {
+      console.warn('Could not save Berry AI chat history:', error);
+      setRequestError('Chat history could not be saved in this browser. Check available storage and try again.');
+    }
+  }, [conversations, learner.id, loadedForLearner]);
 
   // Auto-scroll to bottom of conversation
   useEffect(() => {
@@ -200,6 +231,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
       )
     );
 
+    setRequestError(null);
     setInput('');
     setLoading(true);
 
@@ -241,25 +273,12 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
         )
       );
     } catch (err) {
-      // Local fallback with pedagogical reasoning
-      const fallbackReply = `Great inquiry on this concept! In our **${
-        activeCourse?.title || 'course'
-      }**, let's build the answer collaboratively:\n\n1. Let's look at the underlying definition.\n2. What is your current understanding of the initial condition?\n3. Tell me your initial step, and we will verify it together!`;
-
-      const assistantMessage: AiChatMessage = {
-        id: `asst-${Date.now()}`,
-        sender: 'assistant',
-        text: fallbackReply,
-        source: 'Berry Local Pedagogy',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeConversation.id
-            ? { ...c, messages: [...c.messages, assistantMessage] }
-            : c
-        )
+      // Preserve the submitted message and restore the composer so the learner can retry.
+      setInput(textToSend);
+      setRequestError(
+        err instanceof Error && err.message === 'API request failed'
+          ? 'Berry AI could not reach its response service. Your message is saved in this chat; please retry.'
+          : 'Berry AI could not connect. Check your connection and retry your message.'
       );
     } finally {
       setLoading(false);
@@ -451,6 +470,12 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
 
         {/* Messages Scroll View */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+          {requestError && (
+            <div role="alert" className="mx-auto max-w-3xl flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <span>{requestError}</span>
+              <button type="button" onClick={() => setRequestError(null)} className="font-bold underline">Dismiss</button>
+            </div>
+          )}
           {activeConversation?.messages.map((msg) => {
             const isUser = msg.sender === 'user';
 
