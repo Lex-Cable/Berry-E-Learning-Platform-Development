@@ -40,8 +40,8 @@ jobs:
           project_id="${FIREBASE_PROJECT_ID:-${VITE_FIREBASE_PROJECT_ID:-}}"
 
           if [ -z "$service_account" ] || [ -z "$project_id" ]; then
-            echo "::warning::Firestore rules were NOT deployed. Configure GitHub Actions secrets FIREBASE_SERVICE_ACCOUNT_JSON (service-account JSON) and FIREBASE_PROJECT_ID (Firebase project ID), then rerun this workflow."
-            exit 0
+            echo "::error::Firestore rules were NOT deployed. Configure GitHub Actions secrets FIREBASE_SERVICE_ACCOUNT_JSON (service-account JSON) and FIREBASE_PROJECT_ID (Firebase project ID), then rerun this workflow."
+            exit 1
           fi
 
           credentials_file="$RUNNER_TEMP/firebase-service-account.json"
