@@ -79,22 +79,25 @@ export async function saveAiConversation(uid: string, conversation: AiConversati
       updatedAtServer: serverTimestamp(),
     }, { merge: true });
 
-    const batch = writeBatch(database);
-    for (const [index, message] of conversation.messages.entries()) {
-      const messageRef = doc(conversationRef, 'messages', message.id);
-      const messageData = {
-        sender: message.sender,
-        text: message.text.slice(0, 20000),
-        timestamp: message.timestamp.slice(0, 60),
-        createdAtEpoch: now - conversation.messages.length + index,
-        ...(message.source ? { source: message.source.slice(0, 100) } : {}),
-        ...(message.suggestedFollowUps
-          ? { suggestedFollowUps: message.suggestedFollowUps.slice(0, 8).map((item) => item.slice(0, 200)) }
-          : {}),
-      };
-      batch.set(messageRef, messageData, { merge: true });
+    for (let offset = 0; offset < conversation.messages.length; offset += 450) {
+      const batch = writeBatch(database);
+      conversation.messages.slice(offset, offset + 450).forEach((message, batchIndex) => {
+        const index = offset + batchIndex;
+        const messageRef = doc(conversationRef, 'messages', message.id);
+        const messageData = {
+          sender: message.sender,
+          text: message.text.slice(0, 20000),
+          timestamp: message.timestamp.slice(0, 60),
+          createdAtEpoch: now - conversation.messages.length + index,
+          ...(message.source ? { source: message.source.slice(0, 100) } : {}),
+          ...(message.suggestedFollowUps
+            ? { suggestedFollowUps: message.suggestedFollowUps.slice(0, 8).map((item) => item.slice(0, 200)) }
+            : {}),
+        };
+        batch.set(messageRef, messageData, { merge: true });
+      });
+      await batch.commit();
     }
-    await batch.commit();
   });
 }
 
