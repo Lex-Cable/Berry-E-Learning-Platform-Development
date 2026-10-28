@@ -138,6 +138,23 @@ if (process.env.GEMINI_API_KEY) {
 app.post('/api/ai/chat', async (req, res) => {
   try {
     const { message, stage, courseTitle, currentTopic, history } = req.body;
+    if (typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'A non-empty message is required.' });
+    }
+
+    // Accept only a short, well-formed conversation history from the client.
+    // Bound message sizes so a stale or malformed client cannot send huge prompts.
+    const safeHistory = Array.isArray(history)
+      ? history.slice(-12).filter((item: unknown) =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          ['user', 'model'].includes((item as { role?: unknown }).role as string) &&
+          typeof (item as { text?: unknown }).text === 'string'
+        ).map((item: { role: 'user' | 'model'; text: string }) => ({
+          role: item.role,
+          parts: [{ text: item.text.slice(0, 8000) }],
+        }))
+      : [];
 
     const stageGuidelines: Record<string, string> = {
       junior: 'The learner is a child or early adolescent (PP1-Grade 9 CBC). Use simple, encouraging, warm, concrete language with analogies and examples. Do not give direct solutions to homework; guide them step-by-step.',
@@ -164,7 +181,10 @@ Core Principles:
 
       const response = await aiClient.models.generateContent({
         model: 'gemini-3.8-flash',
-        contents: `${message}`,
+        contents: [
+          ...safeHistory,
+          { role: 'user', parts: [{ text: message.trim().slice(0, 8000) }] },
+        ],
         config: {
           systemInstruction,
           temperature: 0.7,
