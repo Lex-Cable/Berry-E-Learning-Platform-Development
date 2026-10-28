@@ -191,16 +191,51 @@ Core Principles:
 3. Ask guiding questions, point out conceptual connections, and recommend practical practice.
 4. Keep answers focused, well-formatted with markdown, bolding, and bullet points.`;
 
+      const contents = [
+        ...safeHistory,
+        { role: 'user' as const, parts: [{ text: message.trim().slice(0, 8000) }] },
+      ];
+      const generationConfig = {
+        systemInstruction,
+        temperature: 0.7,
+      };
+
+      if (req.body?.stream === true) {
+        res.status(200);
+        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders?.();
+
+        try {
+          const stream = await aiClient.models.generateContentStream({
+            model: 'gemini-3.8-flash',
+            contents,
+            config: generationConfig,
+          });
+          for await (const chunk of stream) {
+            if (res.destroyed) return;
+            const text = typeof chunk.text === 'string' ? chunk.text : '';
+            if (text) res.write(`data: ${JSON.stringify({ text })}\\n\\n`);
+          }
+          if (!res.destroyed) {
+            res.write('data: [DONE]\\n\\n');
+            res.end();
+          }
+        } catch (streamError) {
+          console.error('Berry AI stream error:', streamError);
+          if (!res.destroyed) {
+            res.write(`data: ${JSON.stringify({ error: 'Berry AI generation was interrupted. Please retry.' })}\\n\\n`);
+            res.end();
+          }
+        }
+        return;
+      }
+
       const response = await aiClient.models.generateContent({
         model: 'gemini-3.8-flash',
-        contents: [
-          ...safeHistory,
-          { role: 'user', parts: [{ text: message.trim().slice(0, 8000) }] },
-        ],
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-        },
+        contents,
+        config: generationConfig,
       });
 
       const reply = response.text || 'I am here to guide your learning. Could you rephrase your question?';
