@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Square,
   BookOpen,
   ArrowRight,
   Bot,
@@ -49,6 +50,8 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamingReply, setStreamingReply] = useState('');
+  const requestControllerRef = useRef<AbortController | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [loadedForLearner, setLoadedForLearner] = useState<string | null>(null);
   const [persistenceMode, setPersistenceMode] = useState<'cloud' | 'local' | null>(null);
@@ -281,20 +284,23 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
     setRequestError(null);
     setInput('');
     setLoading(true);
-
-    const contextMessages =
-      retryExisting &&
-      activeConversation.messages[activeConversation.messages.length - 1]?.sender === 'user' &&
-      activeConversation.messages[activeConversation.messages.length - 1]?.text === textToSend.trim()
-        ? activeConversation.messages.slice(0, -1)
-        : activeConversation.messages;
+    setStreamingReply('');
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    let streamedText = '';
+    const retryIndex = retryExisting ? activeConversation.messages.reduce(
+      (found, item, index) => item.sender === 'user' && item.text === textToSend.trim() ? index : found, -1
+    ) : -1;
+    const contextMessages = retryIndex >= 0 ? activeConversation.messages.slice(0, retryIndex) : activeConversation.messages;
 
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           message: textToSend,
+          stream: true,
           stage: learner.stage,
           courseTitle: activeCourse?.title,
           currentTopic: activeCourse?.chapters[0]?.title,
@@ -307,23 +313,41 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
         }),
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(
-          typeof data.error === 'string' ? data.error : 'Berry AI request failed. Please retry.'
-        );
+        const data = await res.json().catch(() => ({}));
+        throw new Error(typeof data.error === 'string' ? data.error : 'Berry AI request failed. Please retry.');
       }
-      if (typeof data.reply !== 'string' || !data.reply.trim()) {
-        throw new Error('Berry AI returned an invalid response. Please retry.');
+      if (!res.body) throw new Error('This browser cannot stream Berry AI responses. Please retry.');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let ended = false;
+      while (!ended) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\\n\\n');
+        buffer = events.pop() || '';
+        for (const event of events) {
+          const line = event.split('\\n').find((entry) => entry.startsWith('data: '));
+          if (!line) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') { ended = true; break; }
+          const chunk = JSON.parse(payload) as { text?: string; error?: string };
+          if (chunk.error) throw new Error(chunk.error);
+          if (typeof chunk.text === 'string') {
+            streamedText += chunk.text;
+            setStreamingReply(streamedText);
+          }
+        }
       }
-
+      if (!streamedText.trim()) throw new Error('Berry AI returned an empty response. Please retry.');
       const assistantMessage: AiChatMessage = {
         id: `asst-${Date.now()}`,
         sender: 'assistant',
-        text: data.reply,
-        source: data.source || 'Berry Socratic AI',
+        text: streamedText,
+        source: 'Berry AI · Gemini',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        suggestedFollowUps: data.followUps,
       };
 
       setConversations((prev) =>
@@ -334,16 +358,25 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
         )
       );
     } catch (err) {
-      // Preserve the submitted message and restore the composer so the learner can retry.
+      if (streamedText.trim()) {
+        const partial: AiChatMessage = {
+          id: `asst-partial-${Date.now()}`, sender: 'assistant', text: streamedText,
+          source: 'Berry AI · Interrupted response',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setConversations((prev) => prev.map((conversation) => conversation.id === activeConversation.id
+          ? { ...conversation, messages: [...conversation.messages, partial] } : conversation));
+      }
       setInput(textToSend);
-      setRequestError(
-        err instanceof TypeError
+      setRequestError(err instanceof DOMException && err.name === 'AbortError'
+        ? 'Generation stopped. Any response text received so far has been kept in this chat.'
+        : err instanceof TypeError
           ? 'Berry AI could not connect. Check your internet connection and retry your message.'
-          : err instanceof Error
-            ? err.message
-            : 'Berry AI could not respond. Your message is saved in this chat; please retry.'
-      );
+          : err instanceof Error ? err.message
+            : 'Berry AI could not respond. Your message is saved in this chat; please retry.');
     } finally {
+      requestControllerRef.current = null;
+      setStreamingReply('');
       setLoading(false);
     }
   };
@@ -633,13 +666,11 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
 
           {/* Loading Indicator Bubble */}
           {loading && (
-            <div className="flex gap-3 mr-auto max-w-xl">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-400 text-white flex items-center justify-center flex-shrink-0 text-xs">
-                <Bot size={15} />
-              </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 rounded-tl-xs flex items-center gap-2 text-xs text-purple-700 font-semibold">
-                <Sparkles size={14} className="animate-spin text-purple-600" />
-                <span>Formulating Socratic guidance...</span>
+            <div className="flex gap-3 mr-auto max-w-3xl">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-400 text-white flex items-center justify-center flex-shrink-0 text-xs"><Bot size={15} /></div>
+              <div className="min-w-0 flex-1 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 rounded-tl-xs text-xs sm:text-sm text-slate-800 whitespace-pre-wrap">
+                {streamingReply || <span className="inline-flex items-center gap-2 text-purple-700 font-semibold"><Sparkles size={14} className="animate-spin" />Berry AI is thinking…</span>}
+                {streamingReply && <span className="inline-block w-1.5 h-4 ml-1 bg-purple-500 animate-pulse align-middle" aria-label="Generating response" />}
               </div>
             </div>
           )}
@@ -693,14 +724,15 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={!input.trim() || loading}
-              className="p-3 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white shadow transition-all active:scale-95 flex-shrink-0"
-              title="Send message"
-            >
-              <Send size={16} />
-            </button>
+            {loading ? (
+              <button type="button" onClick={() => requestControllerRef.current?.abort()} className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-900 text-white shadow flex-shrink-0" title="Stop generation" aria-label="Stop generation">
+                <Square size={16} fill="currentColor" />
+              </button>
+            ) : (
+              <button type="submit" disabled={!input.trim()} className="p-3 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white shadow transition-all active:scale-95 flex-shrink-0" title="Send message">
+                <Send size={16} />
+              </button>
+            )}
           </form>
           <p className="text-[10px] text-center text-slate-400 mt-2">
             Berry AI guides learning through Socratic dialogue. Never replaces classroom teachers or official exams.
