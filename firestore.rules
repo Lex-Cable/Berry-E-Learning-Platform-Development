@@ -67,6 +67,51 @@ service cloud.firestore {
       allow create, update: if isOwner(userId) && validProfile(userId);
       allow delete: if false;
 
+      match /learningProgress/{lessonId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly([
+            'lessonId', 'isCompleted', 'isMastered', 'scorePercent', 'attemptsCount',
+            'lastAttemptDate', 'identifiedMisconceptions', 'remedialActivitiesCompleted', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'lessonId', 'isCompleted', 'isMastered', 'scorePercent', 'attemptsCount',
+            'identifiedMisconceptions', 'remedialActivitiesCompleted', 'updatedAt'
+          ])
+          && request.resource.data.lessonId == lessonId
+          && request.resource.data.isCompleted is bool
+          && request.resource.data.isMastered is bool
+          && request.resource.data.scorePercent is number
+          && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100
+          && request.resource.data.attemptsCount is int && request.resource.data.attemptsCount >= 0
+          && request.resource.data.identifiedMisconceptions is list
+          && request.resource.data.identifiedMisconceptions.size() <= 50
+          && request.resource.data.remedialActivitiesCompleted is bool;
+        allow delete: if isOwner(userId);
+      }
+
+      match /lessonNotes/{lessonId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['lessonId', 'notes', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['lessonId', 'notes', 'updatedAt'])
+          && request.resource.data.lessonId == lessonId
+          && request.resource.data.notes is string
+          && request.resource.data.notes.size() <= 20000;
+        allow delete: if isOwner(userId);
+      }
+
+      match /learningState/{courseId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['courseId', 'lastLessonId', 'lastOpenedAt', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['courseId', 'lastLessonId', 'lastOpenedAt', 'updatedAt'])
+          && request.resource.data.courseId == courseId
+          && request.resource.data.lastLessonId is string
+          && request.resource.data.lastOpenedAt is string;
+        allow delete: if isOwner(userId);
+      }
+
       match /transcriptSessions/{sessionId} {
         function validTranscriptSession() {
           let data = request.resource.data;
