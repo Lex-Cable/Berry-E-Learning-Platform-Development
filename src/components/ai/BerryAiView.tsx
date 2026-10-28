@@ -199,7 +199,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
     setEditingConvId(null);
   };
 
-  const handleSend = async (messageText?: string) => {
+  const handleSend = async (messageText?: string, retryExisting = false) => {
     const textToSend = messageText || input;
     if (!textToSend.trim() || loading || !activeConversation) return;
 
@@ -218,18 +218,20 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
         ? textToSend.trim().slice(0, 32) + (textToSend.length > 32 ? '...' : '')
         : activeConversation.title;
 
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeConversation.id
-          ? {
-              ...c,
-              title: updatedTitle,
-              updatedAt: 'Just now',
-              messages: [...c.messages, userMessage],
-            }
-          : c
-      )
-    );
+    if (!retryExisting) {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeConversation.id
+            ? {
+                ...c,
+                title: updatedTitle,
+                updatedAt: 'Just now',
+                messages: [...c.messages, userMessage],
+              }
+            : c
+        )
+      );
+    }
 
     setRequestError(null);
     setInput('');
@@ -473,7 +475,10 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           {requestError && (
             <div role="alert" className="mx-auto max-w-3xl flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <span>{requestError}</span>
-              <button type="button" onClick={() => setRequestError(null)} className="font-bold underline">Dismiss</button>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => handleSend(input, true)} disabled={!input.trim() || loading} className="font-bold underline disabled:opacity-50">Retry</button>
+                <button type="button" onClick={() => setRequestError(null)} className="font-bold underline">Dismiss</button>
+              </div>
             </div>
           )}
           {activeConversation?.messages.map((msg) => {
