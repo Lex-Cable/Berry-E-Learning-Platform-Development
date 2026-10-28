@@ -66,6 +66,55 @@ service cloud.firestore {
       allow list: if false;
       allow create, update: if isOwner(userId) && validProfile(userId);
       allow delete: if false;
+
+      match /aiConversations/{conversationId} {
+        function validConversation() {
+          return request.resource.data.keys().hasOnly([
+              'title', 'createdAt', 'updatedAt', 'createdAtEpoch',
+              'updatedAtEpoch', 'updatedAtServer'
+            ])
+            && request.resource.data.keys().hasAll([
+              'title', 'createdAt', 'updatedAt', 'createdAtEpoch',
+              'updatedAtEpoch', 'updatedAtServer'
+            ])
+            && request.resource.data.title is string
+            && request.resource.data.title.size() > 0
+            && request.resource.data.title.size() <= 120
+            && request.resource.data.createdAt is string
+            && request.resource.data.createdAt.size() <= 60
+            && request.resource.data.updatedAt is string
+            && request.resource.data.updatedAt.size() <= 60
+            && request.resource.data.createdAtEpoch is int
+            && request.resource.data.updatedAtEpoch is int
+            && request.resource.data.updatedAtServer == request.time;
+        }
+
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && validConversation();
+        allow delete: if isOwner(userId);
+
+        match /messages/{messageId} {
+          function validAiMessage() {
+            let data = request.resource.data;
+            return data.keys().hasOnly([
+                'sender', 'text', 'timestamp', 'createdAtEpoch',
+                'source', 'suggestedFollowUps'
+              ])
+              && data.keys().hasAll(['sender', 'text', 'timestamp', 'createdAtEpoch'])
+              && data.sender in ['user', 'assistant']
+              && data.text is string && data.text.size() <= 20000
+              && data.timestamp is string && data.timestamp.size() <= 60
+              && data.createdAtEpoch is int
+              && (!('source' in data) || (data.source is string && data.source.size() <= 100))
+              && (!('suggestedFollowUps' in data)
+                || (data.suggestedFollowUps is list && data.suggestedFollowUps.size() <= 8));
+          }
+
+          allow get, list: if isOwner(userId);
+          allow create, update: if isOwner(userId) && validAiMessage();
+          allow delete: if isOwner(userId);
+        }
+      }
     }
 
     function validBlog(data, userId) {
