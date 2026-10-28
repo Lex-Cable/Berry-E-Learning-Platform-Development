@@ -56,7 +56,8 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS);
   const [libraryResources, setLibraryResources] = useState<LibraryResource[]>(LIBRARY_RESOURCES);
   const [transcriptSessions, setTranscriptSessions] = useState<LiveTranscriptSession[]>(TRANSCRIPT_SESSIONS);
-  const [certificates, setCertificates] = useState<CertificateRecord[]>(SAMPLE_CERTIFICATES);
+  // Only display certificates earned by this learner; seeded sample credentials must not appear as real awards.
+  const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [workspaceLoadedFor, setWorkspaceLoadedFor] = useState<string | null>(null);
 
   // Auth / Session State (starts logged out on landing page as requested)
