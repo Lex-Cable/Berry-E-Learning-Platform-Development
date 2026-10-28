@@ -285,7 +285,7 @@ export default function App() {
     }
   };
 
-  // Claim verified certificate when exam is passed
+  // Issue a Berry learning record when the exam is passed; this is not a government-issued credential.
   const handleClaimCertificate = (course: Course, scorePercent: number) => {
     const newCert: CertificateRecord = {
       id: `cert-${Date.now()}`,
@@ -302,16 +302,16 @@ export default function App() {
         year: 'numeric',
       }),
       scorePercent: scorePercent,
-      authority: 'Kenya CBC Digital Learning Directorate • Berry Ecosystem',
-      verified: true,
+      authority: 'Berry Learning Platform',
+      verified: false,
     };
 
     setCertificates((prev) => [newCert, ...prev]);
 
     const newNotif: AppNotification = {
       id: `notif-${Date.now()}`,
-      title: 'Verified Certificate Awarded! 🎓',
-      message: `You scored ${scorePercent}% on the ${course.subject} Final Exam! Your official CBC Certificate has been issued.`,
+      title: 'Berry Certificate Issued! 🎓',
+      message: `You scored ${scorePercent}% on the ${course.subject} Final Exam. Your Berry learning record has been issued.`,
       stage: learner.stage,
       type: 'certification',
       date: 'Just now',
