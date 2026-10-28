@@ -20,6 +20,7 @@ interface ExploreCoursesViewProps {
   learner: LearnerProfile;
   onSelectCourse: (course: Course) => void;
   onOpenLesson: (course: Course, lessonId: string) => void;
+  onOpenCourse: (course: Course) => void;
   onEnrollCourse: (courseId: string) => void;
 }
 
@@ -28,6 +29,7 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   learner,
   onSelectCourse,
   onOpenLesson,
+  onOpenCourse,
   onEnrollCourse,
 }) => {
   const [selectedStage, setSelectedStage] = useState<LearnerStage | 'all'>(learner.stage);
@@ -328,11 +330,7 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
                 <div className="pt-2 flex items-center gap-2">
                   {isEnrolled ? (
                     <button
-                      onClick={() => {
-                        if (firstLesson) {
-                          onOpenLesson(course, firstLesson.id);
-                        }
-                      }}
+                      onClick={() => onOpenCourse(course)}
                       className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow transition-all active:scale-95 flex items-center justify-center gap-1.5"
                     >
                       <span>Continue Learning</span>
