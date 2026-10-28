@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Copy,
   Square,
+  RefreshCw,
   BookOpen,
   ArrowRight,
   Bot,
@@ -381,6 +382,22 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
     }
   };
 
+  const handleRegenerate = (assistantMessageId: string) => {
+    if (loading || !activeConversation) return;
+    const messageIndex = activeConversation.messages.findIndex((message) => message.id === assistantMessageId);
+    if (messageIndex < 0) return;
+    const previousUser = activeConversation.messages.slice(0, messageIndex).reverse().find((message) => message.sender === 'user');
+    if (!previousUser) return;
+
+    setConversations((prev) => prev.map((conversation) =>
+      conversation.id === activeConversation.id
+        ? { ...conversation, messages: conversation.messages.slice(0, messageIndex) }
+        : conversation
+    ));
+    setInput(previousUser.text);
+    void handleSend(previousUser.text, true);
+  };
+
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -577,6 +594,8 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           )}
           {activeConversation?.messages.map((msg) => {
             const isUser = msg.sender === 'user';
+            const messageIndex = activeConversation.messages.findIndex((message) => message.id === msg.id);
+            const hasEarlierUserMessage = activeConversation.messages.slice(0, messageIndex).some((message) => message.sender === 'user');
 
             return (
               <div
@@ -621,26 +640,18 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
 
                     {/* Copy action on assistant response */}
                     {!isUser && (
-                      <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-                        <span className="text-[10px] font-semibold text-purple-600">
-                          {msg.source || 'Socratic Dialogue'}
-                        </span>
-                        <button
-                          onClick={() => handleCopy(msg.id, msg.text)}
-                          className="flex items-center gap-1 hover:text-slate-700 transition-colors"
-                        >
-                          {copiedId === msg.id ? (
-                            <>
-                              <Check size={12} className="text-emerald-600" />
-                              <span className="text-emerald-600">Copied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy size={12} />
-                              <span>Copy</span>
-                            </>
+                      <div className="pt-3 mt-3 border-t border-slate-200/60 flex items-center justify-between gap-3 text-[11px] text-slate-400">
+                        <span className="text-[10px] font-semibold text-purple-600">{msg.source || 'Socratic Dialogue'}</span>
+                        <div className="flex items-center gap-3">
+                          {hasEarlierUserMessage && (
+                            <button type="button" onClick={() => handleRegenerate(msg.id)} disabled={loading} className="flex items-center gap-1 hover:text-slate-700 disabled:opacity-40 transition-colors" title="Regenerate response">
+                              <RefreshCw size={12} /><span>Regenerate</span>
+                            </button>
                           )}
-                        </button>
+                          <button type="button" onClick={() => handleCopy(msg.id, msg.text)} className="flex items-center gap-1 hover:text-slate-700 transition-colors">
+                            {copiedId === msg.id ? <><Check size={12} className="text-emerald-600" /><span className="text-emerald-600">Copied</span></> : <><Copy size={12} /><span>Copy</span></>}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
