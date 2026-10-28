@@ -20,7 +20,7 @@ app.use(express.json({ limit: '10mb' }));
 app.get('/api/library/open-textbooks', async (req, res) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
   const requestedPage = Number.parseInt(typeof req.query.page === 'string' ? req.query.page : '1', 10);
-  const page = Number.isFinite(requestedPage) ? Math.max(1, Math.min(requestedPage, 100)) : 1;
+  const page = Number.isFinite(requestedPage) ? Math.max(1, Math.min(requestedPage, 500)) : 1;
   const cacheKey = `${query.toLocaleLowerCase()}|${page}`;
   const cached = openTextbookCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
