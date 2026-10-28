@@ -20,6 +20,12 @@ import {
 } from 'lucide-react';
 import { LearnerProfile, Course, AiConversation, AiChatMessage } from '../../types';
 import { INITIAL_CONVERSATIONS } from '../../data/curriculumData';
+import { firebaseAuth } from '../../lib/firebase';
+import {
+  deleteAiConversation,
+  loadAiConversations,
+  saveAiConversation,
+} from '../../services/aiConversations';
 
 interface BerryAiViewProps {
   learner: LearnerProfile;
@@ -57,6 +63,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [loadedForLearner, setLoadedForLearner] = useState<string | null>(null);
+  const [persistenceMode, setPersistenceMode] = useState<'cloud' | 'local' | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // In-line thread renaming
@@ -66,40 +73,83 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load and save each learner's chat history separately on this device.
-  // The loading guard prevents a profile switch from overwriting another learner's history.
+  // Prefer authenticated Firestore storage so chats survive refreshes and sign-ins on other devices.
+  // Keep profile-scoped local storage as a fallback when Firebase is not configured or reachable.
   useEffect(() => {
-    const storageKey = `berry_ai_conversations_${learner.id}`;
-    try {
-      const saved = localStorage.getItem(storageKey);
-      const parsed = saved ? JSON.parse(saved) : null;
-      if (Array.isArray(parsed) && parsed.every((item) =>
-        item && typeof item.id === 'string' && Array.isArray(item.messages)
-      )) {
-        setConversations(parsed as AiConversation[]);
-        setActiveConvId(parsed[0]?.id || '');
+    let cancelled = false;
+
+    const load = async () => {
+      const localKey = `berry_ai_conversations_${learner.id}`;
+      const loadLocal = (): AiConversation[] => {
+        try {
+          const saved = localStorage.getItem(localKey);
+          const parsed = saved ? JSON.parse(saved) : null;
+          return Array.isArray(parsed) ? parsed as AiConversation[] : INITIAL_CONVERSATIONS;
+        } catch {
+          return INITIAL_CONVERSATIONS;
+        }
+      };
+
+      const user = firebaseAuth?.currentUser;
+      if (user && user.uid === learner.id) {
+        try {
+          const cloudConversations = await loadAiConversations(user.uid);
+          if (cancelled) return;
+          const localConversations = loadLocal();
+          const conversationsToUse = cloudConversations.length
+            ? cloudConversations
+            : localStorage.getItem(localKey)
+              ? localConversations
+              : [];
+          setConversations(conversationsToUse);
+          setActiveConvId(conversationsToUse[0]?.id || '');
+          setPersistenceMode('cloud');
+        } catch (error) {
+          if (cancelled) return;
+          console.warn('Could not load Berry AI history from Firestore:', error);
+          const localConversations = loadLocal();
+          setConversations(localConversations);
+          setActiveConvId(localConversations[0]?.id || '');
+          setPersistenceMode('local');
+          setRequestError('Cloud chat history is unavailable. This chat is using this browser until cloud access is restored.');
+        }
       } else {
-        setConversations(INITIAL_CONVERSATIONS);
-        setActiveConvId(INITIAL_CONVERSATIONS[0]?.id || '');
+        const localConversations = loadLocal();
+        setConversations(localConversations);
+        setActiveConvId(localConversations[0]?.id || '');
+        setPersistenceMode('local');
       }
-    } catch (error) {
-      console.warn('Could not load Berry AI chat history:', error);
-      setConversations(INITIAL_CONVERSATIONS);
-      setActiveConvId(INITIAL_CONVERSATIONS[0]?.id || '');
-    }
-    setLoadedForLearner(learner.id);
+      if (!cancelled) setLoadedForLearner(learner.id);
+    };
+
+    setLoadedForLearner(null);
+    setPersistenceMode(null);
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [learner.id]);
 
   useEffect(() => {
-    if (loadedForLearner !== learner.id) return;
+    if (loadedForLearner !== learner.id || persistenceMode === null) return;
+    const localKey = `berry_ai_conversations_${learner.id}`;
     try {
-      localStorage.setItem(`berry_ai_conversations_${learner.id}`, JSON.stringify(conversations));
+      localStorage.setItem(localKey, JSON.stringify(conversations));
     } catch (error) {
-      console.warn('Could not save Berry AI chat history:', error);
-      setRequestError('Chat history could not be saved in this browser. Check available storage and try again.');
+      console.warn('Could not save Berry AI chat history locally:', error);
+      setRequestError('Chat history could not be saved in this browser. Check available storage.');
     }
-  }, [conversations, learner.id, loadedForLearner]);
 
+    const user = firebaseAuth?.currentUser;
+    if (persistenceMode === 'cloud' && user && user.uid === learner.id) {
+      conversations.forEach((conversation) => {
+        void saveAiConversation(user.uid, conversation).catch((error) => {
+          console.warn('Could not sync Berry AI conversation:', error);
+          setRequestError('Cloud chat sync failed. Your latest chat remains saved in this browser.');
+        });
+      });
+    }
+  }, [conversations, learner.id, loadedForLearner, persistenceMode]);
   // Auto-scroll to bottom of conversation
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -177,6 +227,13 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
       return;
     }
     const filtered = conversations.filter((c) => c.id !== id);
+    const user = firebaseAuth?.currentUser;
+    if (persistenceMode === 'cloud' && user && user.uid === learner.id) {
+      void deleteAiConversation(user.uid, id).catch((error) => {
+        console.warn('Could not delete Berry AI conversation from Firestore:', error);
+        setRequestError('The conversation could not be deleted from cloud history. Please check your connection and try again.');
+      });
+    }
     setConversations(filtered);
     if (activeConvId === id) {
       setActiveConvId(filtered[0].id);
