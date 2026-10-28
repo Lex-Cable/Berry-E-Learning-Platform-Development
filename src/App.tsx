@@ -671,6 +671,7 @@ export default function App() {
               onClearInitialCourse={() => setLearningTargetCourseId(null)}
               onSaveMastery={handleSaveMastery}
               onNavigateToCertificates={() => handleNavigate('certifications')}
+              onNavigateToCourses={() => handleNavigate('courses')}
               onClaimCertificate={handleClaimCertificate}
             />
           )}
