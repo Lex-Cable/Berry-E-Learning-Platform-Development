@@ -25,6 +25,8 @@ import {
 } from '../../types';
 import { LessonView } from '../lessons/LessonView';
 import { isLessonUnlocked } from '../../utils/mastery';
+import { loadLastOpenedLesson, saveLastOpenedLesson } from '../../services/learningProgress';
+import { firebaseAuth } from '../../lib/firebase';
 
 interface MyLearningViewProps {
   learner: LearnerProfile;
@@ -63,13 +65,46 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     if (!initialCourseId) return;
     const targetCourse = courses.find((course) => course.id === initialCourseId);
     if (!targetCourse || !learner.enrolledCourseIds.includes(targetCourse.id)) return;
+    let cancelled = false;
     setActiveCourse(targetCourse);
     setActiveLessonId(null);
     setTakingExam(false);
     setExamSubmitted(false);
     setExamAnswers({});
-    onClearInitialCourse?.();
-  }, [initialCourseId, courses, learner.enrolledCourseIds]);
+    const resume = async () => {
+      const localKey = `berry_last_lesson_${learner.id}_${targetCourse.id}`;
+      let savedLessonId: string | null = null;
+      try { savedLessonId = localStorage.getItem(localKey); } catch { /* local resume is optional */ }
+      const uid = firebaseAuth?.currentUser?.uid || learner.id;
+      if (uid) {
+        try {
+          const cloudLessonId = await loadLastOpenedLesson(uid, targetCourse.id);
+          if (cloudLessonId) savedLessonId = cloudLessonId;
+        } catch (error) {
+          console.warn('Could not load cloud resume state; using the local copy:', error);
+        }
+      }
+      const lessonExists = targetCourse.chapters.some((chapter) =>
+        chapter.lessons.some((lesson) => lesson.id === savedLessonId)
+      );
+      if (!cancelled && lessonExists && savedLessonId) setActiveLessonId(savedLessonId);
+      if (!cancelled) onClearInitialCourse?.();
+    };
+    void resume();
+    return () => { cancelled = true; };
+  }, [initialCourseId, courses, learner.id, learner.enrolledCourseIds, onClearInitialCourse]);
+
+  useEffect(() => {
+    if (!activeCourse || !activeLessonId) return;
+    const localKey = `berry_last_lesson_${learner.id}_${activeCourse.id}`;
+    try { localStorage.setItem(localKey, activeLessonId); } catch { /* local resume is optional */ }
+    const uid = firebaseAuth?.currentUser?.uid || learner.id;
+    if (uid) {
+      void saveLastOpenedLesson(uid, activeCourse.id, activeLessonId).catch((error) => {
+        console.warn('Could not sync resume state; the local copy is retained:', error);
+      });
+    }
+  }, [activeCourse, activeLessonId, learner.id]);
 
   // Grade filter (defaults to learner's current grade level, e.g. Grade 1, Grade 7, Grade 10, PP1, Bachelor Year 2)
   const [gradeFilter, setGradeFilter] = useState<string>('all');
@@ -164,6 +199,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           onBackToCourse={() => setActiveLessonId(null)}
           masteryRecord={masteryRecords[activeLessonId]}
           onSaveMastery={onSaveMastery}
+          userId={learner.id}
         />
       </div>
     );
