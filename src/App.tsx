@@ -38,7 +38,7 @@ import {
 import { isLiveTranscriptionAllowed, canNavigateBack, popNavigationHistory } from './utils/mastery';
 import { firebaseAuth } from './lib/firebase';
 import { loadTranscriptSessions, saveTranscriptSession } from './services/transcriptSessions';
-import { loadLearningProgress, saveLearningProgress } from './services/learningProgress';
+import { loadLearningCertificates, loadLearningProgress, saveLearningCertificate, saveLearningProgress } from './services/learningProgress';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
@@ -112,6 +112,23 @@ export default function App() {
       .catch((error) => {
         console.warn('Could not load cloud learning progress; keeping this device cache:', error);
       });
+    return () => { cancelled = true; };
+  }, [learner.id, isLoggedIn, authStateReady]);
+
+
+  useEffect(() => {
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (!authStateReady || !isLoggedIn || !uid) return;
+    let cancelled = false;
+    void loadLearningCertificates(uid).then((cloudCertificates) => {
+      if (cancelled || cloudCertificates.length === 0) return;
+      setCertificates((current) => [
+        ...cloudCertificates,
+        ...current.filter((item) => !cloudCertificates.some((cloudItem) => cloudItem.id === item.id)),
+      ]);
+    }).catch((error) => {
+      console.warn('Could not load cloud learning certificates; keeping this device cache:', error);
+    });
     return () => { cancelled = true; };
   }, [learner.id, isLoggedIn, authStateReady]);
 
@@ -405,6 +422,12 @@ export default function App() {
     };
 
     setCertificates((prev) => [newCert, ...prev]);
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) {
+      void saveLearningCertificate(uid, newCert).catch((error) => {
+        console.warn('Could not sync certificate to the cloud; the local record is retained:', error);
+      });
+    }
 
     const newNotif: AppNotification = {
       id: `notif-${Date.now()}`,
