@@ -27,3 +27,26 @@ jobs:
         run: npm run lint
       - name: Build application
         run: npm run build
+      - name: Deploy Firestore security rules
+        if: github.event_name == 'push' && github.ref == 'refs/heads/Jaccie-Jay'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          service_account="${FIREBASE_SERVICE_ACCOUNT_JSON:-${FIREBASE_SERVICE_ACCOUNT:-}}"
+          project_id="${FIREBASE_PROJECT_ID:-${VITE_FIREBASE_PROJECT_ID:-}}"
+
+          if [ -z "$service_account" ] || [ -z "$project_id" ]; then
+            echo "::warning::Firestore rules were NOT deployed. Configure GitHub Actions secrets FIREBASE_SERVICE_ACCOUNT_JSON (service-account JSON) and FIREBASE_PROJECT_ID (Firebase project ID), then rerun this workflow."
+            exit 0
+          fi
+
+          credentials_file="$RUNNER_TEMP/firebase-service-account.json"
+          printf '%s' "$service_account" > "$credentials_file"
+          chmod 600 "$credentials_file"
+          export GOOGLE_APPLICATION_CREDENTIALS="$credentials_file"
+
+          npx --yes firebase-tools@latest deploy --only firestore:rules --project "$project_id" --non-interactive
