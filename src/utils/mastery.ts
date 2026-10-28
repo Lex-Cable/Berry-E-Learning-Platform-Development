@@ -4,8 +4,9 @@ import { Lesson, QuizQuestion, LearnerStage, Curriculum, Course } from '../types
  * Calculates score percentage from raw correct counts.
  */
 export function calculateScore(correct: number, total: number): number {
-  if (total <= 0) return 0;
-  return Math.round((Math.max(0, correct) / total) * 100);
+  if (!Number.isFinite(correct) || !Number.isFinite(total) || total <= 0) return 0;
+  const safeCorrect = Math.min(total, Math.max(0, correct));
+  return Math.max(0, Math.min(100, Math.round((safeCorrect / total) * 100)));
 }
 
 /**
