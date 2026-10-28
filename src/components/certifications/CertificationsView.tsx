@@ -15,7 +15,6 @@ import {
   Share2,
 } from 'lucide-react';
 import { CertificateRecord, Course, LearnerProfile } from '../../types';
-import { SAMPLE_CERTIFICATES } from '../../data/curriculumData';
 
 interface CertificationsViewProps {
   learner: LearnerProfile;
@@ -33,11 +32,14 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
   const [selectedCert, setSelectedCert] = useState<CertificateRecord | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const handleCopyLink = (cert: CertificateRecord) => {
-    const fakeUrl = `https://berry.education/verify/${cert.credentialId}`;
-    navigator.clipboard.writeText(fakeUrl);
-    setCopiedId(cert.credentialId);
-    setTimeout(() => setCopiedId(null), 2500);
+  const handleCopyCredentialId = async (cert: CertificateRecord) => {
+    try {
+      await navigator.clipboard.writeText(cert.credentialId);
+      setCopiedId(cert.credentialId);
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch {
+      window.prompt('Copy this Berry credential ID:', cert.credentialId);
+    }
   };
 
   const handlePrint = () => {
@@ -51,10 +53,10 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold mb-2">
             <ShieldCheck size={14} className="text-emerald-600" />
-            <span>KICD Aligned Verified Credentials</span>
+            <span>Berry Learning Records</span>
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            Berry Verifiable Certifications
+            Berry Certificates
           </h2>
           <p className="text-xs text-slate-500 mt-1 max-w-xl">
             Digital credentials earned through demonstrated competency and mastery exams across Kenya CBC, Higher Education, and Professional tracks.
@@ -74,7 +76,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
       <div className="space-y-4">
         <h3 className="font-extrabold text-lg text-slate-900 flex items-center gap-2">
           <Award size={20} className="text-amber-500" />
-          <span>Earned Verified Certificates ({certificates.length})</span>
+          <span>Earned Certificates ({certificates.length})</span>
         </h3>
 
         {certificates.length === 0 ? (
@@ -104,7 +106,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
                       <ShieldCheck size={12} />
-                      <span>Verified Credential</span>
+                      <span>Berry-issued Record</span>
                     </div>
                     <span className="text-[10px] text-white/70 font-mono">
                       {cert.credentialId}
@@ -139,7 +141,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
                   </div>
 
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-600 group-hover:text-purple-800">
-                    <span>View Official Certificate</span>
+                    <span>View Certificate Record</span>
                     <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
                   </div>
                 </div>
@@ -181,10 +183,10 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
                   B
                 </div>
                 <h4 className="text-xs font-black tracking-widest uppercase text-purple-700">
-                  REPUBLIC OF KENYA • COMPETENCY-BASED CURRICULUM
+                  BERRY LEARNING PLATFORM • LEARNING RECORD
                 </h4>
                 <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-serif">
-                  Certificate of Competence & Mastery
+                  Certificate of Completion & Mastery
                 </h2>
                 <div className="w-24 h-1 bg-amber-400 mx-auto rounded-full mt-2" />
               </div>
@@ -210,15 +212,15 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
               <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-amber-200/80 text-xs">
                 <div className="text-left">
                   <div className="font-script text-lg text-slate-800 font-bold">
-                    Dr. Julius K. Jwan
+                    Berry Learning Platform
                   </div>
                   <span className="text-[11px] text-slate-500 block border-t border-slate-300 pt-1">
-                    Director of Curriculum Quality (KICD)
+                    Learning Achievement Record
                   </span>
                 </div>
 
                 <div className="w-16 h-16 rounded-full border-2 border-dashed border-amber-500 flex items-center justify-center text-center p-1 text-[9px] font-bold text-amber-700">
-                  OFFICIAL DIGITAL SEAL
+                  BERRY RECORD
                 </div>
 
                 <div className="text-right">
@@ -235,18 +237,18 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
             {/* Modal Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
               <button
-                onClick={() => handleCopyLink(selectedCert)}
+                onClick={() => handleCopyCredentialId(selectedCert)}
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs"
               >
                 {copiedId === selectedCert.credentialId ? (
                   <>
                     <Check size={14} className="text-emerald-600" />
-                    <span className="text-emerald-600">Copied Verification Link!</span>
+                    <span className="text-emerald-600">Copied Credential ID!</span>
                   </>
                 ) : (
                   <>
                     <Copy size={14} />
-                    <span>Copy Verification Link</span>
+                    <span>Copy Credential ID</span>
                   </>
                 )}
               </button>
