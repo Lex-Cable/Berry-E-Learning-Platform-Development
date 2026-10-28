@@ -134,6 +134,26 @@ if (process.env.GEMINI_API_KEY) {
   });
 }
 
+// Gemini may temporarily return 429/503 or 5xx responses under load. Retry only
+// transient failures with a short exponential backoff; never retry client errors.
+async function withGeminiRetry<T>(operation: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      const candidate = error as { status?: unknown; code?: unknown; message?: unknown };
+      const status = Number(candidate?.status ?? candidate?.code);
+      const retryable = status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+        || candidate?.status === 'UNAVAILABLE'
+        || candidate?.status === 'RESOURCE_EXHAUSTED';
+      if (!retryable || attempt >= maxAttempts - 1) throw error;
+      const delayMs = Math.min(1000 * (2 ** attempt), 4000);
+      console.warn(`Berry AI temporary API failure (attempt ${attempt + 1}/${maxAttempts}); retrying in ${delayMs}ms.`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 // Socratic pedagogical tutor endpoint
 app.post('/api/ai/chat', async (req, res) => {
   try {
@@ -201,18 +221,20 @@ Core Principles:
       };
 
       if (req.body?.stream === true) {
-        res.status(200);
-        res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache, no-transform');
-        res.setHeader('Connection', 'keep-alive');
-        res.flushHeaders?.();
-
         try {
-          const stream = await aiClient.models.generateContentStream({
-            model: 'gemini-3.8-flash',
+          // Establish the stream before sending SSE headers so a temporary 503 can
+          // be retried and, if still unavailable, returned as a real HTTP error.
+          const stream = await withGeminiRetry(() => aiClient!.models.generateContentStream({
+            model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
             contents,
             config: generationConfig,
-          });
+          }));
+          res.status(200);
+          res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache, no-transform');
+          res.setHeader('Connection', 'keep-alive');
+          res.flushHeaders?.();
+
           for await (const chunk of stream) {
             if (res.destroyed) return;
             const text = typeof chunk.text === 'string' ? chunk.text : '';
@@ -224,19 +246,35 @@ Core Principles:
           }
         } catch (streamError) {
           console.error('Berry AI stream error:', streamError);
-          if (!res.destroyed) {
-            res.write(`data: ${JSON.stringify({ error: 'Berry AI generation was interrupted. Please retry.' })}\n\n`);
+          if (!res.destroyed && res.headersSent) {
+            const candidate = streamError as { status?: unknown; code?: unknown };
+            const status = Number(candidate?.status ?? candidate?.code);
+            const message = status === 503 || candidate?.status === 'UNAVAILABLE'
+              ? 'Berry AI is temporarily busy. Your message is safe; please try again in a moment.'
+              : status === 429 || candidate?.status === 'RESOURCE_EXHAUSTED'
+                ? 'Berry AI is receiving too many requests right now. Please wait a moment and retry.'
+                : 'Berry AI generation was interrupted. Please retry.';
+            res.write(`data: ${JSON.stringify({ error: message, retryable: true })}\n\n`);
             res.end();
+          } else if (!res.destroyed) {
+            const candidate = streamError as { status?: unknown; code?: unknown };
+            const status = Number(candidate?.status ?? candidate?.code);
+            res.status(status === 429 ? 429 : 503).json({
+              error: status === 429
+                ? 'Berry AI is receiving too many requests. Please wait a moment and retry.'
+                : 'Berry AI is temporarily busy. Please try again in a moment.',
+              retryable: true,
+            });
           }
         }
         return;
       }
 
-      const response = await aiClient.models.generateContent({
-        model: 'gemini-3.8-flash',
+      const response = await withGeminiRetry(() => aiClient!.models.generateContent({
+        model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
         contents,
         config: generationConfig,
-      });
+      }));
 
       const reply = response.text || 'I am here to guide your learning. Could you rephrase your question?';
       return res.json({ reply, source: 'gemini' });
