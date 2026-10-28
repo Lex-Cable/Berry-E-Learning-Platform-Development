@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BookOpen,
   CheckCircle2,
@@ -33,6 +33,9 @@ interface MyLearningViewProps {
   onSaveMastery: (record: LessonMasteryState) => void;
   onNavigateToCertificates?: () => void;
   onClaimCertificate?: (course: Course, scorePercent: number) => void;
+  initialCourseId?: string | null;
+  onClearInitialCourse?: () => void;
+  onNavigateToCourses?: () => void;
 }
 
 export const MyLearningView: React.FC<MyLearningViewProps> = ({
@@ -42,6 +45,9 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   onSaveMastery,
   onNavigateToCertificates,
   onClaimCertificate,
+  initialCourseId = null,
+  onClearInitialCourse,
+  onNavigateToCourses,
 }) => {
   // Navigation inside My Learning:
   // 1. Subject Grid (activeCourse === null)
@@ -53,6 +59,18 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [takingExam, setTakingExam] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!initialCourseId) return;
+    const targetCourse = courses.find((course) => course.id === initialCourseId);
+    if (!targetCourse || !learner.enrolledCourseIds.includes(targetCourse.id)) return;
+    setActiveCourse(targetCourse);
+    setActiveLessonId(null);
+    setTakingExam(false);
+    setExamSubmitted(false);
+    setExamAnswers({});
+    onClearInitialCourse?.();
+  }, [initialCourseId, courses, learner.enrolledCourseIds]);
+
   // Grade filter (defaults to learner's current grade level, e.g. Grade 1, Grade 7, Grade 10, PP1, Bachelor Year 2)
   const [gradeFilter, setGradeFilter] = useState<string>(learner.gradeLevel);
 
@@ -63,27 +81,15 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [examPassed, setExamPassed] = useState<boolean>(false);
 
   // Available grade options based on learner stage
-  const availableGrades = Array.from(
-    new Set(
-      courses
-        .filter((c) => {
-          if (learner.stage === 'advance') {
-            return c.stage === 'advance' || c.stage === 'university' || c.stage === 'professionals';
-          }
-          return c.stage === learner.stage;
-        })
-        .map((c) => c.gradeLevel)
-    )
-  );
+  // My Learning must show only courses this learner has actually enrolled in.
+  const enrolledCourses = courses.filter((course) => learner.enrolledCourseIds.includes(course.id));
+  const availableGrades = Array.from(new Set(enrolledCourses.map((course) => course.gradeLevel)))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-  // Filter courses for current grade
-  const gradeCourses = courses.filter((c) => {
-    if (gradeFilter !== 'all' && c.gradeLevel !== gradeFilter) return false;
-    if (learner.stage === 'advance') {
-      return c.stage === 'advance' || c.stage === 'university' || c.stage === 'professionals';
-    }
-    return c.stage === learner.stage;
-  });
+  // Grade filters apply to the learner's enrolled courses, not the global catalogue.
+  const gradeCourses = enrolledCourses.filter((course) =>
+    gradeFilter === 'all' || course.gradeLevel === gradeFilter
+  );
 
   // Calculate course mastery stats
   const getCourseProgress = (course: Course) => {
@@ -558,7 +564,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
         </div>
 
         {/* Grade Filter Pill */}
-        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200 text-xs font-bold">
+        {enrolledCourses.length > 0 && <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200 text-xs font-bold">
           <span className="text-slate-400 px-2">Grade:</span>
           {availableGrades.map((g) => (
             <button
@@ -583,13 +589,22 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           >
             All
           </button>
-        </div>
+        </div>}
+
+        {enrolledCourses.length === 0 && (
+          <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-8 md:p-12 text-center">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-4"><BookOpen size={26} /></div>
+            <h3 className="text-lg font-black text-slate-900">Your learning journey starts here</h3>
+            <p className="text-sm text-slate-500 max-w-md mx-auto mt-2">You have not enrolled in a course yet. Explore the course catalogue and enrol to see your courses here.</p>
+            {onNavigateToCourses && <button type="button" onClick={onNavigateToCourses} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm px-5 py-3"><BookOpen size={16} /> Explore courses <ChevronRight size={16} /></button>}
+          </div>
+        )}
       </div>
 
       {/* =========================================
           SUBJECT GRID
           ========================================= */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {gradeCourses.length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {gradeCourses.map((course) => {
           const progress = getCourseProgress(course);
 
@@ -671,7 +686,13 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             </div>
           );
         })}
-      </div>
+      </div>}
+      {enrolledCourses.length > 0 && gradeCourses.length === 0 && (
+        <div className="text-center rounded-3xl border border-dashed border-slate-300 bg-white p-8">
+          <p className="text-sm text-slate-600">You have no enrolled courses for this grade.</p>
+          <button type="button" onClick={() => setGradeFilter('all')} className="mt-3 text-sm font-bold text-purple-700 hover:text-purple-900">Show all my courses</button>
+        </div>
+      )}
     </div>
   );
 };
