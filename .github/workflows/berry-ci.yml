@@ -1,0 +1,29 @@
+name: Berry validation
+
+on:
+  push:
+    branches:
+      - Jaccie-Jay
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run mastery and utility tests
+        run: npm test
+      - name: Type-check
+        run: npm run lint
+      - name: Build application
+        run: npm run build
