@@ -31,7 +31,10 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
   const recordsArray = Object.values(masteryRecords);
   const masteredCount = recordsArray.filter((r) => r.isMastered).length;
   const inProgressCount = recordsArray.filter((r) => !r.isMastered && r.attemptsCount > 0).length;
-  const totalTrackedObjectives = Math.max(recordsArray.length, 6);
+  const totalTrackedObjectives = recordsArray.length;
+  const masteryPercentage = totalTrackedObjectives
+    ? Math.round((masteredCount / totalTrackedObjectives) * 100)
+    : 0;
 
   // Stage-specific Career Exploration Data
   const careerPathwaysMap: Record<
@@ -238,14 +241,14 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
                 <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
                   <span>Demonstrated Competency (Assessments Passed ≥80%)</span>
                   <span className="text-emerald-700 font-bold">
-                    {Math.round((masteredCount / totalTrackedObjectives) * 100)}%
+                    {masteryPercentage}%
                   </span>
                 </div>
                 <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                     style={{
-                      width: `${Math.round((masteredCount / totalTrackedObjectives) * 100)}%`,
+                      width: `${masteryPercentage}%`,
                     }}
                   />
                 </div>
