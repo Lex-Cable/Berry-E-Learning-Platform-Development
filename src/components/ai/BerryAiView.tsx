@@ -42,21 +42,9 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   const activeCourse =
     courses.find((c) => learner.enrolledCourseIds.includes(c.id)) || courses[0];
 
-  const [conversations, setConversations] = useState<AiConversation[]>(() => {
-    const saved = localStorage.getItem('berry_ai_conversations');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // fallback
-      }
-    }
-    return INITIAL_CONVERSATIONS;
-  });
+  const [conversations, setConversations] = useState<AiConversation[]>([]);
 
-  const [activeConvId, setActiveConvId] = useState<string>(
-    conversations[0]?.id || 'conv-1'
-  );
+  const [activeConvId, setActiveConvId] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [input, setInput] = useState('');
