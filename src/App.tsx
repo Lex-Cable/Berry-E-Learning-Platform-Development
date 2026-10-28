@@ -38,6 +38,7 @@ import {
 import { isLiveTranscriptionAllowed, canNavigateBack, popNavigationHistory } from './utils/mastery';
 import { firebaseAuth } from './lib/firebase';
 import { loadTranscriptSessions, saveTranscriptSession } from './services/transcriptSessions';
+import { loadLearningProgress, saveLearningProgress } from './services/learningProgress';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
@@ -96,6 +97,23 @@ export default function App() {
     }
     setWorkspaceLoadedFor(learner.id);
   }, [learner.id]);
+
+
+  // Merge cloud mastery with this device's cache so progress follows a learner across devices.
+  useEffect(() => {
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (!authStateReady || !isLoggedIn || !uid) return;
+    let cancelled = false;
+    void loadLearningProgress(uid)
+      .then((cloudRecords) => {
+        if (cancelled) return;
+        setMasteryRecords((current) => ({ ...current, ...cloudRecords }));
+      })
+      .catch((error) => {
+        console.warn('Could not load cloud learning progress; keeping this device cache:', error);
+      });
+    return () => { cancelled = true; };
+  }, [learner.id, isLoggedIn, authStateReady]);
 
   // Sync transcript history to the signed-in learner's private Firestore subcollection.
   useEffect(() => {
@@ -338,6 +356,12 @@ export default function App() {
       ...prev,
       [record.lessonId]: record,
     }));
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) {
+      void saveLearningProgress(uid, record).catch((error) => {
+        console.warn('Could not sync lesson mastery to the cloud; the local record is retained:', error);
+      });
+    }
 
     if (record.isMastered) {
       const newNotif: AppNotification = {
