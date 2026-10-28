@@ -22,7 +22,6 @@ import {
   COURSES,
   INITIAL_LEARNER,
   LIBRARY_RESOURCES,
-  TRANSCRIPT_SESSIONS,
 } from './data/curriculumData';
 
 import {
@@ -38,6 +37,7 @@ import {
 } from './types';
 import { isLiveTranscriptionAllowed, canNavigateBack, popNavigationHistory } from './utils/mastery';
 import { firebaseAuth } from './lib/firebase';
+import { loadTranscriptSessions, saveTranscriptSession } from './services/transcriptSessions';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
@@ -52,7 +52,7 @@ export default function App() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [libraryResources, setLibraryResources] = useState<LibraryResource[]>(LIBRARY_RESOURCES);
-  const [transcriptSessions, setTranscriptSessions] = useState<LiveTranscriptSession[]>(TRANSCRIPT_SESSIONS);
+  const [transcriptSessions, setTranscriptSessions] = useState<LiveTranscriptSession[]>([]);
   // Only display certificates earned by this learner; seeded sample credentials must not appear as real awards.
   const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [workspaceLoadedFor, setWorkspaceLoadedFor] = useState<string | null>(null);
@@ -96,6 +96,25 @@ export default function App() {
     }
     setWorkspaceLoadedFor(learner.id);
   }, [learner.id]);
+
+  // Sync transcript history to the signed-in learner's private Firestore subcollection.
+  useEffect(() => {
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (!authStateReady || !isLoggedIn || !uid) return;
+    let cancelled = false;
+    void loadTranscriptSessions(uid)
+      .then((savedSessions) => {
+        if (cancelled || savedSessions.length === 0) return;
+        setTranscriptSessions((current) => [
+          ...savedSessions,
+          ...current.filter((session) => !savedSessions.some((saved) => saved.id === session.id)),
+        ]);
+      })
+      .catch((error) => {
+        console.warn('Could not load cloud transcript history; keeping local sessions:', error);
+      });
+    return () => { cancelled = true; };
+  }, [learner.id, isLoggedIn, authStateReady]);
 
   useEffect(() => {
     if (workspaceLoadedFor !== learner.id) return;
@@ -449,9 +468,16 @@ export default function App() {
     });
   };
 
-  // Transcript session handler
+  // Transcript session handler. Keep local state responsive while syncing to Firestore.
   const handleSaveTranscriptSession = (session: LiveTranscriptSession) => {
-    setTranscriptSessions((prev) => [session, ...prev]);
+    setTranscriptSessions((prev) => [session, ...prev.filter((item) => item.id !== session.id)]);
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (!uid) return;
+    void saveTranscriptSession(uid, session).catch((error) => {
+      console.warn('Transcript saved locally but cloud sync failed:', error);
+      setAuthNotice('Your transcript is saved on this device, but cloud sync failed. Check Firebase configuration and rules.');
+      setTimeout(() => setAuthNotice(null), 7000);
+    });
   };
 
   // Accessibility classes
