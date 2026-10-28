@@ -83,7 +83,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     } catch {
       setPersonalNotes('');
     }
-    const uid = firebaseAuth?.currentUser?.uid || userId;
+    const uid = firebaseAuth?.currentUser?.uid;
     if (uid) {
       void loadLessonNotes(uid, lessonId).then((notes) => {
         if (cancelled) return;
