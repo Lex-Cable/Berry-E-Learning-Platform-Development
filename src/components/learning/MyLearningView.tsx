@@ -75,7 +75,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       const localKey = `berry_last_lesson_${learner.id}_${targetCourse.id}`;
       let savedLessonId: string | null = null;
       try { savedLessonId = localStorage.getItem(localKey); } catch { /* local resume is optional */ }
-      const uid = firebaseAuth?.currentUser?.uid || learner.id;
+      const uid = firebaseAuth?.currentUser?.uid;
       if (uid) {
         try {
           const cloudLessonId = await loadLastOpenedLesson(uid, targetCourse.id);
@@ -92,7 +92,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     };
     void resume();
     return () => { cancelled = true; };
-  }, [initialCourseId, courses, learner.id, learner.enrolledCourseIds, onClearInitialCourse]);
+  }, [initialCourseId, courses, learner.id, learner.enrolledCourseIds]);
 
   useEffect(() => {
     if (!activeCourse || !activeLessonId) return;
@@ -496,6 +496,16 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                 <div>
                   <h4 className="font-bold text-base text-slate-900">{chapter.title}</h4>
                   <p className="text-xs text-slate-500 mt-0.5">{chapter.description}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
+                      {chapter.lessons.filter((lesson) => masteryRecords[lesson.id]?.isMastered).length}/{chapter.lessons.length} lessons mastered
+                    </span>
+                    {chapter.lessons.length > 0 && chapter.lessons.every((lesson) => masteryRecords[lesson.id]?.isMastered) && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
+                        <Award size={12} /> Chapter badge earned
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -554,7 +564,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                         <div className="flex items-center gap-2">
                           {isMastered ? (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                              Mastered (100%)
+                              Mastered ({mastery?.scorePercent ?? 0}%)
                             </span>
                           ) : isUnlocked ? (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800">
