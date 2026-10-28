@@ -161,8 +161,10 @@ app.post('/api/ai/chat', async (req, res) => {
       : [];
 
     const stageGuidelines: Record<string, string> = {
+      early: 'The learner is in PP1 or PP2. Use very simple, playful, child-friendly language, short sentences, concrete examples, and gentle encouragement. Keep content age-appropriate and safe.',
       junior: 'The learner is a child or early adolescent (PP1-Grade 9 CBC). Use simple, encouraging, warm, concrete language with analogies and examples. Do not give direct solutions to homework; guide them step-by-step.',
       senior: 'The learner is a secondary/high school student (Grades 10-12 CBC/international). Provide clear conceptual explanations, step-by-step problem-solving hints, and revision strategies without answering test questions directly.',
+      advance: 'The learner is in an advanced learning pathway. Provide deeper technical explanations, structured reasoning, practical examples, and clear distinctions between established facts and uncertainty.',
       university: 'The learner is an undergraduate or postgraduate student. Use rigorous academic terminology, cite research methodologies, provide structured guidance, and encourage critical thinking.',
       professionals: 'The learner is a working professional or career changer. Provide pragmatic workplace applications, real-world industry best practices, and action-oriented takeaways.',
     };
@@ -198,19 +200,9 @@ Core Principles:
       const reply = response.text || 'I am here to guide your learning. Could you rephrase your question?';
       return res.json({ reply, source: 'gemini' });
     } else {
-      // Pedagogical fallback when GEMINI_API_KEY is not configured
-      let simulatedReply = '';
-      const lower = (message || '').toLowerCase();
-
-      if (lower.includes('fraction') || lower.includes('add') || lower.includes('number')) {
-        simulatedReply = `**Berry Tutor Guidance:**\n\nWhen working on numbers or fractions, remember that understanding *why* is the secret to mastery!\n\n1. For adding fractions like $\\frac{1}{2} + \\frac{1}{4}$, find a common denominator first: $\\frac{2}{4} + \\frac{1}{4} = \\frac{3}{4}$.\n2. Never add denominators straight across.\n\n*Would you like to try another practice check in your current lesson?*`;
-      } else if (lower.includes('kenya') || lower.includes('cbc')) {
-        simulatedReply = `**Kenyan Competency-Based Curriculum (CBC) Insight:**\n\nUnder Kenya's CBC structure:\n- **PP1 & PP2:** Pre-Primary foundational activities\n- **Grades 1–3:** Lower Primary\n- **Grades 4–6:** Upper Primary\n- **Grades 7–9:** Junior School (broad practical & integrated science)\n- **Grades 10–12:** Senior School (STEM, Social Sciences, Arts & Sports pathways)\n\nWhich learning area would you like to explore?`;
-      } else {
-        simulatedReply = `**Berry Learning Assistant (${stage.toUpperCase()} Stage):**\n\nGreat question regarding **${currentTopic || 'your current study'}**! Let's break this down:\n\n- What is the key concept or learning objective you are tackling?\n- Look at the worked example in your lesson notes.\n- Try taking the first step, and tell me what you notice.\n\nI'm here to coach you through it step-by-step so you achieve genuine mastery!`;
-      }
-
-      return res.json({ reply: simulatedReply, source: 'pedagogical-engine' });
+      return res.status(503).json({
+        error: 'Berry AI is not configured yet. Add the server-side GEMINI_API_KEY to enable live AI responses.',
+      });
     }
   } catch (err: any) {
     console.error('Berry AI Chat Error:', err);
@@ -255,11 +247,8 @@ ${transcript}`;
         source: 'gemini',
       });
     } else {
-      // Clean pedagogical summarizer fallback
-      const wordCount = transcript.trim().split(/\s+/).length;
-      return res.json({
-        summary: `### Lecture Summary: ${title || 'Academic Session'}\n\n**Overview:**\nThis session covered key lecture themes across ${wordCount} transcribed words, focusing on foundational principles and practical methodology.\n\n**Core Takeaways:**\n- Structured understanding of the presented arguments\n- Identification of key variables and empirical definitions\n- Connections to upcoming module assessments\n\n**Recommended Study Actions:**\n- Cross-reference with your Berry Library reading materials\n- Review quiz questions on this topic to confirm mastery`,
-        source: 'academic-summary-engine',
+      return res.status(503).json({
+        error: 'Berry AI summarization is not configured yet. Add the server-side GEMINI_API_KEY to enable AI summaries.',
       });
     }
   } catch (err: any) {
