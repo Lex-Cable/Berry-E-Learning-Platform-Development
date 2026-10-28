@@ -41,6 +41,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
 
   // Curriculum choice: Kenyan CBC vs Universal Learning
   const [curriculumType, setCurriculumType] = useState<'kenya_cbc' | 'universal'>('kenya_cbc');
+  const [globalCurriculum, setGlobalCurriculum] = useState<Exclude<Curriculum, 'kenya_cbc'>>('cambridge');
 
   // Form states
   const [fullName, setFullName] = useState('');
@@ -113,7 +114,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
     // Determine final curriculum value
     let resolvedCurriculum: Curriculum = 'kenya_cbc';
     if (curriculumType === 'universal') {
-      resolvedCurriculum = stage === 'senior' ? 'ib' : 'cambridge';
+      resolvedCurriculum = globalCurriculum;
     }
 
     // Determine effective grade level
@@ -456,6 +457,26 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                 </button>
               </div>
 
+              {curriculumType === 'universal' && (
+                <div className="mb-5 rounded-xl border border-purple-100 bg-purple-50/60 p-4">
+                  <label htmlFor="global-curriculum" className="block text-xs font-bold text-slate-700 mb-2">
+                    Choose your Global Classroom curriculum
+                  </label>
+                  <select
+                    id="global-curriculum"
+                    value={globalCurriculum}
+                    onChange={(event) => setGlobalCurriculum(event.target.value as Exclude<Curriculum, 'kenya_cbc'>)}
+                    className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="cambridge">Cambridge International</option>
+                    <option value="uk_national">England National Curriculum</option>
+                    <option value="us_common_core">US Common Core</option>
+                    <option value="ib">International Baccalaureate (IB)</option>
+                  </select>
+                  <p className="mt-2 text-[11px] text-slate-500">Your choice sets the curriculum filter for your learning profile. Course availability depends on the current catalogue.</p>
+                </div>
+              )}
+
               {/* Dynamic Curriculum Options by Stage */}
               <div className="pt-4 border-t border-slate-200">
                 {/* Kindergarten dynamic options */}
@@ -651,12 +672,17 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({
                           onChange={(e) => setAdvanceDegreeYear(e.target.value)}
                           className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                         >
+                          <option value="Certificate Programme">Certificate Programme</option>
+                          <option value="Diploma Programme">Diploma Programme</option>
+                          <option value="Higher Diploma Programme">Higher Diploma Programme</option>
+                          <option value="Postgraduate Diploma">Postgraduate Diploma</option>
                           <option value="Bachelor Year 1">Bachelor Year 1 (Freshman)</option>
                           <option value="Bachelor Year 2">Bachelor Year 2 (Sophomore)</option>
                           <option value="Bachelor Year 3">Bachelor Year 3 (Junior)</option>
                           <option value="Bachelor Year 4">Bachelor Year 4 (Senior / Final Year)</option>
                           <option value="Master of Science / MA">Masters Degree Student</option>
-                          <option value="Ph.D. Researcher">Ph.D. Candidate / Postgrad Researcher</option>
+                          <option value="Postgraduate Diploma">Postgraduate Diploma Student</option>
+                          <option value="Doctoral Researcher">Doctoral / Ph.D. Researcher</option>
                         </select>
                       </div>
                     ) : (
