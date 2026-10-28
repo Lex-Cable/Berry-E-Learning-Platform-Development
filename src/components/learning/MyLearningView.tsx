@@ -195,7 +195,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">{exam.title}</h2>
           <p className="text-xs text-slate-500">
             Passing threshold: <strong>{exam.passingScorePercent}%</strong>. Passing this exam awards
-            a digitally verified Berry Certificate of Competency aligned with the Kenya curriculum.
+            a Berry course assessment record. Berry records are not government-issued or externally accredited qualifications.
           </p>
         </div>
 
@@ -225,7 +225,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                   </h3>
                   <p className="text-xs opacity-90">
                     {examPassed
-                      ? 'Your official Kenyan CBC Certificate has been generated and added to your verified profile.'
+                      ? 'You passed this course assessment. Any Berry learning record is not an official Kenyan CBC qualification.'
                       : `You scored ${examScore}%. You need ${exam.passingScorePercent}% to earn the verified certificate.`}
                   </p>
                 </div>
@@ -250,7 +250,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all active:scale-95"
                 >
                   <Award size={16} />
-                  <span>View Verified Certificate</span>
+                  <span>View Berry Learning Record</span>
                 </button>
               )}
             </div>
