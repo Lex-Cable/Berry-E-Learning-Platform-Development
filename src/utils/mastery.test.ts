@@ -19,6 +19,10 @@ test('calculateScore computes percentages correctly', () => {
   assert.equal(calculateScore(10, 10), 100);
   assert.equal(calculateScore(2, 3), 67);
   assert.equal(calculateScore(0, 0), 0);
+  assert.equal(calculateScore(12, 10), 100);
+  assert.equal(calculateScore(-2, 10), 0);
+  assert.equal(calculateScore(4, -5), 0);
+  assert.equal(calculateScore(Number.NaN, 5), 0);
 });
 
 test('evaluateMastery enforces mastery thresholds without false advancement', () => {
