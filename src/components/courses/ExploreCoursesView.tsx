@@ -55,7 +55,7 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
 
   // Available curricula
   const curricula = [
-    { id: 'kenya_cbc' as Curriculum, name: 'Kenya CBC (KICD Official)', flag: '🇰🇪' },
+    { id: 'kenya_cbc' as Curriculum, name: 'Kenya CBC (CBC-aligned)', flag: '🇰🇪' },
     { id: 'cambridge' as Curriculum, name: 'Cambridge International (CIE)', flag: '🌐' },
     { id: 'uk_national' as Curriculum, name: 'England National Curriculum', flag: '🇬🇧' },
     { id: 'us_common_core' as Curriculum, name: 'US State Standards / Common Core', flag: '🇺🇸' },
@@ -97,7 +97,7 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
             Explore Courses & Curricula
           </h2>
           <p className="text-xs text-slate-500 mt-1 max-w-xl">
-            Browse official Kenya CBC learning areas (PP1 through Grade 12) alongside verified international comparisons.
+            Browse the current Berry catalogue across Kenya CBC and selected international frameworks. Coverage varies by grade, subject and curriculum; available courses are shown in the results.
           </p>
         </div>
 

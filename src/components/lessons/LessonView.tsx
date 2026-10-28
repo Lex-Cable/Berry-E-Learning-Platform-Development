@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Play,
   Pause,
@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { Course, Lesson, QuizQuestion, LessonMasteryState } from '../../types';
 import { calculateScore, evaluateMastery, getMisconceptionExplanation } from '../../utils/mastery';
+import { loadLessonNotes, saveLessonNotes } from '../../services/learningProgress';
+import { firebaseAuth } from '../../lib/firebase';
 
 interface LessonViewProps {
   course: Course;
@@ -29,6 +31,7 @@ interface LessonViewProps {
   onBackToCourse: () => void;
   masteryRecord?: LessonMasteryState;
   onSaveMastery: (record: LessonMasteryState) => void;
+  userId?: string;
 }
 
 export const LessonView: React.FC<LessonViewProps> = ({
@@ -38,6 +41,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   onBackToCourse,
   masteryRecord,
   onSaveMastery,
+  userId,
 }) => {
   // Find current lesson and chapter
   let currentLesson: Lesson | undefined;
@@ -66,9 +70,33 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [showCaptions, setShowCaptions] = useState(true);
 
-  // Notes state
+  // Personal notes are cached locally and synced to the signed-in learner's private cloud record.
   const [personalNotes, setPersonalNotes] = useState('');
   const [notesSavedNotice, setNotesSavedNotice] = useState(false);
+  const [notesSaveError, setNotesSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const localKey = `berry_lesson_notes_${userId || 'guest'}_${lessonId}`;
+    try {
+      setPersonalNotes(localStorage.getItem(localKey) || '');
+    } catch {
+      setPersonalNotes('');
+    }
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) {
+      void loadLessonNotes(uid, lessonId).then((notes) => {
+        if (cancelled) return;
+        if (notes) {
+          setPersonalNotes(notes);
+          try { localStorage.setItem(localKey, notes); } catch { /* local cache is optional */ }
+        }
+      }).catch((error) => {
+        console.warn('Could not load cloud study notes; keeping the local copy:', error);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [lessonId, userId]);
 
   // Matching activity state
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
@@ -80,14 +108,44 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [submittedQuiz, setSubmittedQuiz] = useState(false);
   const [quizScore, setQuizScore] = useState<number>(masteryRecord?.scorePercent || 0);
 
+  // Reset lesson-specific interactions when moving between lessons so answers never leak.
+  useEffect(() => {
+    setActiveTab('video');
+    setIsPlaying(false);
+    setSelectedLeft(null);
+    setMatchedPairs({});
+    setMatchingFeedback(null);
+    setSelectedAnswers({});
+    setSubmittedQuiz(false);
+    setQuizScore(masteryRecord?.scorePercent || 0);
+  }, [lessonId]);
+
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
   const currentOverallIndex = allLessons.findIndex((l) => l.id === lessonId);
   const nextLesson = allLessons[currentOverallIndex + 1];
 
-  const handleSaveNotes = () => {
+  const handleSaveNotes = async () => {
+    setNotesSaveError(null);
+    const localKey = `berry_lesson_notes_${userId || 'guest'}_${lessonId}`;
+    try {
+      localStorage.setItem(localKey, personalNotes);
+    } catch {
+      setNotesSaveError('This browser could not save a local copy. Please check available storage.');
+      return;
+    }
+    const uid = firebaseAuth?.currentUser?.uid || userId;
+    if (uid) {
+      try {
+        await saveLessonNotes(uid, lessonId, personalNotes);
+      } catch (error) {
+        console.warn('Cloud notes sync failed; the local copy is retained:', error);
+        setNotesSaveError('Saved on this device, but cloud sync failed. Check your connection and try saving again.');
+        return;
+      }
+    }
     setNotesSavedNotice(true);
-    setTimeout(() => setNotesSavedNotice(false), 2000);
+    window.setTimeout(() => setNotesSavedNotice(false), 2500);
   };
 
   // Matching pair handler
@@ -245,77 +303,70 @@ export const LessonView: React.FC<LessonViewProps> = ({
       {/* Tab 1: Video Lesson Player */}
       {activeTab === 'video' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-          <div className="relative aspect-video rounded-2xl overflow-hidden bg-slate-900 flex flex-col justify-between p-4 shadow-inner">
-            {/* Overlay Title */}
-            <div className="flex items-center justify-between text-white/90 z-10">
-              <span className="text-xs font-bold bg-black/40 backdrop-blur-md px-3 py-1 rounded-full">
-                {currentLesson?.videoTitle || currentLesson?.title}
-              </span>
-              <span className="text-xs bg-black/40 px-2 py-1 rounded">
-                Speed: {playbackSpeed}x
-              </span>
+          {currentLesson?.videoUrl ? (
+            <div className="space-y-3">
+              {/\.(mp4|webm|ogg)(\?.*)?$/i.test(currentLesson.videoUrl) ? (
+                <video
+                  key={currentLesson.videoUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="w-full aspect-video rounded-2xl bg-slate-950"
+                  title={currentLesson.videoTitle || currentLesson.title}
+                >
+                  <source src={currentLesson.videoUrl} />
+                  Your browser does not support embedded video. <a href={currentLesson.videoUrl} target="_blank" rel="noreferrer">Open video</a>.
+                </video>
+              ) : (
+                <div className="aspect-video rounded-2xl overflow-hidden bg-slate-950">
+                  <iframe
+                    title={currentLesson.videoTitle || currentLesson.title}
+                    src={(() => {
+                      const raw = currentLesson?.videoUrl || '';
+                      try {
+                        const url = new URL(raw);
+                        if (url.hostname.includes('youtu.be')) return `https://www.youtube-nocookie.com/embed/${url.pathname.slice(1).split('/')[0]}`;
+                        if (url.hostname.includes('youtube.com')) {
+                          const id = url.searchParams.get('v') || url.pathname.match(/\/embed\/([^/?]+)/)?.[1] || url.pathname.match(/\/shorts\/([^/?]+)/)?.[1];
+                          if (id) return `https://www.youtube-nocookie.com/embed/${id}`;
+                        }
+                        if (url.hostname.includes('vimeo.com')) {
+                          const id = url.pathname.split('/').filter(Boolean).pop();
+                          if (id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`;
+                        }
+                        return raw;
+                      } catch { return ''; }
+                    })()}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allowFullScreen
+                  />
+                </div>
+              )}
+              <p className="text-xs text-slate-500">Video supplied for this lesson. If the provider blocks embedding, open it directly in a new tab.</p>
+              <a href={currentLesson.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-purple-700 hover:bg-purple-50">
+                Open video in a new tab <ArrowRight size={14} />
+              </a>
             </div>
-
-            {/* Visual Center / Simulated Demonstrator */}
-            <div className="flex flex-col items-center justify-center text-center text-white space-y-3">
-              <button
-                onClick={() => setIsPlaying(!isPlaying)}
-                aria-label={isPlaying ? 'Pause video' : 'Play video'}
-                className="w-16 h-16 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-lg transition-transform active:scale-90"
+          ) : (
+            <div className="aspect-video rounded-2xl bg-slate-950 flex flex-col items-center justify-center text-center text-white p-8 gap-3">
+              <Video size={36} className="text-purple-300" />
+              <h3 className="font-bold text-lg">No video has been linked to this lesson yet</h3>
+              <p className="text-sm text-slate-300 max-w-lg">This lesson does not yet have a verified video attached. You can still study the notes and activities, or search for a lesson video from an external provider.</p>
+              <a
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${course.subject} ${currentLesson?.title || ''} lesson`)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-purple-500"
               >
-                {isPlaying ? <Pause size={28} /> : <Play size={28} className="translate-x-0.5" />}
-              </button>
-              <p className="text-xs text-white/80 max-w-sm">
-                {isPlaying
-                  ? 'Playing instructional demonstration with captions...'
-                  : 'Click play to begin the video lesson demonstration'}
-              </p>
+                Search for a lesson video <ArrowRight size={14} />
+              </a>
             </div>
-
-            {/* Player Controls Bar */}
-            <div className="flex items-center justify-between gap-4 text-white/90 text-xs z-10 bg-black/50 backdrop-blur-md p-2 rounded-xl">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsPlaying(!isPlaying)}
-                  className="p-1 hover:text-purple-300"
-                >
-                  {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                </button>
-                <span>01:14 / 03:00</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {/* Speed Controls */}
-                <button
-                  onClick={() => {
-                    const speeds = [0.75, 1, 1.25, 1.5];
-                    const next = speeds[(speeds.indexOf(playbackSpeed) + 1) % speeds.length];
-                    setPlaybackSpeed(next);
-                  }}
-                  className="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-[11px] font-bold"
-                >
-                  {playbackSpeed}x
-                </button>
-
-                <button
-                  onClick={() => setShowCaptions(!showCaptions)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                    showCaptions ? 'bg-purple-600 text-white' : 'bg-white/20'
-                  }`}
-                >
-                  CC
-                </button>
-              </div>
-            </div>
-          </div>
-
+          )}
           <div className="flex justify-end">
-            <button
-              onClick={() => setActiveTab('notes')}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold shadow hover:bg-purple-700 transition-all"
-            >
-              <span>Next: Read Lesson Notes</span>
-              <ArrowRight size={14} />
+            <button onClick={() => setActiveTab('notes')} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 text-white text-xs font-bold shadow hover:bg-purple-700 transition-all">
+              <span>Next: Read Lesson Notes</span><ArrowRight size={14} />
             </button>
           </div>
         </div>
@@ -375,6 +426,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
               >
                 Save Notes
               </button>
+              {notesSaveError && <span role="status" className="text-xs text-amber-700">{notesSaveError}</span>}
               {notesSavedNotice && (
                 <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
                   <CheckCircle2 size={14} />

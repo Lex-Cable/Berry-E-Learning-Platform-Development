@@ -25,6 +25,8 @@ import {
 } from '../../types';
 import { LessonView } from '../lessons/LessonView';
 import { isLessonUnlocked } from '../../utils/mastery';
+import { loadLastOpenedLesson, saveLastOpenedLesson } from '../../services/learningProgress';
+import { firebaseAuth } from '../../lib/firebase';
 
 interface MyLearningViewProps {
   learner: LearnerProfile;
@@ -63,13 +65,46 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     if (!initialCourseId) return;
     const targetCourse = courses.find((course) => course.id === initialCourseId);
     if (!targetCourse || !learner.enrolledCourseIds.includes(targetCourse.id)) return;
+    let cancelled = false;
     setActiveCourse(targetCourse);
     setActiveLessonId(null);
     setTakingExam(false);
     setExamSubmitted(false);
     setExamAnswers({});
-    onClearInitialCourse?.();
-  }, [initialCourseId, courses, learner.enrolledCourseIds]);
+    const resume = async () => {
+      const localKey = `berry_last_lesson_${learner.id}_${targetCourse.id}`;
+      let savedLessonId: string | null = null;
+      try { savedLessonId = localStorage.getItem(localKey); } catch { /* local resume is optional */ }
+      const uid = firebaseAuth?.currentUser?.uid;
+      if (uid) {
+        try {
+          const cloudLessonId = await loadLastOpenedLesson(uid, targetCourse.id);
+          if (cloudLessonId) savedLessonId = cloudLessonId;
+        } catch (error) {
+          console.warn('Could not load cloud resume state; using the local copy:', error);
+        }
+      }
+      const lessonExists = targetCourse.chapters.some((chapter) =>
+        chapter.lessons.some((lesson) => lesson.id === savedLessonId)
+      );
+      if (!cancelled && lessonExists && savedLessonId) setActiveLessonId(savedLessonId);
+      if (!cancelled) onClearInitialCourse?.();
+    };
+    void resume();
+    return () => { cancelled = true; };
+  }, [initialCourseId, courses, learner.id, learner.enrolledCourseIds]);
+
+  useEffect(() => {
+    if (!activeCourse || !activeLessonId) return;
+    const localKey = `berry_last_lesson_${learner.id}_${activeCourse.id}`;
+    try { localStorage.setItem(localKey, activeLessonId); } catch { /* local resume is optional */ }
+    const uid = firebaseAuth?.currentUser?.uid || learner.id;
+    if (uid) {
+      void saveLastOpenedLesson(uid, activeCourse.id, activeLessonId).catch((error) => {
+        console.warn('Could not sync resume state; the local copy is retained:', error);
+      });
+    }
+  }, [activeCourse, activeLessonId, learner.id]);
 
   // Grade filter (defaults to learner's current grade level, e.g. Grade 1, Grade 7, Grade 10, PP1, Bachelor Year 2)
   const [gradeFilter, setGradeFilter] = useState<string>('all');
@@ -164,6 +199,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           onBackToCourse={() => setActiveLessonId(null)}
           masteryRecord={masteryRecords[activeLessonId]}
           onSaveMastery={onSaveMastery}
+          userId={learner.id}
         />
       </div>
     );
@@ -460,6 +496,16 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                 <div>
                   <h4 className="font-bold text-base text-slate-900">{chapter.title}</h4>
                   <p className="text-xs text-slate-500 mt-0.5">{chapter.description}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
+                      {chapter.lessons.filter((lesson) => masteryRecords[lesson.id]?.isMastered).length}/{chapter.lessons.length} lessons mastered
+                    </span>
+                    {chapter.lessons.length > 0 && chapter.lessons.every((lesson) => masteryRecords[lesson.id]?.isMastered) && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
+                        <Award size={12} /> Chapter badge earned
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -518,7 +564,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                         <div className="flex items-center gap-2">
                           {isMastered ? (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                              Mastered (100%)
+                              Mastered ({mastery?.scorePercent ?? 0}%)
                             </span>
                           ) : isUnlocked ? (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800">
