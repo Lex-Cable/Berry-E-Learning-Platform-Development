@@ -57,6 +57,56 @@ export default function App() {
   const [libraryResources, setLibraryResources] = useState<LibraryResource[]>(LIBRARY_RESOURCES);
   const [transcriptSessions, setTranscriptSessions] = useState<LiveTranscriptSession[]>(TRANSCRIPT_SESSIONS);
   const [certificates, setCertificates] = useState<CertificateRecord[]>(SAMPLE_CERTIFICATES);
+  const [workspaceLoadedFor, setWorkspaceLoadedFor] = useState<string | null>(null);
+
+  // Persist learner activity per profile on this device. This keeps tasks, progress,
+  // notifications, transcripts and certificates after refresh without mixing profiles.
+  useEffect(() => {
+    const storageKey = `berry_workspace_${learner.id}`;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as Record<string, unknown>;
+        if (Array.isArray(saved.tasks)) setTasks(saved.tasks as TaskItem[]);
+        if (Array.isArray(saved.notifications)) setNotifications(saved.notifications as AppNotification[]);
+        if (Array.isArray(saved.libraryResources)) setLibraryResources(saved.libraryResources as LibraryResource[]);
+        if (Array.isArray(saved.transcriptSessions)) setTranscriptSessions(saved.transcriptSessions as LiveTranscriptSession[]);
+        if (Array.isArray(saved.certificates)) setCertificates(saved.certificates as CertificateRecord[]);
+        if (saved.masteryRecords && typeof saved.masteryRecords === 'object' && !Array.isArray(saved.masteryRecords)) {
+          setMasteryRecords(saved.masteryRecords as Record<string, LessonMasteryState>);
+        }
+      }
+    } catch (error) {
+      console.warn('Could not load saved Berry workspace data:', error);
+    }
+    setWorkspaceLoadedFor(learner.id);
+  }, [learner.id]);
+
+  useEffect(() => {
+    if (workspaceLoadedFor !== learner.id) return;
+    const storageKey = `berry_workspace_${learner.id}`;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        tasks,
+        notifications,
+        libraryResources,
+        transcriptSessions,
+        certificates,
+        masteryRecords,
+      }));
+    } catch (error) {
+      console.warn('Could not save Berry workspace data:', error);
+    }
+  }, [
+    learner.id,
+    workspaceLoadedFor,
+    tasks,
+    notifications,
+    libraryResources,
+    transcriptSessions,
+    certificates,
+    masteryRecords,
+  ]);
 
   // Auth / Session State (starts logged out on landing page as requested)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
