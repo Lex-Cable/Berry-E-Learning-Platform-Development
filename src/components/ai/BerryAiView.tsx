@@ -705,6 +705,13 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           <p className="text-[10px] text-center text-slate-400 mt-2">
             Berry AI guides learning through Socratic dialogue. Never replaces classroom teachers or official exams.
           </p>
+          <p className="text-[10px] text-center text-slate-400 mt-1" aria-live="polite">
+            {persistenceMode === 'cloud'
+              ? 'Chat history syncs to your Berry account.'
+              : persistenceMode === 'local'
+                ? 'Chat history is saved only in this browser.'
+                : 'Loading chat history…'}
+          </p>
         </div>
       </div>
     </div>
