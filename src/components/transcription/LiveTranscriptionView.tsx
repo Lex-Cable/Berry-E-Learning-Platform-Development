@@ -32,26 +32,11 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
 }) => {
   const isAllowed = isLiveTranscriptionAllowed(stage);
 
-  // If accessed by junior or senior stages, show strict restriction message
-  if (!isAllowed) {
-    return (
-      <div className="bg-white rounded-3xl p-12 text-center max-w-xl mx-auto border border-slate-200 shadow-sm space-y-4">
-        <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-          <Lock size={32} />
-        </div>
-        <h2 className="text-xl font-bold text-slate-900">
-          Feature Restricted: Higher Education & Workplace Only
-        </h2>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          Live Lecture Speech Transcription is strictly designated for <strong>Berry University</strong> and <strong>Berry Professionals</strong> learners attending academic lectures, research symposiums, and professional seminars. It is not enabled for Berry Junior or Senior School curricula.
-        </p>
-      </div>
-    );
-  }
-
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentText, setCurrentText] = useState('');
+  const [interimText, setInterimText] = useState('');
+  const [recordingError, setRecordingError] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState('University Lecture: Advanced Computational Complexity');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [copiedNotice, setCopiedNotice] = useState(false);
@@ -76,61 +61,98 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
     };
   }, [isRecording, isPaused]);
 
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // Recognition may already have stopped.
+        }
+      }
+    };
+  }, []);
+
+  // Keep hooks above this stage-specific early return to preserve hook order.
+  if (!isAllowed) {
+    return (
+      <div className="bg-white rounded-3xl p-12 text-center max-w-xl mx-auto border border-slate-200 shadow-sm space-y-4">
+        <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+          <Lock size={32} />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">
+          Feature Restricted: Higher Education & Workplace Only
+        </h2>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Live Lecture Speech Transcription is strictly designated for <strong>Berry University</strong> and <strong>Berry Professionals</strong> learners attending academic lectures, research symposiums, and professional seminars. It is not enabled for Berry Junior or Senior School curricula.
+        </p>
+      </div>
+    );
+  }
+
   // Speech recognition initialization with browser Web Speech API
   const startRecording = () => {
-    setIsRecording(true);
-    setIsPaused(false);
-    setAiSummary(null);
-
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    if (SpeechRecognition) {
-      try {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
+    setRecordingError(null);
+    setInterimText('');
+    setAiSummary(null);
 
-        recognition.onresult = (event: any) => {
-          let interimTranscript = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              setCurrentText((prev) => prev + ' ' + event.results[i][0].transcript);
-            } else {
-              interimTranscript += event.results[i][0].transcript;
-            }
+    if (!SpeechRecognition) {
+      setRecordingError(
+        'Live speech recognition is not supported by this browser. Try the latest version of Chrome or Edge, or type/paste your notes into the transcript editor.'
+      );
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: any) => {
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const text = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            setCurrentText((prev) => (prev ? prev + ' ' + text : text));
+          } else {
+            interimTranscript += text;
           }
-        };
-
-        recognition.onerror = (event: any) => {
-          console.warn('Speech recognition status:', event.error);
-        };
-
-        recognition.start();
-        recognitionRef.current = recognition;
-      } catch (e) {
-        console.warn('Speech recognition already initialized or restricted', e);
-      }
-    } else {
-      // Realistic educational transcript streaming simulation when Web Speech API is unavailable in headless container
-      const simulatedPhrases = [
-        "In today's academic lecture, we are evaluating the Master Theorem for divide-and-conquer recurrences.",
-        "Consider an algorithm that divides an input of size n into 'a' subproblems, each of size n/b.",
-        "The critical comparison is between the external recombining work O(n^d) and the tree leaf overhead n^(log_b a).",
-        "When d equals log_b a, the work is strictly balanced at every depth of the recursion tree, yielding Theta(n^d log n).",
-        "Make sure to record this for your upcoming coursework problem set.",
-      ];
-
-      let phraseIdx = 0;
-      const interval = setInterval(() => {
-        if (phraseIdx < simulatedPhrases.length) {
-          setCurrentText((prev) => (prev ? prev + ' ' + simulatedPhrases[phraseIdx] : simulatedPhrases[phraseIdx]));
-          phraseIdx++;
-        } else {
-          clearInterval(interval);
         }
-      }, 3000);
+        setInterimText(interimTranscript.trim());
+      };
+
+      recognition.onerror = (event: any) => {
+        const error = String(event.error || 'unknown');
+        console.warn('Speech recognition status:', error);
+        if (['not-allowed', 'service-not-allowed', 'audio-capture', 'network'].includes(error)) {
+          setRecordingError(
+            error === 'not-allowed' || error === 'service-not-allowed'
+              ? 'Microphone access was denied. Allow microphone access in your browser settings and try again.'
+              : error === 'audio-capture'
+                ? 'No microphone was detected. Connect a microphone and try again.'
+                : 'The speech recognition service is unavailable. Check your connection and try again.'
+          );
+          setIsRecording(false);
+          setIsPaused(false);
+        }
+      };
+
+      recognition.onend = () => {
+        setInterimText('');
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+      setIsRecording(true);
+      setIsPaused(false);
+    } catch (error) {
+      console.warn('Could not start speech recognition', error);
+      setRecordingError('Could not start speech recognition. Check microphone permissions and try again.');
+      setIsRecording(false);
     }
   };
 
@@ -147,6 +169,7 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   const stopRecording = () => {
     setIsRecording(false);
     setIsPaused(false);
+    setInterimText('');
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -336,9 +359,17 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
             <span>{currentText ? currentText.trim().split(/\s+/).length : 0} words</span>
           </div>
 
+          {recordingError && (
+            <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              {recordingError}
+            </div>
+          )}
           <textarea
-            value={currentText}
-            onChange={(e) => setCurrentText(e.target.value)}
+            value={interimText ? `${currentText}${currentText ? ' ' : ''}${interimText}` : currentText}
+            onChange={(e) => {
+              setCurrentText(e.target.value);
+              setInterimText('');
+            }}
             placeholder="Live spoken lecture audio will transcribe here in real-time. You can edit, format, or annotate during or after the session..."
             rows={10}
             className="w-full text-xs md:text-sm leading-relaxed p-4 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-200 font-mono text-slate-800"
