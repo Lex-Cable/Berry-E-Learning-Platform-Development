@@ -160,6 +160,12 @@ app.post('/api/ai/chat', async (req, res) => {
           }))
       : [];
 
+    // Gemini conversation contents should begin with a user turn; a new Berry chat
+    // starts with a local welcome message, so discard any leading assistant-only turns.
+    while (safeHistory[0]?.role === 'model') {
+      safeHistory.shift();
+    }
+
     const stageGuidelines: Record<string, string> = {
       early: 'The learner is in PP1 or PP2. Use very simple, playful, child-friendly language, short sentences, concrete examples, and gentle encouragement. Keep content age-appropriate and safe.',
       junior: 'The learner is a child or early adolescent (PP1-Grade 9 CBC). Use simple, encouraging, warm, concrete language with analogies and examples. Do not give direct solutions to homework; guide them step-by-step.',
