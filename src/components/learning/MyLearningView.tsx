@@ -72,7 +72,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   }, [initialCourseId, courses, learner.enrolledCourseIds]);
 
   // Grade filter (defaults to learner's current grade level, e.g. Grade 1, Grade 7, Grade 10, PP1, Bachelor Year 2)
-  const [gradeFilter, setGradeFilter] = useState<string>(learner.gradeLevel);
+  const [gradeFilter, setGradeFilter] = useState<string>('all');
 
   // Exam state
   const [examAnswers, setExamAnswers] = useState<Record<string, number>>({});
