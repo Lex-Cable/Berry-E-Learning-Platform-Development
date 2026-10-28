@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Bookmark,
   Sparkles,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { TaskItem, LearnerProfile } from '../../types';
 
@@ -15,6 +17,8 @@ interface CalendarViewProps {
   tasks: TaskItem[];
   learner: LearnerProfile;
   onAddTask: (task: Omit<TaskItem, 'id'>) => void;
+  onUpdateTask: (task: TaskItem) => void;
+  onDeleteTask: (taskId: string) => void;
   onToggleTaskComplete: (taskId: string) => void;
 }
 
@@ -22,31 +26,82 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   tasks,
   learner,
   onAddTask,
+  onUpdateTask,
+  onDeleteTask,
   onToggleTaskComplete,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const [newTitle, setNewTitle] = useState('');
-  const [newSubject, setNewSubject] = useState('Grade 1 Mathematics');
-  const [newDueDate, setNewDueDate] = useState('2026-10-28T18:00');
+  const [newSubject, setNewSubject] = useState(`${learner.gradeLevel} Study Session`);
+  const [newDueDate, setNewDueDate] = useState(() => {
+    const date = new Date();
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    date.setHours(18, 0, 0, 0);
+    return date.toISOString().slice(0, 16);
+  });
   const [newUrgency, setNewUrgency] = useState<'urgent' | 'medium' | 'normal'>('medium');
   const [newType, setNewType] = useState<'quiz' | 'assignment' | 'reading' | 'revision'>('revision');
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('en-CA'));
+
+  const localDateKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const monthLabel = visibleMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - ((monthStart.getDay() + 6) % 7));
+  const calendarDays = Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    return day;
+  });
+  const selectedDayTasks = tasks.filter((task) => localDateKey(new Date(task.dueDate)) === selectedDate);
+
+  const resetTaskForm = () => {
+    setEditingTask(null);
+    setNewTitle('');
+    setNewSubject(`${learner.gradeLevel} Study Session`);
+    const date = new Date();
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    date.setHours(18, 0, 0, 0);
+    setNewDueDate(date.toISOString().slice(0, 16));
+    setNewUrgency('medium');
+    setNewType('revision');
+  };
+
+  const openEditTask = (task: TaskItem) => {
+    setEditingTask(task);
+    setNewTitle(task.title);
+    setNewSubject(task.subject);
+    const date = new Date(task.dueDate);
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    setNewDueDate(date.toISOString().slice(0, 16));
+    setNewUrgency(task.urgency);
+    setNewType(task.type === 'exam' ? 'revision' : task.type);
+    setShowAddModal(true);
+  };
 
   const handleCreateSession = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
-
-    onAddTask({
-      title: newTitle,
-      subject: newSubject,
-      courseId: 'cbc-g1-math',
-      stage: learner.stage,
+    if (!newTitle.trim() || !newDueDate) return;
+    const taskFields = {
+      title: newTitle.trim(),
+      subject: newSubject.trim() || `${learner.gradeLevel} Study Session`,
+      courseId: editingTask?.courseId || '',
+      stage: editingTask?.stage || learner.stage,
       dueDate: new Date(newDueDate).toISOString(),
       urgency: newUrgency,
-      status: 'pending',
+      status: editingTask?.status || 'pending' as const,
       type: newType,
-    });
-
-    setNewTitle('');
+    };
+    if (editingTask) onUpdateTask({ ...editingTask, ...taskFields });
+    else onAddTask(taskFields);
+    resetTaskForm();
     setShowAddModal(false);
   };
 
@@ -80,65 +135,46 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </button>
       </div>
 
-      {/* Monthly Interactive Calendar Preview */}
+      {/* Calendar is derived from real saved task dates, not sample events. */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <h3 className="font-bold text-slate-900 text-base">October 2026</h3>
+          <div>
+            <h3 className="font-bold text-slate-900 text-base">{monthLabel}</h3>
+            <p className="text-xs text-slate-500 mt-1">Select a date to see your scheduled learning tasks.</p>
+          </div>
           <div className="flex items-center gap-1">
-            <button className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600">
+            <button type="button" aria-label="Previous month" onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))} className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600">
               <ChevronLeft size={16} />
             </button>
-            <button className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600">
+            <button type="button" onClick={() => { const today = new Date(); setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDate(localDateKey(today)); }} className="px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-semibold">Today</button>
+            <button type="button" aria-label="Next month" onClick={() => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))} className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600">
               <ChevronRight size={16} />
             </button>
           </div>
         </div>
-
-        {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-2 text-center text-xs">
+        <div className="grid grid-cols-7 gap-1.5 text-center text-xs">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-            <div key={day} className="font-bold text-slate-400 py-1">
-              {day}
-            </div>
+            <div key={day} className="font-bold text-slate-400 py-1">{day}</div>
           ))}
-
-          {/* Days 19-31 representation */}
-          {[19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31].map((dateNum) => {
-            const isToday = dateNum === 24;
-            const hasDeadline = dateNum === 26 || dateNum === 28 || dateNum === 29;
-
+          {calendarDays.map((day) => {
+            const key = localDateKey(day);
+            const dayTasks = tasks.filter((task) => localDateKey(new Date(task.dueDate)) === key);
+            const isCurrentMonth = day.getMonth() === visibleMonth.getMonth();
+            const isToday = key === localDateKey(new Date());
+            const isSelected = key === selectedDate;
             return (
-              <div
-                key={dateNum}
-                className={`p-3 rounded-2xl border text-left min-h-[70px] flex flex-col justify-between transition-all ${
-                  isToday
-                    ? 'border-purple-500 bg-purple-50/60 ring-2 ring-purple-200'
-                    : 'border-slate-100 bg-slate-50/50 hover:bg-white'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span
-                    className={`font-bold text-xs ${
-                      isToday ? 'text-purple-700' : 'text-slate-700'
-                    }`}
-                  >
-                    {dateNum}
-                  </span>
-                  {isToday && (
-                    <span className="text-[9px] font-bold bg-purple-600 text-white px-1.5 py-0.2 rounded-full">
-                      Today
-                    </span>
-                  )}
-                </div>
-
-                {hasDeadline && (
-                  <div className="w-full text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 truncate">
-                    • Assessment Due
-                  </div>
-                )}
-              </div>
+              <button key={key} type="button" onClick={() => setSelectedDate(key)} aria-pressed={isSelected} className={`p-2 rounded-xl border min-h-[58px] flex flex-col items-center justify-center gap-1 transition-all ${isSelected ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-100' : isToday ? 'border-purple-300 bg-white' : 'border-slate-100'} ${isCurrentMonth ? 'text-slate-800' : 'text-slate-300'}`}>
+                <span className={`font-bold ${isToday ? 'text-purple-700' : ''}`}>{day.getDate()}</span>
+                {dayTasks.length > 0 && <span className="text-[9px] font-bold rounded-full bg-amber-100 text-amber-800 px-1.5">{dayTasks.length} task{dayTasks.length === 1 ? '' : 's'}</span>}
+              </button>
             );
           })}
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
+          <h4 className="text-xs font-bold text-slate-700">{new Date(`${selectedDate}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</h4>
+          {selectedDayTasks.length === 0 ? <p className="text-xs text-slate-500 mt-1">No tasks scheduled for this date.</p> : (
+            <ul className="mt-2 space-y-1">{selectedDayTasks.map((task) => <li key={task.id} className="text-xs text-slate-600">{task.title} · {task.status.replace('_', ' ')}</li>)}</ul>
+          )}
         </div>
       </div>
 
@@ -185,6 +221,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <Clock size={13} />
                   <span>Due {new Date(task.dueDate).toLocaleDateString()}</span>
                 </span>
+                <button type="button" onClick={() => openEditTask(task)} aria-label={`Edit ${task.title}`} className="p-2 rounded-lg bg-slate-100 hover:bg-purple-50 hover:text-purple-700 text-slate-700" title="Edit task">
+                  <Pencil size={14} />
+                </button>
+                <button type="button" onClick={() => onDeleteTask(task.id)} aria-label={`Delete ${task.title}`} className="p-2 rounded-lg bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700" title="Delete task">
+                  <Trash2 size={14} />
+                </button>
                 <button
                   onClick={() => onToggleTaskComplete(task.id)}
                   className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 font-semibold text-xs transition-colors"
@@ -218,7 +260,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
-            <h3 className="font-bold text-slate-900 text-base">Schedule Study Session</h3>
+            <h3 className="font-bold text-slate-900 text-base">{editingTask ? 'Edit Study Task' : 'Schedule Study Session'}</h3>
             <form onSubmit={handleCreateSession} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -283,7 +325,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); resetTaskForm(); }}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
                 >
                   Cancel
@@ -292,7 +334,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   type="submit"
                   className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow"
                 >
-                  Save Task
+                  {editingTask ? 'Save Changes' : 'Save Task'}
                 </button>
               </div>
             </form>
