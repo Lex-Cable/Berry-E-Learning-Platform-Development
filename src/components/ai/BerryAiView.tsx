@@ -294,6 +294,13 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
     setInput('');
     setLoading(true);
 
+    const contextMessages =
+      retryExisting &&
+      activeConversation.messages[activeConversation.messages.length - 1]?.sender === 'user' &&
+      activeConversation.messages[activeConversation.messages.length - 1]?.text === textToSend.trim()
+        ? activeConversation.messages.slice(0, -1)
+        : activeConversation.messages;
+
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -303,7 +310,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           stage: learner.stage,
           courseTitle: activeCourse?.title,
           currentTopic: activeCourse?.chapters[0]?.title,
-          history: activeConversation.messages
+          history: contextMessages
             .slice(-12)
             .map((message) => ({
               role: message.sender === 'assistant' ? 'model' : 'user',
@@ -312,8 +319,15 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
         }),
       });
 
-      if (!res.ok) throw new Error('API request failed');
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Berry AI request failed. Please retry.'
+        );
+      }
+      if (typeof data.reply !== 'string' || !data.reply.trim()) {
+        throw new Error('Berry AI returned an invalid response. Please retry.');
+      }
 
       const assistantMessage: AiChatMessage = {
         id: `asst-${Date.now()}`,
@@ -335,9 +349,11 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
       // Preserve the submitted message and restore the composer so the learner can retry.
       setInput(textToSend);
       setRequestError(
-        err instanceof Error && err.message === 'API request failed'
-          ? 'Berry AI could not reach its response service. Your message is saved in this chat; please retry.'
-          : 'Berry AI could not connect. Check your connection and retry your message.'
+        err instanceof TypeError
+          ? 'Berry AI could not connect. Check your internet connection and retry your message.'
+          : err instanceof Error
+            ? err.message
+            : 'Berry AI could not respond. Your message is saved in this chat; please retry.'
       );
     } finally {
       setLoading(false);
