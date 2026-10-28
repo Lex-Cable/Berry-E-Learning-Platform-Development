@@ -326,10 +326,10 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split('\\n\\n');
+        const events = buffer.split('\n\n');
         buffer = events.pop() || '';
         for (const event of events) {
-          const line = event.split('\\n').find((entry) => entry.startsWith('data: '));
+          const line = event.split('\n').find((entry) => entry.startsWith('data: '));
           if (!line) continue;
           const payload = line.slice(6);
           if (payload === '[DONE]') { ended = true; break; }
