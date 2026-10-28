@@ -41,7 +41,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return date.toISOString().slice(0, 16);
   });
   const [newUrgency, setNewUrgency] = useState<'urgent' | 'medium' | 'normal'>('medium');
-  const [newType, setNewType] = useState<'quiz' | 'assignment' | 'reading' | 'revision'>('revision');
+  const [newType, setNewType] = useState<TaskItem['type']>('revision');
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString('en-CA'));
 
@@ -82,7 +82,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
     setNewDueDate(date.toISOString().slice(0, 16));
     setNewUrgency(task.urgency);
-    setNewType(task.type === 'exam' ? 'revision' : task.type);
+    setNewType(task.type);
     setShowAddModal(true);
   };
 
@@ -224,7 +224,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 <button type="button" onClick={() => openEditTask(task)} aria-label={`Edit ${task.title}`} className="p-2 rounded-lg bg-slate-100 hover:bg-purple-50 hover:text-purple-700 text-slate-700" title="Edit task">
                   <Pencil size={14} />
                 </button>
-                <button type="button" onClick={() => onDeleteTask(task.id)} aria-label={`Delete ${task.title}`} className="p-2 rounded-lg bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700" title="Delete task">
+                <button type="button" onClick={() => { if (window.confirm(`Delete “${task.title}” from your planner?`)) onDeleteTask(task.id); }} aria-label={`Delete ${task.title}`} className="p-2 rounded-lg bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700" title="Delete task">
                   <Trash2 size={14} />
                 </button>
                 <button
@@ -318,6 +318,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     <option value="quiz">Quiz Prep</option>
                     <option value="assignment">Assignment</option>
                     <option value="reading">Library Reading</option>
+                    <option value="exam">Examination</option>
                   </select>
                 </div>
               </div>
