@@ -101,6 +101,35 @@ service cloud.firestore {
         allow delete: if isOwner(userId);
       }
 
+      match /learningCertificates/{certificateId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.keys().hasOnly([
+            'id', 'credentialId', 'courseId', 'courseTitle', 'recipientName', 'stage',
+            'gradeLevel', 'curriculum', 'issuedDate', 'scorePercent', 'authority',
+            'verified', 'seniorPathway', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'id', 'credentialId', 'courseId', 'courseTitle', 'recipientName', 'stage',
+            'gradeLevel', 'curriculum', 'issuedDate', 'scorePercent', 'authority',
+            'verified', 'updatedAt'
+          ])
+          && request.resource.data.id == certificateId
+          && request.resource.data.credentialId is string
+          && request.resource.data.courseId is string
+          && request.resource.data.courseTitle is string
+          && request.resource.data.recipientName is string
+          && request.resource.data.stage in ['early', 'junior', 'senior', 'advance', 'university', 'professionals']
+          && request.resource.data.gradeLevel is string
+          && request.resource.data.curriculum in ['kenya_cbc', 'cambridge', 'uk_national', 'us_common_core', 'ib']
+          && request.resource.data.issuedDate is string
+          && request.resource.data.scorePercent is number
+          && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100
+          && request.resource.data.authority == 'Berry Learning Platform'
+          && request.resource.data.verified == false;
+        allow update, delete: if false;
+      }
+
       match /learningState/{courseId} {
         allow get, list: if isOwner(userId);
         allow create, update: if isOwner(userId)
