@@ -108,6 +108,18 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [submittedQuiz, setSubmittedQuiz] = useState(false);
   const [quizScore, setQuizScore] = useState<number>(masteryRecord?.scorePercent || 0);
 
+  // Reset lesson-specific interactions when moving between lessons so answers never leak.
+  useEffect(() => {
+    setActiveTab('video');
+    setIsPlaying(false);
+    setSelectedLeft(null);
+    setMatchedPairs({});
+    setMatchingFeedback(null);
+    setSelectedAnswers({});
+    setSubmittedQuiz(false);
+    setQuizScore(masteryRecord?.scorePercent || 0);
+  }, [lessonId]);
+
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
   const currentOverallIndex = allLessons.findIndex((l) => l.id === lessonId);
