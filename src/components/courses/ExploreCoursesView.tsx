@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search,
   Filter,
@@ -32,7 +32,35 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
 }) => {
   const [selectedStage, setSelectedStage] = useState<LearnerStage | 'all'>(learner.stage);
   const [selectedCurriculum, setSelectedCurriculum] = useState<Curriculum | 'all'>(learner.curriculum);
-  const [selectedGrade, setSelectedGrade] = useState<string>('all');
+  const [selectedGrade, setSelectedGrade] = useState<string>(learner.gradeLevel);
+
+  const stageGrades = useMemo(() => {
+    const stageCourses = courses.filter((course) => {
+      if (selectedStage === 'all') return true;
+      if (selectedStage === 'advance') {
+        return course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals';
+      }
+      return course.stage === selectedStage;
+    });
+    return Array.from(new Set(stageCourses.map((course) => course.gradeLevel))).sort((a, b) => {
+      const rank = (value: string) => {
+        if (value === 'PP1') return 1;
+        if (value === 'PP2') return 2;
+        const match = value.match(/Grade (\\d+)/);
+        if (match) return 10 + Number(match[1]);
+        if (/Bachelor/i.test(value)) return 30;
+        if (/Master|Postgraduate/i.test(value)) return 40;
+        return 50;
+      };
+      return rank(a) - rank(b) || a.localeCompare(b);
+    });
+  }, [courses, selectedStage]);
+
+  useEffect(() => {
+    if (selectedGrade !== 'all' && !stageGrades.includes(selectedGrade)) {
+      setSelectedGrade(stageGrades.includes(learner.gradeLevel) ? learner.gradeLevel : stageGrades[0] || 'all');
+    }
+  }, [learner.gradeLevel, selectedGrade, stageGrades]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCurriculumComparison, setShowCurriculumComparison] = useState(false);
 
@@ -169,7 +197,6 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
             Stage:
           </span>
           {[
-            { id: 'all', label: 'All Stages' },
             { id: 'early', label: 'Berry Early (PP1-PP2)' },
             { id: 'junior', label: 'Berry Junior (G1-G9)' },
             { id: 'senior', label: 'Berry Senior (G10-G12)' },
@@ -177,7 +204,16 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
           ].map((st) => (
             <button
               key={st.id}
-              onClick={() => setSelectedStage(st.id as LearnerStage | 'all')}
+              onClick={() => {
+                const nextStage = st.id as LearnerStage;
+                setSelectedStage(nextStage);
+                const nextGrades = courses.filter((course) =>
+                  nextStage === 'advance'
+                    ? course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals'
+                    : course.stage === nextStage
+                ).map((course) => course.gradeLevel);
+                setSelectedGrade(nextGrades.includes(learner.gradeLevel) ? learner.gradeLevel : nextGrades[0] || 'all');
+              }}
               className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
                 selectedStage === st.id
                   ? 'bg-purple-600 text-white shadow-sm'
@@ -219,42 +255,9 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
               onChange={(e) => setSelectedGrade(e.target.value)}
               className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
             >
-              <option value="all">All Grades / Levels</option>
-              {selectedStage === 'junior' && (
-                <>
-                  <option value="PP1">PP1 (Pre-Primary 1)</option>
-                  <option value="PP2">PP2 (Pre-Primary 2)</option>
-                  <option value="Grade 1">Grade 1 (Lower Primary)</option>
-                  <option value="Grade 2">Grade 2 (Lower Primary)</option>
-                  <option value="Grade 3">Grade 3 (Lower Primary)</option>
-                  <option value="Grade 4">Grade 4 (Upper Primary)</option>
-                  <option value="Grade 5">Grade 5 (Upper Primary)</option>
-                  <option value="Grade 6">Grade 6 (Upper Primary)</option>
-                  <option value="Grade 7">Grade 7 (Junior School)</option>
-                  <option value="Grade 8">Grade 8 (Junior School)</option>
-                  <option value="Grade 9">Grade 9 (Junior School)</option>
-                </>
-              )}
-              {selectedStage === 'senior' && (
-                <>
-                  <option value="Grade 10">Grade 10 (Senior School)</option>
-                  <option value="Grade 11">Grade 11 (Senior School)</option>
-                  <option value="Grade 12">Grade 12 (Senior School)</option>
-                </>
-              )}
-              {selectedStage === 'university' && (
-                <>
-                  <option value="Bachelor Year 1">Bachelor Year 1</option>
-                  <option value="Bachelor Year 2">Bachelor Year 2</option>
-                  <option value="Bachelor Year 3">Bachelor Year 3</option>
-                  <option value="Master's / Postgraduate">Master's / Postgraduate</option>
-                </>
-              )}
-              {selectedStage === 'professionals' && (
-                <>
-                  <option value="Professional">Professional Practitioner</option>
-                </>
-              )}
+              {stageGrades.map((grade) => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
             </select>
           </div>
 
