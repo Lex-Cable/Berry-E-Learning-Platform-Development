@@ -5,7 +5,7 @@ import {
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
-import type { LessonMasteryState } from '../types';
+import type { CertificateRecord, LessonMasteryState } from '../types';
 import { firestoreDb } from '../lib/firebase';
 
 function requireDatabase() {
@@ -71,6 +71,18 @@ export async function saveLastOpenedLesson(uid: string, courseId: string, lesson
     courseId,
     lastLessonId: lessonId,
     lastOpenedAt: new Date().toISOString(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function loadLearningCertificates(uid: string): Promise<CertificateRecord[]> {
+  const snapshot = await getDocs(collection(requireDatabase(), 'users', uid, 'learningCertificates'));
+  return snapshot.docs.map((item) => item.data() as CertificateRecord);
+}
+
+export async function saveLearningCertificate(uid: string, certificate: CertificateRecord): Promise<void> {
+  await setDoc(doc(requireDatabase(), 'users', uid, 'learningCertificates', certificate.id), {
+    ...certificate,
     updatedAt: serverTimestamp(),
   });
 }
