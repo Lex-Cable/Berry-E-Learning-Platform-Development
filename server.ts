@@ -145,15 +145,19 @@ app.post('/api/ai/chat', async (req, res) => {
     // Accept only a short, well-formed conversation history from the client.
     // Bound message sizes so a stale or malformed client cannot send huge prompts.
     const safeHistory = Array.isArray(history)
-      ? history.slice(-12).filter((item: unknown) =>
-          Boolean(item) &&
-          typeof item === 'object' &&
-          ['user', 'model'].includes((item as { role?: unknown }).role as string) &&
-          typeof (item as { text?: unknown }).text === 'string'
-        ).map((item: { role: 'user' | 'model'; text: string }) => ({
-          role: item.role,
-          parts: [{ text: item.text.slice(0, 8000) }],
-        }))
+      ? history.slice(-12)
+          .filter((item: unknown): item is { role: 'user' | 'model'; text: string } => {
+            if (!item || typeof item !== 'object') return false;
+            const candidate = item as { role?: unknown; text?: unknown };
+            return (
+              (candidate.role === 'user' || candidate.role === 'model') &&
+              typeof candidate.text === 'string'
+            );
+          })
+          .map((item) => ({
+            role: item.role,
+            parts: [{ text: item.text.slice(0, 8000) }],
+          }))
       : [];
 
     const stageGuidelines: Record<string, string> = {
