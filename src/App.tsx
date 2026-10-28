@@ -69,6 +69,7 @@ export default function App() {
   // Active course and lesson state
   const [activeCourse, setActiveCourse] = useState<Course>(COURSES[0]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [learningTargetCourseId, setLearningTargetCourseId] = useState<string | null>(null);
 
   // Start with no claimed learning evidence; progress is added by completed learner activities.
   const [masteryRecords, setMasteryRecords] = useState<Record<string, LessonMasteryState>>({});
@@ -296,10 +297,19 @@ export default function App() {
     }
   };
 
+  // Open a specific course from Explore Courses in the learner's own learning workspace.
+  const handleOpenCourse = (course: Course) => {
+    setActiveCourse(course);
+    setActiveLessonId(null);
+    setLearningTargetCourseId(course.id);
+    handleNavigate('my-learning');
+  };
+
   // Open a specific lesson
   const handleOpenLesson = (course: Course, lessonId: string) => {
     setActiveCourse(course);
     setActiveLessonId(lessonId);
+    setLearningTargetCourseId(course.id);
     handleNavigate('my-learning');
   };
 
@@ -657,6 +667,8 @@ export default function App() {
               learner={learner}
               courses={courses}
               masteryRecords={masteryRecords}
+              initialCourseId={learningTargetCourseId}
+              onClearInitialCourse={() => setLearningTargetCourseId(null)}
               onSaveMastery={handleSaveMastery}
               onNavigateToCertificates={() => handleNavigate('certifications')}
               onClaimCertificate={handleClaimCertificate}
@@ -669,6 +681,7 @@ export default function App() {
               learner={learner}
               onSelectCourse={setActiveCourse}
               onOpenLesson={handleOpenLesson}
+              onOpenCourse={handleOpenCourse}
               onEnrollCourse={handleEnrollCourse}
             />
           )}
