@@ -176,6 +176,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     setApiPage(1);
   }, [searchQuery]);
 
+  const apiAutoLoadQuery = useRef<string | null>(null);
+
   const loadAllOpenTextbooks = async () => {
     if (apiLoadingAll || !apiHasMore) return;
     const query = searchQuery.trim();
@@ -211,6 +213,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       setApiLoadingAll(false);
     }
   };
+
+  // Automatically load every page for the current search so the library shows the
+  // provider's full available catalogue, not just its first page. Manual retry remains
+  // available if the upstream API temporarily fails.
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (apiLoading || apiLoadingAll || !apiHasMore || apiPage !== 1 || apiAutoLoadQuery.current === query) return;
+    apiAutoLoadQuery.current = query;
+    void loadAllOpenTextbooks();
+  }, [apiLoading, apiLoadingAll, apiHasMore, apiPage, searchQuery]);
 
   const availableResources = useMemo(() => {
     const seen = new Set<string>();
