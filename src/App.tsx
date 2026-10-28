@@ -408,6 +408,16 @@ export default function App() {
       id: `task-${Date.now()}`,
     };
     setTasks((prev) => [item, ...prev]);
+    setNotifications((prev) => [{
+      id: `notif-task-${item.id}`,
+      title: 'Study task scheduled',
+      message: `“${item.title}” is on your planner for ${new Date(item.dueDate).toLocaleString()}.`,
+      stage: item.stage,
+      type: 'system',
+      date: 'Just now',
+      unread: true,
+      actionUrl: 'calendar',
+    }, ...prev]);
   };
 
   const handleUpdateTask = (updatedTask: TaskItem) => {
