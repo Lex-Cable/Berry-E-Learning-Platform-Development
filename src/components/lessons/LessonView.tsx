@@ -341,7 +341,15 @@ export const LessonView: React.FC<LessonViewProps> = ({
             <div className="aspect-video rounded-2xl bg-slate-950 flex flex-col items-center justify-center text-center text-white p-8 gap-3">
               <Video size={36} className="text-purple-300" />
               <h3 className="font-bold text-lg">No video has been linked to this lesson yet</h3>
-              <p className="text-sm text-slate-300 max-w-lg">Use the lesson notes, interactive activities and mastery assessment below. A real video will appear here when a verified video URL is added to this lesson.</p>
+              <p className="text-sm text-slate-300 max-w-lg">This lesson does not yet have a verified video attached. You can still study the notes and activities, or search for a lesson video from an external provider.</p>
+              <a
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(`${course.subject} ${currentLesson?.title || ''} lesson`)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-purple-500"
+              >
+                Search for a lesson video <ArrowRight size={14} />
+              </a>
             </div>
           )}
           <div className="flex justify-end">
