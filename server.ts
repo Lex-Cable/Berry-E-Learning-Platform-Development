@@ -216,16 +216,16 @@ Core Principles:
           for await (const chunk of stream) {
             if (res.destroyed) return;
             const text = typeof chunk.text === 'string' ? chunk.text : '';
-            if (text) res.write(`data: ${JSON.stringify({ text })}\\n\\n`);
+            if (text) res.write(`data: ${JSON.stringify({ text })}\n\n`);
           }
           if (!res.destroyed) {
-            res.write('data: [DONE]\\n\\n');
+            res.write('data: [DONE]\n\n');
             res.end();
           }
         } catch (streamError) {
           console.error('Berry AI stream error:', streamError);
           if (!res.destroyed) {
-            res.write(`data: ${JSON.stringify({ error: 'Berry AI generation was interrupted. Please retry.' })}\\n\\n`);
+            res.write(`data: ${JSON.stringify({ error: 'Berry AI generation was interrupted. Please retry.' })}\n\n`);
             res.end();
           }
         }
