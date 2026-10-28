@@ -35,25 +35,12 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   const [selectedGrade, setSelectedGrade] = useState<string>(learner.gradeLevel);
 
   const stageGrades = useMemo(() => {
-    const stageCourses = courses.filter((course) => {
-      if (selectedStage === 'all') return true;
-      if (selectedStage === 'advance') {
-        return course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals';
-      }
-      return course.stage === selectedStage;
-    });
-    return Array.from(new Set(stageCourses.map((course) => course.gradeLevel))).sort((a, b) => {
-      const rank = (value: string) => {
-        if (value === 'PP1') return 1;
-        if (value === 'PP2') return 2;
-        const match = value.match(/Grade (\\d+)/);
-        if (match) return 10 + Number(match[1]);
-        if (/Bachelor/i.test(value)) return 30;
-        if (/Master|Postgraduate/i.test(value)) return 40;
-        return 50;
-      };
-      return rank(a) - rank(b) || a.localeCompare(b);
-    });
+    if (selectedStage === 'early') return ['PP1', 'PP2'];
+    if (selectedStage === 'junior') return Array.from({ length: 9 }, (_, index) => `Grade ${index + 1}`);
+    if (selectedStage === 'senior') return ['Grade 10', 'Grade 11', 'Grade 12'];
+    return Array.from(new Set(courses
+      .filter((course) => course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals')
+      .map((course) => course.gradeLevel))).sort((a, b) => a.localeCompare(b));
   }, [courses, selectedStage]);
 
   useEffect(() => {
