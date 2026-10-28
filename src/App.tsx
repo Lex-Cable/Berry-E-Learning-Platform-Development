@@ -417,6 +417,14 @@ export default function App() {
     setTasks((prev) => [item, ...prev]);
   };
 
+  const handleUpdateTask = (updatedTask: TaskItem) => {
+    setTasks((prev) => prev.map((task) => task.id === updatedTask.id ? updatedTask : task));
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+  };
+
   // Library bookmark handler
   const handleToggleBookmark = (resourceId: string, resource?: LibraryResource) => {
     setLibraryResources((prev) => {
@@ -704,6 +712,8 @@ export default function App() {
               tasks={tasks}
               learner={learner}
               onAddTask={handleAddTask}
+              onUpdateTask={handleUpdateTask}
+              onDeleteTask={handleDeleteTask}
               onToggleTaskComplete={handleToggleTaskComplete}
             />
           )}
