@@ -21,11 +21,8 @@ import { ProfileView } from './components/profile/ProfileView';
 import {
   COURSES,
   INITIAL_LEARNER,
-  TASKS,
-  NOTIFICATIONS,
   LIBRARY_RESOURCES,
   TRANSCRIPT_SESSIONS,
-  SAMPLE_CERTIFICATES,
 } from './data/curriculumData';
 
 import {
@@ -52,8 +49,8 @@ import {
 export default function App() {
   const [learner, setLearner] = useState<LearnerProfile>(INITIAL_LEARNER);
   const [courses, setCourses] = useState<Course[]>(COURSES);
-  const [tasks, setTasks] = useState<TaskItem[]>(TASKS);
-  const [notifications, setNotifications] = useState<AppNotification[]>(NOTIFICATIONS);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [libraryResources, setLibraryResources] = useState<LibraryResource[]>(LIBRARY_RESOURCES);
   const [transcriptSessions, setTranscriptSessions] = useState<LiveTranscriptSession[]>(TRANSCRIPT_SESSIONS);
   // Only display certificates earned by this learner; seeded sample credentials must not appear as real awards.
@@ -73,19 +70,8 @@ export default function App() {
   const [activeCourse, setActiveCourse] = useState<Course>(COURSES[0]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
 
-  // Lesson Mastery Records
-  const [masteryRecords, setMasteryRecords] = useState<Record<string, LessonMasteryState>>({
-    'cbc-g1-math-l1': {
-      lessonId: 'cbc-g1-math-l1',
-      isCompleted: true,
-      isMastered: true,
-      scorePercent: 100,
-      attemptsCount: 1,
-      lastAttemptDate: '2026-10-24T08:00:00Z',
-      identifiedMisconceptions: [],
-      remedialActivitiesCompleted: false,
-    },
-  });
+  // Start with no claimed learning evidence; progress is added by completed learner activities.
+  const [masteryRecords, setMasteryRecords] = useState<Record<string, LessonMasteryState>>({});
 
   // Persist learner activity per profile on this device. This keeps tasks, progress,
   // notifications, transcripts and certificates after refresh without mixing profiles.
@@ -340,6 +326,12 @@ export default function App() {
 
   // Issue a Berry learning record when the exam is passed; this is not a government-issued credential.
   const handleClaimCertificate = (course: Course, scorePercent: number) => {
+    const requiredScore = course.exam?.passingScorePercent ?? 75;
+    const alreadyAwarded = certificates.some(
+      (certificate) => certificate.courseId === course.id && certificate.recipientName === learner.name
+    );
+    if (scorePercent < requiredScore || alreadyAwarded) return;
+
     const newCert: CertificateRecord = {
       id: `cert-${Date.now()}`,
       credentialId: `BERRY-CBC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
