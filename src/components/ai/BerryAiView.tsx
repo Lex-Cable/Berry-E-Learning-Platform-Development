@@ -212,6 +212,12 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           stage: learner.stage,
           courseTitle: activeCourse?.title,
           currentTopic: activeCourse?.chapters[0]?.title,
+          history: activeConversation.messages
+            .slice(-12)
+            .map((message) => ({
+              role: message.sender === 'assistant' ? 'model' : 'user',
+              text: message.text,
+            })),
         }),
       });
 
