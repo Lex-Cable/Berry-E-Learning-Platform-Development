@@ -84,7 +84,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
             <Award size={40} className="mx-auto text-slate-300" />
             <h4 className="font-bold text-slate-700">No certificates unlocked yet</h4>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Complete your course chapters and pass the Grade Final Exam with 75% or higher to earn an official credential!
+              Complete the configured course requirements and pass the final assessment to earn a Berry learning record. It is not an external qualification.
             </p>
             <button
               onClick={onNavigateToCourses}
