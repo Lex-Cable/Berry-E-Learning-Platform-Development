@@ -127,6 +127,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [apiError, setApiError] = useState(false);
   const [apiHasMore, setApiHasMore] = useState(false);
   const [apiPage, setApiPage] = useState(1);
+  const [apiLoadingAll, setApiLoadingAll] = useState(false);
+  const [apiLoadAllProgress, setApiLoadAllProgress] = useState(0);
+  const apiLastLoadedPage = useRef(0);
   const [selectedStage, setSelectedStage] = useState<StageFilter>(() => selectedStageFor(learner.stage));
   const [selectedCurriculum, setSelectedCurriculum] = useState<CurriculumFilter>('all');
   const [selectedMaterial, setSelectedMaterial] = useState<MaterialFilter>('all');
@@ -148,6 +151,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         .then((payload) => {
           const nextPage = Array.isArray(payload.data) ? payload.data : [];
           setApiResources((current) => apiPage === 1 ? nextPage : [...current, ...nextPage]);
+          apiLastLoadedPage.current = apiPage;
           setApiHasMore(Boolean(payload.nextPageAvailable));
         })
         .catch((error: unknown) => {
@@ -167,8 +171,46 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   }, [searchQuery, apiPage]);
 
   useEffect(() => {
+    apiLastLoadedPage.current = 0;
+    setApiLoadAllProgress(0);
     setApiPage(1);
   }, [searchQuery]);
+
+  const loadAllOpenTextbooks = async () => {
+    if (apiLoadingAll || !apiHasMore) return;
+    const query = searchQuery.trim();
+    setApiLoadingAll(true);
+    setApiError(false);
+    setApiLoadAllProgress(0);
+    let page = Math.max(1, apiLastLoadedPage.current + 1);
+    let hasNext = true;
+    try {
+      while (hasNext && page <= 500) {
+        const params = new URLSearchParams({ page: String(page) });
+        if (query) params.set('q', query);
+        const response = await fetch('/api/library/open-textbooks?' + params.toString());
+        if (!response.ok) throw new Error('Open Textbook Library request failed');
+        const payload = await response.json() as { data?: LibraryResource[]; nextPageAvailable?: boolean };
+        const books = Array.isArray(payload.data) ? payload.data : [];
+        setApiResources((current) => {
+          const existingIds = new Set(current.map((resource) => resource.id));
+          return [...current, ...books.filter((book) => !existingIds.has(book.id))];
+        });
+        apiLastLoadedPage.current = page;
+        setApiLoadAllProgress((current) => current + books.length);
+        hasNext = Boolean(payload.nextPageAvailable);
+        setApiHasMore(hasNext);
+        page += 1;
+        if (hasNext) await new Promise((resolve) => window.setTimeout(resolve, 100));
+      }
+      if (page > 500 && hasNext) setApiError(true);
+    } catch (error) {
+      console.error('Could not load the complete Open Textbook Library catalogue:', error);
+      setApiError(true);
+    } finally {
+      setApiLoadingAll(false);
+    }
+  };
 
   const availableResources = useMemo(() => {
     const seen = new Set<string>();
@@ -266,6 +308,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <input
               type="search"
               placeholder="Search books, subjects, providers, or exams…"
+              disabled={apiLoadingAll}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-purple-300 focus:bg-white focus:ring-4 focus:ring-purple-100"
@@ -444,10 +487,19 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             </section>
           ))}
           {apiHasMore && (
-            <div className="text-center">
-              <button type="button" disabled={apiLoading} onClick={() => setApiPage((page) => page + 1)} className="rounded-2xl border border-purple-200 bg-white px-5 py-3 text-sm font-extrabold text-purple-800 shadow-sm transition hover:bg-purple-50 disabled:cursor-wait disabled:opacity-60">
-                {apiLoading ? 'Loading more books…' : 'Load more Open Textbook Library books'}
-              </button>
+            <div className="flex flex-col items-center gap-3 rounded-3xl border border-purple-100 bg-purple-50/70 p-5 text-center">
+              <p className="text-sm font-bold text-purple-950">
+                {apiLoadingAll ? `Loading the catalogue… ${apiLoadAllProgress} additional books loaded so far.` : `Showing ${apiResources.length} Open Textbook Library books so far.`}
+              </p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button type="button" disabled={apiLoading || apiLoadingAll} onClick={() => setApiPage(apiLastLoadedPage.current + 1)} className="rounded-2xl border border-purple-200 bg-white px-5 py-3 text-sm font-extrabold text-purple-800 shadow-sm transition hover:bg-purple-50 disabled:cursor-wait disabled:opacity-60">
+                  {apiLoading && !apiLoadingAll ? 'Loading more books…' : 'Load next page'}
+                </button>
+                <button type="button" disabled={apiLoading || apiLoadingAll} onClick={() => void loadAllOpenTextbooks()} className="rounded-2xl bg-purple-700 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-purple-800 disabled:cursor-wait disabled:opacity-60">
+                  {apiLoadingAll ? 'Loading all books…' : `Load all ${searchQuery.trim() ? 'matching ' : ''}Open Textbook Library books`}
+                </button>
+              </div>
+              {apiError && <p role="status" className="text-xs font-semibold text-amber-800">Loading stopped before the full catalogue finished. The books already loaded are still available; try loading all again or narrow your search.</p>}
             </div>
           )}
         </div>
