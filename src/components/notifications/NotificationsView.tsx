@@ -116,6 +116,11 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">{item.message}</p>
                 <span className="text-[11px] text-slate-400 block pt-1">{item.date}</span>
+                {item.actionUrl && (
+                  <button type="button" onClick={() => onNavigate(item.actionUrl!)} className="text-xs font-bold text-purple-700 hover:text-purple-900 pt-1">
+                    Open related page →
+                  </button>
+                )}
               </div>
             </div>
 
