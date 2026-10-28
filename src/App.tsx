@@ -59,6 +59,33 @@ export default function App() {
   const [certificates, setCertificates] = useState<CertificateRecord[]>(SAMPLE_CERTIFICATES);
   const [workspaceLoadedFor, setWorkspaceLoadedFor] = useState<string | null>(null);
 
+  // Auth / Session State (starts logged out on landing page as requested)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [authStateReady, setAuthStateReady] = useState(false);
+  const [signupStage, setSignupStage] = useState<LearnerStage>('junior');
+
+  // Requirement: "let the 1st always be the landing page"
+  const [currentView, setCurrentView] = useState<string>('landing');
+  const [history, setHistory] = useState<string[]>([]);
+
+  // Active course and lesson state
+  const [activeCourse, setActiveCourse] = useState<Course>(COURSES[0]);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+
+  // Lesson Mastery Records
+  const [masteryRecords, setMasteryRecords] = useState<Record<string, LessonMasteryState>>({
+    'cbc-g1-math-l1': {
+      lessonId: 'cbc-g1-math-l1',
+      isCompleted: true,
+      isMastered: true,
+      scorePercent: 100,
+      attemptsCount: 1,
+      lastAttemptDate: '2026-10-24T08:00:00Z',
+      identifiedMisconceptions: [],
+      remedialActivitiesCompleted: false,
+    },
+  });
+
   // Persist learner activity per profile on this device. This keeps tasks, progress,
   // notifications, transcripts and certificates after refresh without mixing profiles.
   useEffect(() => {
@@ -108,32 +135,7 @@ export default function App() {
     masteryRecords,
   ]);
 
-  // Auth / Session State (starts logged out on landing page as requested)
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [authStateReady, setAuthStateReady] = useState(false);
-  const [signupStage, setSignupStage] = useState<LearnerStage>('junior');
 
-  // Requirement: "let the 1st always be the landing page"
-  const [currentView, setCurrentView] = useState<string>('landing');
-  const [history, setHistory] = useState<string[]>([]);
-
-  // Active course and lesson state
-  const [activeCourse, setActiveCourse] = useState<Course>(COURSES[0]);
-  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
-
-  // Lesson Mastery Records
-  const [masteryRecords, setMasteryRecords] = useState<Record<string, LessonMasteryState>>({
-    'cbc-g1-math-l1': {
-      lessonId: 'cbc-g1-math-l1',
-      isCompleted: true,
-      isMastered: true,
-      scorePercent: 100,
-      attemptsCount: 1,
-      lastAttemptDate: '2026-10-24T08:00:00Z',
-      identifiedMisconceptions: [],
-      remedialActivitiesCompleted: false,
-    },
-  });
 
   // UI state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
