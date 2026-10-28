@@ -41,6 +41,7 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [copiedNotice, setCopiedNotice] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
 
   // Recognition ref
@@ -97,7 +98,9 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
 
     setRecordingError(null);
     setInterimText('');
+    setRecordingSeconds(0);
     setAiSummary(null);
+    setSummaryError(null);
 
     if (!SpeechRecognition) {
       setRecordingError(
@@ -214,6 +217,7 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   const handleGenerateSummary = async () => {
     if (!currentText.trim() || isSummarizing) return;
     setIsSummarizing(true);
+    setSummaryError(null);
 
     try {
       const res = await fetch('/api/ai/summarize-transcript', {
@@ -230,8 +234,8 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
       const data = await res.json();
       setAiSummary(data.summary);
     } catch (e) {
-      setAiSummary(
-        `### Lecture Summary: ${sessionTitle}\n\n**Executive Summary:**\nThe lecture discussed computational algorithms and formal mathematical methods with special attention to runtime proofs.\n\n**Core Concepts:**\n- Divide-and-conquer recurrence balance\n- Empirical verification against Big-O bounds\n\n**Recommended Study Actions:**\n- Cross-reference with Chapter 1 lecture notes in Berry Library`
+      setSummaryError(
+        'The AI summary service could not be reached. Your transcript is still available; check your connection and try again.'
       );
     } finally {
       setIsSummarizing(false);
@@ -394,6 +398,11 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
             </button>
           </div>
 
+          {summaryError && (
+            <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              {summaryError}
+            </div>
+          )}
           {aiSummary && (
             <div className="p-5 rounded-2xl bg-purple-50/70 border border-purple-200 text-xs md:text-sm text-slate-800 leading-relaxed whitespace-pre-line space-y-2">
               {aiSummary}
