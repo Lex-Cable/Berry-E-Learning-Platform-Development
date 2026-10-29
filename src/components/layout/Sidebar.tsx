@@ -9,6 +9,7 @@ import {
   Sparkles,
   Mic,
   Calendar,
+  ClipboardList,
   Bell,
   BarChart3,
   User,
@@ -101,6 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ...(allowLiveTranscription
       ? [{ id: 'transcription', label: 'Live Transcription', icon: Mic }]
       : []),
+    { id: 'assignments', label: 'Assignments', icon: ClipboardList },
     { id: 'calendar', label: 'Planner & Tasks', icon: Calendar },
     {
       id: 'notifications',

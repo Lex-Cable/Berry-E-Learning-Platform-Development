@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, updateProfile } from 'firebase/auth';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopNavbar } from './components/layout/TopNavbar';
@@ -17,6 +17,7 @@ import { CalendarView } from './components/calendar/CalendarView';
 import { NotificationsView } from './components/notifications/NotificationsView';
 import { ProgressView } from './components/progress/ProgressView';
 import { ProfileView } from './components/profile/ProfileView';
+import { AssignmentsView } from './components/assignments/AssignmentsView';
 
 import {
   COURSES,
@@ -31,6 +32,8 @@ import {
   LessonMasteryState,
   TaskItem,
   AppNotification,
+  ExamAttemptRecord,
+  AssignmentSubmissionStatus,
   LibraryResource,
   LiveTranscriptSession,
   CertificateRecord,
@@ -38,6 +41,21 @@ import {
 import { isLiveTranscriptionAllowed, canNavigateBack, popNavigationHistory } from './utils/mastery';
 import { firebaseAuth } from './lib/firebase';
 import { loadTranscriptSessions, saveTranscriptSession } from './services/transcriptSessions';
+import {
+  deleteLearnerTask,
+  loadAssignmentSubmission,
+  loadExamAttempts,
+  loadLearnerNotifications,
+  loadLearnerTasks,
+  saveAssignmentMarking,
+  saveAssignmentSubmission,
+  saveExamAttempt,
+  saveLearnerNotification,
+  saveLearnerTask,
+} from './services/learnerWorkspace';
+import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, type AssignmentMarkingResult } from './utils/assignments';
+import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
+import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
 import { loadLearningCertificates, loadLearningProgress, saveLearningCertificate, saveLearningProgress } from './services/learningProgress';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
@@ -57,6 +75,24 @@ export default function App() {
   // Only display certificates earned by this learner; seeded sample credentials must not appear as real awards.
   const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [workspaceLoadedFor, setWorkspaceLoadedFor] = useState<string | null>(null);
+
+  // Exam attempt history, persisted per learner in Firestore.
+  const [examAttempts, setExamAttempts] = useState<ExamAttemptRecord[]>([]);
+  // Assignment submissions keyed by assignment id.
+  const [assignmentSubmissions, setAssignmentSubmissions] = useState<Record<string, {
+    content: string;
+    attemptNumber: number;
+    status: AssignmentSubmissionStatus;
+    scorePercent: number;
+    marksAwarded: number;
+    totalMarks: number;
+    markerFeedback: string;
+    submittedAt: string;
+    criterionScores: { criterionId: string; awarded: number; outOf: number }[];
+  }>>({});
+  // Real curriculum coverage report recomputed whenever the catalogue changes.
+  const coverageReport = useMemo(() => auditCurriculumCoverage(courses), [courses]);
+  const assignments = useMemo(() => buildCourseAssignments(courses), [courses]);
 
   // Auth / Session State (starts logged out on landing page as requested)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
@@ -131,6 +167,81 @@ export default function App() {
     });
     return () => { cancelled = true; };
   }, [learner.id, isLoggedIn, authStateReady]);
+
+  // Merge cloud task list with this device's cache so the planner follows the learner.
+  useEffect(() => {
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (!authStateReady || !isLoggedIn || !uid) return;
+    let cancelled = false;
+    void loadLearnerTasks(uid)
+      .then((cloudTasks) => {
+        if (cancelled || cloudTasks.length === 0) return;
+        setTasks((current) => {
+          const merged = [...current];
+          cloudTasks.forEach((cloudTask) => {
+            const index = merged.findIndex((task) => task.id === cloudTask.id);
+            if (index >= 0) merged[index] = cloudTask; else merged.unshift(cloudTask);
+          });
+          return merged;
+        });
+      })
+      .catch((error) => {
+        console.warn('Could not load cloud tasks; keeping this device cache:', error);
+      });
+    return () => { cancelled = true; };
+  }, [learner.id, isLoggedIn, authStateReady]);
+
+  // Merge cloud notifications with this device's cache.
+  useEffect(() => {
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (!authStateReady || !isLoggedIn || !uid) return;
+    let cancelled = false;
+    void loadLearnerNotifications(uid)
+      .then((cloudNotifications) => {
+        if (cancelled || cloudNotifications.length === 0) return;
+        setNotifications((current) => {
+          const merged = [...current];
+          cloudNotifications.forEach((cloudNotification) => {
+            const index = merged.findIndex((entry) => entry.id === cloudNotification.id);
+            if (index >= 0) merged[index] = cloudNotification; else merged.unshift(cloudNotification);
+          });
+          return merged;
+        });
+      })
+      .catch((error) => {
+        console.warn('Could not load cloud notifications; keeping this device cache:', error);
+      });
+    return () => { cancelled = true; };
+  }, [learner.id, isLoggedIn, authStateReady]);
+
+  // Load persisted exam attempts and certificate eligibility history.
+  useEffect(() => {
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (!authStateReady || !isLoggedIn || !uid) return;
+    let cancelled = false;
+    void loadExamAttempts(uid)
+      .then((cloudAttempts) => {
+        if (cancelled) return;
+        setExamAttempts((current) => {
+          const merged = new Map(current.map((attempt) => [attempt.id, attempt]));
+          cloudAttempts.forEach((attempt) => merged.set(attempt.id, attempt));
+          return Array.from(merged.values());
+        });
+      })
+      .catch((error) => {
+        console.warn('Could not load cloud exam attempts:', error);
+      });
+    return () => { cancelled = true; };
+  }, [learner.id, isLoggedIn, authStateReady]);
+
+  // Curriculum coverage audit: surface real gaps in the console so maintainers can act.
+  useEffect(() => {
+    if (coverageReport.issues.length === 0) return;
+    console.warn(
+      `Berry curriculum coverage audit found ${coverageReport.issues.length} issue(s) in ${coverageReport.coursesWithIssues.length} course(s):`,
+      coverageReport.issues,
+    );
+  }, [coverageReport]);
 
   // Sync transcript history to the signed-in learner's private Firestore subcollection.
   useEffect(() => {
@@ -394,13 +505,18 @@ export default function App() {
     }
   };
 
-  // Issue a Berry learning record when the exam is passed; this is not a government-issued credential.
+  // Issue a Berry learning record when the full eligibility check passes: a genuine
+  // passing exam attempt, complete lesson mastery, and no prior certificate. This is
+  // not a government-issued credential.
   const handleClaimCertificate = (course: Course, scorePercent: number) => {
     const requiredScore = course.exam?.passingScorePercent ?? 75;
-    const alreadyAwarded = certificates.some(
-      (certificate) => certificate.courseId === course.id && certificate.recipientName === learner.name
-    );
-    if (scorePercent < requiredScore || alreadyAwarded) return;
+    if (scorePercent < requiredScore) return;
+
+    const eligibility = certificateEligibilityForCourse(course, masteryRecords, examAttempts, certificates);
+    if (!eligibility.eligible) {
+      console.info('Certificate not issued yet; outstanding requirements:', eligibility.unmet);
+      return;
+    }
 
     const newCert: CertificateRecord = {
       id: `cert-${Date.now()}`,
@@ -441,6 +557,33 @@ export default function App() {
     setNotifications((prev) => [newNotif, ...prev]);
   };
 
+  // Persist a completed exam attempt so results survive refreshes and devices, and
+  // keep certificate eligibility checks grounded in real attempt history.
+  const handleExamAttemptSubmitted = (course: Course, attempt: Omit<ExamAttemptRecord, 'id'>) => {
+    const record: ExamAttemptRecord = { ...attempt, id: `attempt-${Date.now()}` };
+    setExamAttempts((prev) => [...prev, record]);
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) {
+      void saveExamAttempt(uid, record).catch((error) => {
+        console.warn('Exam attempt kept locally; cloud sync failed:', error);
+      });
+    }
+    const attemptNotification: AppNotification = {
+      id: `notif-exam-${record.id}`,
+      title: record.passed ? 'Final exam passed! 🎉' : 'Final exam completed',
+      message: record.passed
+        ? `You scored ${record.scorePercent}% on the ${course.subject} final exam, above the ${record.passingScorePercent}% threshold.`
+        : `You scored ${record.scorePercent}% on the ${course.subject} final exam. The pass mark is ${record.passingScorePercent}%. Review and retake when ready.`,
+      stage: learner.stage,
+      type: record.passed ? 'certification' : 'system',
+      date: 'Just now',
+      unread: true,
+      actionUrl: 'my-learning',
+    };
+    setNotifications((prev) => [attemptNotification, ...prev]);
+    if (uid) void saveLearnerNotification(uid, attemptNotification).catch(() => undefined);
+  };
+
   // Enroll in course
   const handleEnrollCourse = (courseId: string) => {
     if (!learner.enrolledCourseIds.includes(courseId)) {
@@ -456,25 +599,41 @@ export default function App() {
   // Notification handlers
   const handleMarkNotificationRead = (id: string) => {
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, unread: false } : n))
+      prev.map((n) => {
+        if (n.id !== id) return n;
+        const updated = { ...n, unread: false };
+        const uid = firebaseAuth?.currentUser?.uid;
+        if (uid) void saveLearnerNotification(uid, updated).catch(() => undefined);
+        return updated;
+      })
     );
   };
 
   const handleMarkAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    setNotifications((prev) => {
+      const uid = firebaseAuth?.currentUser?.uid;
+      prev.filter((n) => n.unread).forEach((notification) => {
+        if (uid) void saveLearnerNotification(uid, { ...notification, unread: false }).catch(() => undefined);
+      });
+      return prev.map((n) => ({ ...n, unread: false }));
+    });
   };
 
-  // Task handlers
+  // Task handlers. Every mutation mirrors to Firestore so the planner follows the learner across devices.
   const handleToggleTaskComplete = (taskId: string) => {
     setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              status: t.status === 'completed' ? 'pending' : 'completed',
-            }
-          : t
-      )
+      prev.map((t) => {
+        if (t.id !== taskId) return t;
+        const updated: TaskItem = {
+          ...t,
+          status: t.status === 'completed' ? 'pending' : 'completed',
+        };
+        const uid = firebaseAuth?.currentUser?.uid;
+        if (uid) void saveLearnerTask(uid, updated).catch((error) => {
+          console.warn('Task update kept locally; cloud sync failed:', error);
+        });
+        return updated;
+      })
     );
   };
 
@@ -484,7 +643,7 @@ export default function App() {
       id: `task-${Date.now()}`,
     };
     setTasks((prev) => [item, ...prev]);
-    setNotifications((prev) => [{
+    const scheduledNotification: AppNotification = {
       id: `notif-task-${item.id}`,
       title: 'Study task scheduled',
       message: `“${item.title}” is on your planner for ${new Date(item.dueDate).toLocaleString()}.`,
@@ -493,15 +652,94 @@ export default function App() {
       date: 'Just now',
       unread: true,
       actionUrl: 'calendar',
-    }, ...prev]);
+    };
+    setNotifications((prev) => [scheduledNotification, ...prev]);
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) {
+      void saveLearnerTask(uid, item).catch((error) => {
+        console.warn('Task saved locally; cloud sync failed:', error);
+      });
+      void saveLearnerNotification(uid, scheduledNotification).catch(() => undefined);
+    }
   };
 
   const handleUpdateTask = (updatedTask: TaskItem) => {
     setTasks((prev) => prev.map((task) => task.id === updatedTask.id ? updatedTask : task));
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) void saveLearnerTask(uid, updatedTask).catch((error) => {
+      console.warn('Task update kept locally; cloud sync failed:', error);
+    });
   };
 
   const handleDeleteTask = (taskId: string) => {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) void deleteLearnerTask(uid, taskId).catch((error) => {
+      console.warn('Task deleted locally; cloud delete failed:', error);
+    });
+  };
+
+  // Assignment submission handler: mark with the rubric, persist, and notify.
+  const handleSubmitAssignment = (assignment: import('./types').Assignment, content: string): AssignmentMarkingResult => {
+    const result = markAssignmentSubmission(assignment, content);
+    const uid = firebaseAuth?.currentUser?.uid;
+    const previous = assignmentSubmissions[assignment.id];
+    const submittedAt = new Date().toISOString();
+    const attemptNumber = nextAttemptNumber(previous?.attemptNumber ?? 0);
+
+    setAssignmentSubmissions((prev) => ({
+      ...prev,
+      [assignment.id]: {
+        content,
+        attemptNumber,
+        status: result.status,
+        scorePercent: result.scorePercent,
+        marksAwarded: result.marksAwarded,
+        totalMarks: result.totalMarks,
+        markerFeedback: result.markerFeedback,
+        submittedAt,
+        criterionScores: result.criterionScores,
+      },
+    }));
+
+    if (uid) {
+      const payload = {
+        assignmentId: assignment.id,
+        content,
+        submittedAt,
+        attemptNumber,
+        status: result.status,
+        ...(result.status !== 'submitted'
+          ? {
+              scorePercent: result.scorePercent,
+              markerFeedback: result.markerFeedback,
+              gradedAt: submittedAt,
+              criterionScores: result.criterionScores,
+            }
+          : {}),
+      };
+      const persist = result.status === 'submitted'
+        ? saveAssignmentSubmission(uid, payload as Parameters<typeof saveAssignmentSubmission>[1])
+        : saveAssignmentMarking(uid, payload as Parameters<typeof saveAssignmentMarking>[1]);
+      void persist.catch((error) => {
+        console.warn('Assignment submission kept locally; cloud sync failed:', error);
+      });
+    }
+
+    const feedbackNotification: AppNotification = {
+      id: `notif-assignment-${assignment.id}-${attemptNumber}`,
+      title: result.status === 'graded' ? 'Assignment marked ✔' : 'Assignment returned for revision',
+      message: `${assignment.title}: ${result.marksAwarded}/${result.totalMarks} (${result.scorePercent}%). Open Assignments to read the marker feedback.`,
+      stage: learner.stage,
+      type: 'feedback',
+      date: 'Just now',
+      unread: true,
+      actionUrl: 'assignments',
+    };
+    setNotifications((prev) => [feedbackNotification, ...prev]);
+    if (uid) void saveLearnerNotification(uid, feedbackNotification).catch(() => undefined);
+
+    return result;
   };
 
   // Library bookmark handler
@@ -690,6 +928,7 @@ export default function App() {
                   ? [{ id: 'transcription', label: 'Live Transcription' }]
                   : []),
                 { id: 'calendar', label: 'Calendar & Tasks' },
+                { id: 'assignments', label: 'Assignments' },
                 { id: 'notifications', label: 'Notifications' },
                 { id: 'progress', label: 'Mastery & Progress' },
                 { id: 'profile', label: 'Profile & Settings' },
@@ -746,6 +985,8 @@ export default function App() {
               onNavigateToCertificates={() => handleNavigate('certifications')}
               onNavigateToCourses={() => handleNavigate('courses')}
               onClaimCertificate={handleClaimCertificate}
+              onExamAttemptSubmitted={handleExamAttemptSubmitted}
+              examAttempts={examAttempts.filter((attempt) => attempt.courseId === (learningTargetCourseId ?? ''))}
             />
           )}
 
@@ -794,6 +1035,16 @@ export default function App() {
               stage={learner.stage as 'advance' | 'university' | 'professionals'}
               sessions={transcriptSessions}
               onSaveSession={handleSaveTranscriptSession}
+            />
+          )}
+
+          {currentView === 'assignments' && (
+            <AssignmentsView
+              learnerName={learner.name}
+              assignments={assignments.filter((assignment) => learner.enrolledCourseIds.includes(assignment.courseId))}
+              courses={courses}
+              submissionState={assignmentSubmissions}
+              onSubmit={handleSubmitAssignment}
             />
           )}
 

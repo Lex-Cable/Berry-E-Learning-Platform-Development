@@ -141,6 +141,83 @@ service cloud.firestore {
         allow delete: if isOwner(userId);
       }
 
+      match /learningTasks/{taskId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['id', 'title', 'subject', 'courseId', 'stage', 'dueDate', 'urgency', 'status', 'type', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['id', 'title', 'subject', 'courseId', 'stage', 'dueDate', 'urgency', 'status', 'type', 'updatedAt'])
+          && request.resource.data.id == taskId
+          && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 200
+          && request.resource.data.subject is string && request.resource.data.subject.size() <= 100
+          && request.resource.data.courseId is string && request.resource.data.courseId.size() <= 150
+          && request.resource.data.stage in ['early', 'junior', 'senior', 'advance', 'university', 'professionals']
+          && request.resource.data.dueDate is string && request.resource.data.dueDate.size() <= 60
+          && request.resource.data.urgency in ['urgent', 'medium', 'normal']
+          && request.resource.data.status in ['pending', 'in_progress', 'completed']
+          && request.resource.data.type in ['quiz', 'assignment', 'reading', 'revision', 'exam'];
+        allow delete: if isOwner(userId);
+      }
+
+      match /learningNotifications/{notificationId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['id', 'title', 'message', 'stage', 'type', 'date', 'unread', 'actionUrl', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['id', 'title', 'message', 'stage', 'type', 'date', 'unread', 'updatedAt'])
+          && request.resource.data.id == notificationId
+          && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 200
+          && request.resource.data.message is string && request.resource.data.message.size() <= 2000
+          && request.resource.data.stage in ['early', 'junior', 'senior', 'advance', 'university', 'professionals']
+          && request.resource.data.type in ['deadline', 'feedback', 'mastery', 'community', 'system', 'certification']
+          && request.resource.data.date is string && request.resource.data.date.size() <= 60
+          && request.resource.data.unread is bool
+          && (!('actionUrl' in request.resource.data)
+            || (request.resource.data.actionUrl is string && request.resource.data.actionUrl.size() <= 100));
+        allow delete: if isOwner(userId);
+      }
+
+      match /assignmentSubmissions/{assignmentId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly([
+            'assignmentId', 'content', 'submittedAt', 'attemptNumber', 'status',
+            'scorePercent', 'markerFeedback', 'gradedAt', 'criterionScores', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasAll(['assignmentId', 'content', 'submittedAt', 'attemptNumber', 'status', 'updatedAt'])
+          && request.resource.data.assignmentId == assignmentId
+          && request.resource.data.content is string && request.resource.data.content.size() <= 20000
+          && request.resource.data.submittedAt is string && request.resource.data.submittedAt.size() <= 60
+          && request.resource.data.attemptNumber is int && request.resource.data.attemptNumber >= 1 && request.resource.data.attemptNumber <= 20
+          && request.resource.data.status in ['submitted', 'graded', 'returned_for_revision']
+          && (!('scorePercent' in request.resource.data)
+            || (request.resource.data.scorePercent is number
+              && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100))
+          && (!('markerFeedback' in request.resource.data)
+            || (request.resource.data.markerFeedback is string && request.resource.data.markerFeedback.size() <= 5000))
+          && (!('gradedAt' in request.resource.data)
+            || (request.resource.data.gradedAt is string && request.resource.data.gradedAt.size() <= 60))
+          && (!('criterionScores' in request.resource.data)
+            || (request.resource.data.criterionScores is list && request.resource.data.criterionScores.size() <= 20));
+        allow delete: if isOwner(userId);
+      }
+
+      match /examAttempts/{attemptId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['id', 'courseId', 'examId', 'scorePercent', 'passed', 'passingScorePercent', 'answers', 'submittedAt', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['id', 'courseId', 'examId', 'scorePercent', 'passed', 'passingScorePercent', 'answers', 'submittedAt', 'updatedAt'])
+          && request.resource.data.id == attemptId
+          && request.resource.data.courseId is string && request.resource.data.courseId.size() <= 150
+          && request.resource.data.examId is string && request.resource.data.examId.size() <= 150
+          && request.resource.data.scorePercent is number
+          && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100
+          && request.resource.data.passed is bool
+          && request.resource.data.passingScorePercent is number
+          && request.resource.data.passingScorePercent >= 0 && request.resource.data.passingScorePercent <= 100
+          && request.resource.data.answers is map && request.resource.data.answers.size() <= 100
+          && request.resource.data.submittedAt is string && request.resource.data.submittedAt.size() <= 60;
+        allow delete: if false;
+      }
+
       match /transcriptSessions/{sessionId} {
         function validTranscriptSession() {
           let data = request.resource.data;

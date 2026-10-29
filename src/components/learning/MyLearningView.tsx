@@ -26,6 +26,7 @@ import {
 import { LessonView } from '../lessons/LessonView';
 import { isLessonUnlocked } from '../../utils/mastery';
 import { loadLastOpenedLesson, saveLastOpenedLesson } from '../../services/learningProgress';
+import { findFallbackLesson } from '../../utils/curriculumCoverage';
 import { firebaseAuth } from '../../lib/firebase';
 
 interface MyLearningViewProps {
@@ -35,6 +36,14 @@ interface MyLearningViewProps {
   onSaveMastery: (record: LessonMasteryState) => void;
   onNavigateToCertificates?: () => void;
   onClaimCertificate?: (course: Course, scorePercent: number) => void;
+  onExamAttemptSubmitted?: (course: Course, attempt: {
+    courseId: string; examId: string; scorePercent: number; passed: boolean;
+    passingScorePercent: number; answers: Record<string, number>; submittedAt: string;
+  }) => void;
+  examAttempts?: {
+    id: string; courseId: string; examId: string; scorePercent: number; passed: boolean;
+    passingScorePercent: number; answers: Record<string, number>; submittedAt: string;
+  }[];
   initialCourseId?: string | null;
   onClearInitialCourse?: () => void;
   onNavigateToCourses?: () => void;
@@ -47,6 +56,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   onSaveMastery,
   onNavigateToCertificates,
   onClaimCertificate,
+  onExamAttemptSubmitted,
+  examAttempts = [],
   initialCourseId = null,
   onClearInitialCourse,
   onNavigateToCourses,
@@ -87,7 +98,17 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       const lessonExists = targetCourse.chapters.some((chapter) =>
         chapter.lessons.some((lesson) => lesson.id === savedLessonId)
       );
-      if (!cancelled && lessonExists && savedLessonId) setActiveLessonId(savedLessonId);
+      if (!cancelled && lessonExists && savedLessonId) {
+        setActiveLessonId(savedLessonId);
+      } else if (!cancelled) {
+        // Missing-lesson fallback: a stale or absent resume pointer must never strand
+        // the learner; fall back to the first genuinely accessible lesson.
+        const masteredIds = Object.entries(masteryRecords)
+          .filter(([, state]) => state.isMastered)
+          .map(([lessonId]) => lessonId);
+        const fallback = findFallbackLesson(targetCourse, masteredIds);
+        if (fallback) setActiveLessonId(fallback.id);
+      }
       if (!cancelled) onClearInitialCourse?.();
     };
     void resume();
@@ -167,16 +188,36 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       }
     });
     const calculatedScore = Math.round((correct / questions.length) * 100);
-    const passed = calculatedScore >= (activeCourse.exam.passingScorePercent || 75);
+    const passingScore = activeCourse.exam.passingScorePercent || 75;
+    const passed = calculatedScore >= passingScore;
 
     setExamScore(calculatedScore);
     setExamPassed(passed);
     setExamSubmitted(true);
 
+    // Persist the attempt so results and eligibility history survive refresh and devices.
+    onExamAttemptSubmitted?.(activeCourse, {
+      courseId: activeCourse.id,
+      examId: activeCourse.exam.id,
+      scorePercent: calculatedScore,
+      passed,
+      passingScorePercent: passingScore,
+      answers: { ...examAnswers },
+      submittedAt: new Date().toISOString(),
+    });
+
     if (passed && onClaimCertificate) {
       onClaimCertificate(activeCourse, calculatedScore);
     }
   };
+
+  const courseExamAttempts = examAttempts.filter(
+    (attempt) => activeCourse && attempt.courseId === activeCourse.id,
+  );
+  const bestPreviousAttempt = courseExamAttempts.reduce<number | null>((best, attempt) => {
+    if (!attempt.passed) return best;
+    return best === null || attempt.scorePercent > best ? attempt.scorePercent : best;
+  }, null);
 
   // ==========================================
   // LEVEL 3: ACTIVE LESSON VIEW
@@ -240,6 +281,28 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             a Berry course assessment record. Berry records are not government-issued or externally accredited qualifications.
           </p>
         </div>
+
+        {/* Attempt history from persisted records */}
+        {courseExamAttempts.length > 0 && (
+          <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs text-xs space-y-2">
+            <span className="font-bold text-slate-800">Previous attempts ({courseExamAttempts.length})</span>
+            <div className="flex flex-wrap gap-2">
+              {courseExamAttempts.map((attempt) => (
+                <span
+                  key={attempt.id}
+                  className={`px-2.5 py-1 rounded-full font-bold ${
+                    attempt.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {attempt.scorePercent}% • {new Date(attempt.submittedAt).toLocaleDateString()} {attempt.passed ? 'passed' : 'not passed'}
+                </span>
+              ))}
+            </div>
+            {bestPreviousAttempt !== null && (
+              <p className="text-[11px] text-slate-500">Best passing score so far: {bestPreviousAttempt}%.</p>
+            )}
+          </div>
+        )}
 
         {/* Results Card if submitted */}
         {examSubmitted && (

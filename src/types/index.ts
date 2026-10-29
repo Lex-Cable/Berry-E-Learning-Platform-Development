@@ -168,6 +168,53 @@ export interface TaskItem {
   type: 'quiz' | 'assignment' | 'reading' | 'revision' | 'exam';
 }
 
+export interface AssignmentRubricCriterion {
+  id: string;
+  description: string;
+  marks: number;
+  keywords: string[];
+}
+
+export interface Assignment {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  instructions: string;
+  dueDate: string;
+  totalMarks: number;
+  rubric: AssignmentRubricCriterion[];
+}
+
+export type AssignmentSubmissionStatus = 'submitted' | 'graded' | 'returned_for_revision';
+
+export interface AssignmentSubmission {
+  id: string;
+  assignmentId: string;
+  courseId: string;
+  content: string;
+  submittedAt: string;
+  attemptNumber: number;
+  status: AssignmentSubmissionStatus;
+  scorePercent?: number;
+  marksAwarded?: number;
+  totalMarks?: number;
+  criterionScores?: { criterionId: string; awarded: number; outOf: number }[];
+  markerFeedback?: string;
+  gradedAt?: string;
+}
+
+export interface ExamAttemptRecord {
+  id: string;
+  courseId: string;
+  examId: string;
+  scorePercent: number;
+  passed: boolean;
+  passingScorePercent: number;
+  answers: Record<string, number>;
+  submittedAt: string;
+}
+
 export interface AppNotification {
   id: string;
   title: string;

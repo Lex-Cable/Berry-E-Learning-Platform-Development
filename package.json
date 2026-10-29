@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "npx --yes tsx --test src/utils/mastery.test.ts"
+    "test": "npx --yes tsx --test src/utils/mastery.test.ts src/utils/assignments.test.ts src/utils/curriculumCoverage.test.ts src/utils/certificates.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

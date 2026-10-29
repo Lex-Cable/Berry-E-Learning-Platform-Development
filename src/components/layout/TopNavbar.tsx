@@ -96,6 +96,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
     'ai-tutor': 'Berry AI Socratic Tutor',
     transcription: 'Live Speech-to-Text Transcription',
     calendar: 'Study Planner & Deadlines',
+    assignments: 'Assignment Submission & Marking',
     notifications: 'Notifications Centre',
     progress: 'Mastery & Progress Analytics',
     profile: 'Profile & Stage Settings',

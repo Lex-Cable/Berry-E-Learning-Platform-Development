@@ -63,6 +63,7 @@ Berry is being developed around the following core capabilities.
 - Progress Tracking: Insights into course completion, assessment performance, learning objectives, and areas that require further practice.
 - Achievements and Certifications: A dedicated space for viewing achievements and certificates supported by the platform.
 - Calendar and Notifications: Tools for organizing learning activities, tracking deadlines, and receiving relevant updates.
+- Assignment Submission & Marking: Rubric-based written assignments per enrolled course with automated first-pass marking, feedback, and revision resubmission.
 - Live Transcription: A planned productivity and learning capability for Berry Advanced university and professional learners.
 
 Feature availability may vary as development progresses.
@@ -188,7 +189,9 @@ Open the local development URL displayed in your terminal. In the current projec
 http://localhost:3000
 ```
 
-Firebase Auth stores the account and display name. Cloud Firestore stores learner stage, country, curriculum, grade, pathway, school or institution, course enrollments, study goal, and accessibility preferences. Existing Auth accounts without a profile document receive a safe default profile at their next sign-in. Community blog posts, private drafts, likes, comments, and reports are stored in Firestore; lesson mastery, tasks, notifications, certificates, and other learning activity are still local demo state and are not synchronized yet.
+Firebase Auth stores the account and display name. Cloud Firestore stores learner stage, country, curriculum, grade, pathway, school or institution, course enrollments, study goal, and accessibility preferences. Existing Auth accounts without a profile document receive a safe default profile at their next sign-in. Community blog posts, private drafts, likes, comments, and reports are stored in Firestore.
+
+Learning activity synchronization: lesson mastery, lesson notes, resume position, certificates, planner tasks (`users/{uid}/learningTasks`), notifications (`users/{uid}/learningNotifications`), assignment submissions (`users/{uid}/assignmentSubmissions`), and final-exam attempts (`users/{uid}/examAttempts`) are stored in Firestore under the signed-in learner's own user document and merged with the device cache on sign-in. Every write is validated by `firestore.rules`; a failed cloud sync keeps the local copy and logs a warning rather than losing learner work.
 
 #### Berry Community setup
 
@@ -201,6 +204,21 @@ firebase deploy --only firestore:rules,firestore:indexes
 ```
 
 Reports can only be reviewed by accounts with the Firebase custom claim `moderator: true`. Set that claim from a trusted Admin SDK environment; never grant it from Berry's client or learner profile. Sign out and back in (or refresh the ID token) after the claim is applied. The Community UI provides the moderation queue only to those accounts, and records the reviewer, action, report, and review time.
+
+#### Assignments, exams, and certificates
+
+- **Assignments**: each enrolled course with lessons exposes a rubric-marked writing assignment (`Assignments` page). Submissions are auto-marked against rubric criteria (`src/utils/assignments.ts`), given formative feedback, and either graded (≥50%) or returned for revision. Learners can revise and resubmit; attempts are capped at 20 and persisted in Firestore.
+- **Exams**: every completed course exam attempt is persisted (`src/components/learning/MyLearningView.tsx` via `onExamAttemptSubmitted`) with its answers, score, and pass state, and attempt history is shown before retakes.
+- **Certificates**: a Berry learning record is issued only when `certificateEligibilityForCourse` passes — a genuine passing exam attempt (score ≥ stored threshold, cross-checked against the stored flag), complete lesson mastery for the course, and no existing certificate for that course. These records are not government-issued qualifications.
+- **Curriculum coverage**: `auditCurriculumCoverage` (`src/utils/curriculumCoverage.ts`) detects empty chapters, unresolved lesson prerequisites, duplicate lesson IDs, content-free lessons, and empty exams; issues are surfaced in the console for maintainers. When a saved resume pointer references a lesson that no longer exists, `findFallbackLesson` redirects the learner to the first genuinely accessible lesson.
+
+#### Automated tests
+
+```bash
+npm test
+```
+
+Runs the Node.js test suites for mastery logic, assignment marking, curriculum coverage auditing, and certificate eligibility. `npm run lint` type-checks the project and `npm run build` produces the production bundle.
 
  5. Start Developing
 
