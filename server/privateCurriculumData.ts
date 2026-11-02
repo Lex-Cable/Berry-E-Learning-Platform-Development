@@ -38,7 +38,7 @@ export const INITIAL_LEARNER: LearnerProfile = {
   },
 };
 
-export const COURSES: Course[] = [
+export const COURSES = [
   // ==========================================
   // BERRY EARLY: PP1 & PP2 (Playful & Kid-Friendly)
   // ==========================================
