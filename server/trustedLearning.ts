@@ -4,7 +4,7 @@ import { adminDb } from './firebaseAdmin';
 import { requireFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMiddleware';
 import { COURSES } from './privateCurriculumData';
 import { markAssignmentSubmission } from '../src/utils/assignments';
-import type { Course, LessonMasteryState, CertificateRecord } from '../src/types';
+import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
 
 const router = express.Router();
 const PASS_MARK = 75;
@@ -270,7 +270,7 @@ router.post('/api/assignments/courses/:courseId/:assignmentId/submit', requireFi
     const context = await getEnrolledCourse(req, res, req.params.courseId);
     if (!context) return;
     const { course, uid } = context;
-    const authoredAssignments = (course as Course & { assignments?: Array<{ id: string; rubric: Array<{ id: string; description: string; marks: number; keywords: string[] }> }> }).assignments || [];
+    const authoredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
     const assignment = authoredAssignments.find((item) => item.id === req.params.assignmentId);
     if (!assignment || !Array.isArray(assignment.rubric) || assignment.rubric.length === 0) return res.status(409).json({ error: 'This course has no approved assignment rubric yet. Your draft is not graded or stored as a trusted result.' });
     if (typeof req.body?.content !== 'string' || req.body.content.trim().length < 1 || req.body.content.length > 20000) {
@@ -343,10 +343,10 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
     const completed = progress.docs.filter((document) => document.data().isCompleted === true).length;
     const mastered = progress.docs.filter((document) => document.data().isMastered === true).length;
     const courseMasteryPercent = Math.round(mastered / Math.max(totalLessons, 1) * 100);
-    const requiredAssignments = (course as Course & { assignments?: Array<{ id: string; rubric?: unknown[] }> }).assignments || [];
-    if (requiredAssignments.length === 0) unmet.push('approved assignment and marking rubric not configured for this course');
+    const requiredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
     const assignmentRecords = new Map(assignments.docs.map((document) => [document.id, document.data()]));
     const unmet: string[] = [];
+    if (requiredAssignments.length === 0) unmet.push('approved assignment and marking rubric not configured for this course');
     if (completed !== totalLessons) unmet.push(`course completion (${completed}/${totalLessons} lessons)`);
     if (courseMasteryPercent < PASS_MARK) unmet.push(`course mastery (${courseMasteryPercent}% / ${PASS_MARK}%)`);
     if (cycleSnapshot.data()?.examPassed !== true) unmet.push('final exam pass (75% or higher)');
