@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { LearnerStage, LiveTranscriptSession } from '../../types';
 import { isLiveTranscriptionAllowed } from '../../utils/mastery';
+import { firebaseAuth } from '../../lib/firebase';
 
 interface LiveTranscriptionViewProps {
   stage: LearnerStage;
@@ -220,23 +221,23 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
     setSummaryError(null);
 
     try {
+      const currentUser = firebaseAuth?.currentUser;
+      if (!currentUser) throw new Error('Please sign in again to generate a secure summary.');
+      const idToken = await currentUser.getIdToken();
       const res = await fetch('/api/ai/summarize-transcript', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcript: currentText,
-          title: sessionTitle,
-          stage,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ transcript: currentText, title: sessionTitle }),
       });
 
-      if (!res.ok) throw new Error('Summary generation failed');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(typeof data.error === 'string' ? data.error : 'Summary generation failed');
+      }
       const data = await res.json();
       setAiSummary(data.summary);
     } catch (e) {
-      setSummaryError(
-        'The AI summary service could not be reached. Your transcript is still available; check your connection and try again.'
-      );
+      setSummaryError(e instanceof Error ? e.message : 'The AI summary service could not be reached. Your transcript is still available; check your connection and try again.');
     } finally {
       setIsSummarizing(false);
     }
