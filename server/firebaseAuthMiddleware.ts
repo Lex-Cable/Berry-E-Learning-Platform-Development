@@ -6,6 +6,7 @@ export interface AuthenticatedRequest extends Request {
     uid: string;
     email?: string;
     moderator: boolean;
+    learnerStage?: string;
   };
 }
 
@@ -43,6 +44,7 @@ export async function requireFirebaseAuth(
       uid: decodedToken.uid,
       email: decodedToken.email,
       moderator: decodedToken.moderator === true,
+      learnerStage: typeof decodedToken.learnerStage === 'string' ? decodedToken.learnerStage : undefined,
     };
 
     return next();
