@@ -343,6 +343,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
     ]);
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
     const progressRecords = progress.docs.map((document) => document.data());
+    const courseMasteryPercent = summarizeCourseProgress(progressRecords, totalLessons).courseMasteryPercent;
     const requiredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
     const assignmentRecords = assignments.docs.map((document) => document.data());
     const unmet = certificateUnmetRequirements({
