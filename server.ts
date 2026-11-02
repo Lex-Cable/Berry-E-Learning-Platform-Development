@@ -125,35 +125,9 @@ app.get('/api/library/open-textbooks', async (req, res) => {
 });
 
 
-function findPrivateCourse(courseId: string) { return PRIVATE_COURSES.find((course) => course.id === courseId); }
-async function enrolledCourse(req: AuthenticatedRequest, res: express.Response, courseId: string) {
- const uid=req.user?.uid; if(!uid||!adminDb){res.status(503).json({error:'Secure learner services are unavailable.'});return null;}
- const profile=await adminDb.collection('users').doc(uid).get();
- if(!profile.exists){res.status(403).json({error:'A learner profile is required.'});return null;}
- const ids=profile.data()?.enrolledCourseIds;
- if(!Array.isArray(ids)||!ids.includes(courseId)){res.status(403).json({error:'You must be enrolled in this course.'});return null;}
- const course=findPrivateCourse(courseId);if(!course){res.status(404).json({error:'Course not found.'});return null;}return course;
-}
-function validAnswers(questions:Array<{id:string;options:string[]}>,value:unknown):value is Record<string,number>{
- if(!value||typeof value!=='object'||Array.isArray(value))return false;
- const answers=value as Record<string,unknown>;return Object.keys(answers).length===questions.length&&questions.every(q=>Number.isInteger(answers[q.id])&&Number(answers[q.id])>=0&&Number(answers[q.id])<q.options.length);
-}
-app.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions',requireFirebaseAuth,async(req:AuthenticatedRequest,res)=>{
- try{const course=await enrolledCourse(req,res,req.params.courseId);if(!course)return;const lesson=course.chapters.flatMap(c=>c.lessons).find(l=>l.id===req.params.lessonId);if(!lesson)return res.status(404).json({error:'Lesson not found.'});return res.json({questions:lesson.quizQuestions.map(({id,question,options,learningObjective})=>({id,question,options,learningObjective}))});}
- catch(error){console.error('Assessment retrieval failed:',error);return res.status(500).json({error:'Unable to load assessment.'});}
-});
-app.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit',requireFirebaseAuth,async(req:AuthenticatedRequest,res)=>{
- try{const course=await enrolledCourse(req,res,req.params.courseId);if(!course)return;const lesson=course.chapters.flatMap(c=>c.lessons).find(l=>l.id===req.params.lessonId);if(!lesson)return res.status(404).json({error:'Lesson not found.'});const qs=lesson.quizQuestions;if(!validAnswers(qs,req.body?.answers))return res.status(400).json({error:'Submit one valid answer for every question.'});const answers=req.body.answers;const correct=qs.filter(q=>answers[q.id]===q.correctIndex).length;const scorePercent=Math.round(correct/qs.length*100);const results=Object.fromEntries(qs.map(q=>[q.id,{correct:answers[q.id]===q.correctIndex,correctAnswerIndex:q.correctIndex,feedback:answers[q.id]===q.correctIndex?q.explanation:q.misconceptions?.[answers[q.id]]||'Review this topic and try again.'}]));return res.json({scorePercent,results});}
- catch(error){console.error('Assessment grading failed:',error);return res.status(500).json({error:'Unable to grade assessment.'});}
-});
-app.get('/api/assessments/courses/:courseId/exam/questions',requireFirebaseAuth,async(req:AuthenticatedRequest,res)=>{
- try{const course=await enrolledCourse(req,res,req.params.courseId);if(!course)return;if(!course.exam)return res.status(404).json({error:'No exam is available.'});return res.json({questions:course.exam.questions.map(({id,question,options,topic})=>({id,question,options,topic}))});}
- catch(error){console.error('Exam retrieval failed:',error);return res.status(500).json({error:'Unable to load exam.'});}
-});
-app.post('/api/assessments/courses/:courseId/exam/submit',requireFirebaseAuth,async(req:AuthenticatedRequest,res)=>{
- try{const course=await enrolledCourse(req,res,req.params.courseId);if(!course)return;if(!course.exam)return res.status(404).json({error:'No exam is available.'});const qs=course.exam.questions;if(!validAnswers(qs,req.body?.answers))return res.status(400).json({error:'Submit one valid answer for every exam question.'});const answers=req.body.answers;const correct=qs.filter(q=>answers[q.id]===q.correctIndex).length;const scorePercent=Math.round(correct/qs.length*100);const passingScorePercent=course.exam.passingScorePercent||75;const results=Object.fromEntries(qs.map(q=>[q.id,{correct:answers[q.id]===q.correctIndex,correctAnswerIndex:q.correctIndex,explanation:q.explanation}]));return res.json({scorePercent,passed:scorePercent>=passingScorePercent,passingScorePercent,results});}
- catch(error){console.error('Exam grading failed:',error);return res.status(500).json({error:'Unable to grade exam.'});}
-});
+import trustedLearningRouter from './server/trustedLearning';
+
+app.use(trustedLearningRouter);
 
 // Server-side Gemini initialization
 let aiClient: GoogleGenAI | null = null;
