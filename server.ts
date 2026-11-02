@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { adminDb } from './server/firebaseAdmin';
+import { requireFirebaseAuth, type AuthenticatedRequest } from './server/firebaseAuthMiddleware';
 
 dotenv.config();
 
@@ -154,10 +156,26 @@ async function withGeminiRetry<T>(operation: () => Promise<T>, maxAttempts = 3):
   }
 }
 
+// Protect both AI endpoints with verified Firebase identity.
+app.use('/api/ai', requireFirebaseAuth);
+
+async function getAuthenticatedLearnerStage(req: express.Request): Promise<string | null> {
+  const uid = (req as AuthenticatedRequest).user?.uid;
+  if (!uid || !adminDb) return null;
+  const profile = await adminDb.collection('users').doc(uid).get();
+  const stage = profile.data()?.stage;
+  return typeof stage === 'string' ? stage : null;
+}
+
 // Socratic pedagogical tutor endpoint
 app.post('/api/ai/chat', async (req, res) => {
   try {
-    const { message, stage, courseTitle, currentTopic, history } = req.body;
+    const { message, courseTitle, currentTopic, history } = req.body;
+    if (!adminDb) return res.status(503).json({ error: 'Secure learner services are unavailable.' });
+    const stage = await getAuthenticatedLearnerStage(req);
+    if (!stage || !['early', 'junior', 'senior', 'advance', 'university', 'professionals'].includes(stage)) {
+      return res.status(403).json({ error: 'A valid Berry learner profile is required.' });
+    }
     if (typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'A non-empty message is required.' });
     }
@@ -292,16 +310,19 @@ Core Principles:
   }
 });
 
-// Transcript summarizer endpoint (University & Professionals only)
+// Transcript summarizer endpoint (Berry Advance, University & Professionals only)
 app.post('/api/ai/summarize-transcript', async (req, res) => {
   try {
-    const { transcript, title, stage } = req.body;
+    const { transcript, title } = req.body;
+    if (!adminDb) return res.status(503).json({ error: 'Secure learner services are unavailable.' });
+    const stage = await getAuthenticatedLearnerStage(req);
+    if (!stage) return res.status(403).json({ error: 'A valid Berry learner profile is required.' });
 
-    if (!transcript || transcript.trim().length === 0) {
+    if (typeof transcript !== 'string' || transcript.trim().length === 0 || transcript.length > 400000) {
       return res.status(400).json({ error: 'No transcript text provided' });
     }
 
-    if (stage !== 'university' && stage !== 'professionals') {
+    if (!['advance', 'university', 'professionals'].includes(stage)) {
       return res.status(403).json({ error: 'Live transcription analysis is restricted to University and Professional stages.' });
     }
 
