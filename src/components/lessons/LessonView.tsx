@@ -173,11 +173,9 @@ export const LessonView: React.FC<LessonViewProps> = ({
     const activity = currentLesson?.activities.find((a) => a.type === 'matching');
     const pair = activity?.data.matchingPairs?.find((p) => p.id === selectedLeft);
 
-    if (pair && pair.right === rightText) {
+    if (pair) {
       setMatchedPairs((prev) => ({ ...prev, [selectedLeft]: rightText }));
-      setMatchingFeedback('Correct match! Demonstrated competency.');
-    } else {
-      setMatchingFeedback('Not quite. Try identifying the relationship carefully.');
+      setMatchingFeedback('Match selected. Your understanding will be checked in the secure assessment.');
     }
     setSelectedLeft(null);
   };
@@ -482,13 +480,13 @@ export const LessonView: React.FC<LessonViewProps> = ({
                     {/* Right Column */}
                     <div className="space-y-2">
                       <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Match to Definition / Quantity:</p>
-                      {act.data.matchingPairs.map((pair) => (
+                      {(act.data.matchingOptions || []).map((rightText, rightIndex) => (
                         <button
-                          key={pair.id}
-                          onClick={() => handleRightClick(pair.right)}
+                          key={`${rightIndex}-${rightText}`}
+                          onClick={() => handleRightClick(rightText)}
                           className="w-full text-left p-3 rounded-xl border border-slate-200 bg-white hover:border-purple-300 text-xs font-medium text-slate-800 transition-all"
                         >
-                          {pair.right}
+                          {rightText}
                         </button>
                       ))}
                     </div>
