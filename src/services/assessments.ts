@@ -20,3 +20,5 @@ export const getCourseStatus=(courseId:string)=>request<CourseStatus>(`/api/lear
 export const startCourseRetake=(courseId:string)=>request<{courseId:string;cycle:number;message:string}>(`/api/learning/courses/${encodeURIComponent(courseId)}/retake`,{});
 export const issueTrustedCertificate=(courseId:string)=>request<{eligible:true;certificate:CertificateRecord}>(`/api/certificates/courses/${encodeURIComponent(courseId)}/issue`,{});
 export const submitTrustedAssignment=(courseId:string,assignmentId:string,content:string)=>request<{submission:unknown;marking:unknown}>(`/api/assignments/courses/${encodeURIComponent(courseId)}/${encodeURIComponent(assignmentId)}/submit`,{content});
+
+export const loadTrustedCertificates=()=>request<{certificates:CertificateRecord[]}>(`/api/certificates/mine`).then(x=>x.certificates);

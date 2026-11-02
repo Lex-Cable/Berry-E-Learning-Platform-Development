@@ -56,7 +56,8 @@ import {
 import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, type AssignmentMarkingResult } from './utils/assignments';
 import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
 import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
-import { loadLearningCertificates, loadLearningProgress, saveLearningCertificate, saveLearningProgress } from './services/learningProgress';
+import { loadLearningCertificates, loadLearningProgress } from './services/learningProgress';
+import { getCourseStatus, issueTrustedCertificate, loadTrustedCertificates } from './services/assessments';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
@@ -233,6 +234,35 @@ export default function App() {
       });
     return () => { cancelled = true; };
   }, [learner.id, isLoggedIn, authStateReady]);
+
+  // Load trusted per-course progress and attempts from Admin-owned records.
+  useEffect(() => {
+    if (!authStateReady || !isLoggedIn || !learner.enrolledCourseIds.length) return;
+    let cancelled = false;
+    void Promise.all(learner.enrolledCourseIds.map((courseId) =>
+      getCourseStatus(courseId).then((status) => ({ courseId, status })).catch((error) => {
+        console.warn(`Could not load trusted status for ${courseId}:`, error);
+        return null;
+      }),
+    )).then((items) => {
+      if (cancelled) return;
+      const trusted = items.filter((item): item is NonNullable<typeof item> => item !== null);
+      setMasteryRecords((current) => {
+        const merged = { ...current };
+        trusted.forEach(({ status }) => Object.assign(merged, status.lessonProgress));
+        return merged;
+      });
+      setExamAttempts((current) => {
+        const merged = new Map(current.map((attempt) => [attempt.id, attempt]));
+        trusted.forEach(({ status }) => status.examAttempts.forEach((attempt) => merged.set(`trusted-${attempt.cycle}-${attempt.id}`, { ...attempt, id: `trusted-${attempt.cycle}-${attempt.id}` })));
+        return Array.from(merged.values());
+      });
+    });
+    void loadTrustedCertificates().then((items) => {
+      if (!cancelled) setCertificates((current) => [...items, ...current.filter((item) => !items.some((saved) => saved.credentialId === item.credentialId))]);
+    }).catch((error) => console.warn('Could not load verified certificates:', error));
+    return () => { cancelled = true; };
+  }, [learner.id, learner.enrolledCourseIds.join('|'), isLoggedIn, authStateReady]);
 
   // Curriculum coverage audit: surface real gaps in the console so maintainers can act.
   useEffect(() => {
@@ -484,13 +514,6 @@ export default function App() {
       ...prev,
       [record.lessonId]: record,
     }));
-    const uid = firebaseAuth?.currentUser?.uid;
-    if (uid) {
-      void saveLearningProgress(uid, record).catch((error) => {
-        console.warn('Could not sync lesson mastery to the cloud; the local record is retained:', error);
-      });
-    }
-
     if (record.isMastered) {
       const newNotif: AppNotification = {
         id: `notif-${Date.now()}`,
@@ -508,53 +531,26 @@ export default function App() {
   // Issue a Berry learning record when the full eligibility check passes: a genuine
   // passing exam attempt, complete lesson mastery, and no prior certificate. This is
   // not a government-issued credential.
-  const handleClaimCertificate = (course: Course, scorePercent: number) => {
-    const requiredScore = course.exam?.passingScorePercent ?? 75;
-    if (scorePercent < requiredScore) return;
-
-    const eligibility = certificateEligibilityForCourse(course, masteryRecords, examAttempts, certificates);
-    if (!eligibility.eligible) {
-      console.info('Certificate not issued yet; outstanding requirements:', eligibility.unmet);
-      return;
+  const handleClaimCertificate = async (course: Course, _scorePercent: number) => {
+    try {
+      const result = await issueTrustedCertificate(course.id);
+      setCertificates((prev) => [result.certificate, ...prev.filter((item) => item.credentialId !== result.certificate.credentialId)]);
+      const newNotif: AppNotification = {
+        id: `notif-certificate-${result.certificate.credentialId}`,
+        title: 'Verified Berry Certificate Issued 🎓',
+        message: `Your verified learning record for ${course.title} is ready.`,
+        stage: learner.stage,
+        type: 'certification',
+        date: 'Just now',
+        unread: true,
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Certificate eligibility could not be confirmed.';
+      console.info('Certificate not issued:', message);
+      setAuthNotice(message);
+      setTimeout(() => setAuthNotice(null), 9000);
     }
-
-    const newCert: CertificateRecord = {
-      id: `cert-${Date.now()}`,
-      credentialId: `BERRY-CBC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      courseId: course.id,
-      courseTitle: course.title,
-      recipientName: learner.name,
-      stage: learner.stage,
-      gradeLevel: course.gradeLevel,
-      curriculum: course.curriculum,
-      issuedDate: new Date().toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      }),
-      scorePercent: scorePercent,
-      authority: 'Berry Learning Platform',
-      verified: false,
-    };
-
-    setCertificates((prev) => [newCert, ...prev]);
-    const uid = firebaseAuth?.currentUser?.uid;
-    if (uid) {
-      void saveLearningCertificate(uid, newCert).catch((error) => {
-        console.warn('Could not sync certificate to the cloud; the local record is retained:', error);
-      });
-    }
-
-    const newNotif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      title: 'Berry Certificate Issued! 🎓',
-      message: `You scored ${scorePercent}% on the ${course.subject} Final Exam. Your Berry learning record has been issued.`,
-      stage: learner.stage,
-      type: 'certification',
-      date: 'Just now',
-      unread: true,
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
   };
 
   // Persist a completed exam attempt so results survive refreshes and devices, and
@@ -562,12 +558,6 @@ export default function App() {
   const handleExamAttemptSubmitted = (course: Course, attempt: Omit<ExamAttemptRecord, 'id'>) => {
     const record: ExamAttemptRecord = { ...attempt, id: `attempt-${Date.now()}` };
     setExamAttempts((prev) => [...prev, record]);
-    const uid = firebaseAuth?.currentUser?.uid;
-    if (uid) {
-      void saveExamAttempt(uid, record).catch((error) => {
-        console.warn('Exam attempt kept locally; cloud sync failed:', error);
-      });
-    }
     const attemptNotification: AppNotification = {
       id: `notif-exam-${record.id}`,
       title: record.passed ? 'Final exam passed! 🎉' : 'Final exam completed',

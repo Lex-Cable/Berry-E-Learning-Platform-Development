@@ -380,6 +380,18 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
   }
 });
 
+
+router.get('/api/certificates/mine', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!adminDb || !req.user?.uid) return res.status(503).json({ error: 'Certificate records are temporarily unavailable.' });
+    const snapshot = await adminDb.collection('users').doc(req.user.uid).collection('trustedCertificates').get();
+    return res.json({ certificates: snapshot.docs.map((document) => document.data()) });
+  } catch (error) {
+    console.error('Trusted certificate history retrieval failed:', error);
+    return res.status(500).json({ error: 'Unable to load verified certificates.' });
+  }
+});
+
 router.get('/api/certificates/verify/:credentialId', async (req, res) => {
   try {
     if (!adminDb) return res.status(503).json({ error: 'Certificate verification is temporarily unavailable.' });
