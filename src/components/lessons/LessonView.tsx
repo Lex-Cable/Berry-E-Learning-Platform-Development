@@ -186,7 +186,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setQuizSubmitting(true); setQuizError(null);
     try {
       const result = await submitLessonAssessment(course.id, lessonId, selectedAnswers);
-      setQuizScore(result.scorePercent); setQuizResults(result.results); setSubmittedQuiz(true);
+      setQuizScore(result.scorePercent); setQuizResults(result.results); setSubmittedQuiz(true); onSaveMastery(result.progress);
     } catch (error) {
       setQuizError(error instanceof Error ? error.message : 'Assessment submission failed.');
     } finally { setQuizSubmitting(false); }

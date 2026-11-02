@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt as secureRandomInt, randomUUID } from 'node:crypto';
 import express from 'express';
 import { adminDb } from './firebaseAdmin';
 import { requireFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMiddleware';
 import { COURSES } from './privateCurriculumData';
-import { buildCourseAssignments, markAssignmentSubmission } from '../src/utils/assignments';
+import { markAssignmentSubmission } from '../src/utils/assignments';
 import type { Course, LessonMasteryState, CertificateRecord } from '../src/types';
 
 const router = express.Router();
@@ -34,13 +34,7 @@ function shuffle<T>(values: T[]): T[] {
   }
   return result;
 }
-function randomInt(max: number): number {
-  const crypto = requireCrypto();
-  return crypto.randomInt(max);
-}
-function requireCrypto() {
-  return { randomInt: (max: number) => Math.floor(Math.random() * max) };
-}
+function randomInt(max: number): number { return secureRandomInt(max); }
 function scoreAnswers(questions: Array<{ id: string; correctIndex: number }>, answers: Record<string, number>) {
   const correct = questions.filter((question) => answers[question.id] === question.correctIndex).length;
   return Math.round((correct / Math.max(questions.length, 1)) * 100);
@@ -276,8 +270,9 @@ router.post('/api/assignments/courses/:courseId/:assignmentId/submit', requireFi
     const context = await getEnrolledCourse(req, res, req.params.courseId);
     if (!context) return;
     const { course, uid } = context;
-    const assignment = buildCourseAssignments([course]).find((item) => item.id === req.params.assignmentId);
-    if (!assignment) return res.status(404).json({ error: 'No approved rubric exists for this assignment.' });
+    const authoredAssignments = (course as Course & { assignments?: Array<{ id: string; rubric: Array<{ id: string; description: string; marks: number; keywords: string[] }> }> }).assignments || [];
+    const assignment = authoredAssignments.find((item) => item.id === req.params.assignmentId);
+    if (!assignment || !Array.isArray(assignment.rubric) || assignment.rubric.length === 0) return res.status(409).json({ error: 'This course has no approved assignment rubric yet. Your draft is not graded or stored as a trusted result.' });
     if (typeof req.body?.content !== 'string' || req.body.content.trim().length < 1 || req.body.content.length > 20000) {
       return res.status(400).json({ error: 'Provide assignment content between 1 and 20,000 characters.' });
     }
@@ -348,7 +343,8 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
     const completed = progress.docs.filter((document) => document.data().isCompleted === true).length;
     const mastered = progress.docs.filter((document) => document.data().isMastered === true).length;
     const courseMasteryPercent = Math.round(mastered / Math.max(totalLessons, 1) * 100);
-    const requiredAssignments = buildCourseAssignments([course]);
+    const requiredAssignments = (course as Course & { assignments?: Array<{ id: string; rubric?: unknown[] }> }).assignments || [];
+    if (requiredAssignments.length === 0) unmet.push('approved assignment and marking rubric not configured for this course');
     const assignmentRecords = new Map(assignments.docs.map((document) => [document.id, document.data()]));
     const unmet: string[] = [];
     if (completed !== totalLessons) unmet.push(`course completion (${completed}/${totalLessons} lessons)`);

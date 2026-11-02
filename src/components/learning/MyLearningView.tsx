@@ -28,7 +28,7 @@ import { isLessonUnlocked } from '../../utils/mastery';
 import { loadLastOpenedLesson, saveLastOpenedLesson } from '../../services/learningProgress';
 import { findFallbackLesson } from '../../utils/curriculumCoverage';
 import { firebaseAuth } from '../../lib/firebase';
-import { getCourseExam, submitCourseExam } from '../../services/assessments';
+import { getCourseExam, getCourseStatus, submitCourseExam, startCourseRetake } from '../../services/assessments';
 
 interface MyLearningViewProps {
   learner: LearnerProfile;
@@ -138,6 +138,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [examLoading, setExamLoading] = useState(false);
   const [examSubmitting, setExamSubmitting] = useState(false);
   const [examError, setExamError] = useState<string | null>(null);
+  const [retakeLoading, setRetakeLoading] = useState(false);
   const [examSubmitted, setExamSubmitted] = useState<boolean>(false);
   const [examScore, setExamScore] = useState<number>(0);
   const [examPassed, setExamPassed] = useState<boolean>(false);
@@ -187,8 +188,17 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     if (!takingExam || !activeCourse?.exam) return;
     let cancelled = false;
     setExamLoading(true); setExamError(null); setExamQuestions([]);
-    getCourseExam(activeCourse.id).then((questions) => { if (!cancelled) setExamQuestions(questions); })
-      .catch((error) => { if (!cancelled) setExamError(error instanceof Error ? error.message : 'Unable to load exam.'); })
+    getCourseStatus(activeCourse.id).then(async (status) => {
+      if (cancelled) return;
+      const existing = status.examAttempts?.[0];
+      if (existing) {
+        setExamScore(existing.scorePercent); setExamPassed(existing.passed); setExamSubmitted(true);
+        setExamError('This enrolment cycle already has a recorded final-exam attempt. Complete every lesson and start a full course retake to attempt again.');
+        return;
+      }
+      const exam = await getCourseExam(activeCourse.id);
+      if (!cancelled) setExamQuestions(exam.questions);
+    }).catch((error) => { if (!cancelled) setExamError(error instanceof Error ? error.message : 'Unable to load exam.'); })
       .finally(() => { if (!cancelled) setExamLoading(false); });
     return () => { cancelled = true; };
   }, [takingExam, activeCourse?.id]);
@@ -199,10 +209,22 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setExamSubmitting(true); setExamError(null);
     try {
       const result = await submitCourseExam(activeCourse.id, examAnswers);
-      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true);
+      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true); onExamAttemptSubmitted?.(activeCourse, result.attempt); onClaimCertificate?.(activeCourse, result.scorePercent);
     } catch (error) {
       setExamError(error instanceof Error ? error.message : 'Exam submission failed.');
     } finally { setExamSubmitting(false); }
+  };
+
+  const handleStartFullRetake = async () => {
+    if (!activeCourse || retakeLoading) return;
+    setRetakeLoading(true); setExamError(null);
+    try {
+      await startCourseRetake(activeCourse.id);
+      setExamSubmitted(false); setExamAnswers({}); setExamResults({}); setExamScore(0); setExamPassed(false);
+      setTakingExam(false);
+    } catch (error) {
+      setExamError(error instanceof Error ? error.message : 'Unable to start the full course retake.');
+    } finally { setRetakeLoading(false); }
   };
 
   const courseExamAttempts = examAttempts.filter(
@@ -333,10 +355,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
-                onClick={() => {
-                  setExamSubmitted(false);
-                  setExamAnswers({});
-                }}
+                onClick={handleStartFullRetake}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:bg-slate-50 shadow-xs"
               >
                 <RotateCcw size={14} />
