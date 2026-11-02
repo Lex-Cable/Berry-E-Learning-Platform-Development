@@ -72,7 +72,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         </div>
         <h2 className="text-2xl font-black text-slate-900 tracking-tight">Your Assignments</h2>
         <p className="text-xs text-slate-500 mt-1">
-          Submit written work for your enrolled courses. Submissions are marked against the rubric and can be revised.
+          Practice reflections use formative feedback. They are not yet approved certificate assessments; verified grading requires a course-authored rubric.
         </p>
       </div>
 

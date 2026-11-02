@@ -43,7 +43,7 @@ interface MyLearningViewProps {
   }) => void;
   examAttempts?: {
     id: string; courseId: string; examId: string; scorePercent: number; passed: boolean;
-    passingScorePercent: number; answers: Record<string, number>; submittedAt: string;
+    passingScorePercent: number; answers: Record<string, number>; submittedAt: string; trusted?: boolean; cycle?: number;
   }[];
   initialCourseId?: string | null;
   onClearInitialCourse?: () => void;
@@ -310,7 +310,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                     attempt.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {attempt.scorePercent}% • {new Date(attempt.submittedAt).toLocaleDateString()} {attempt.passed ? 'passed' : 'not passed'}
+                  {attempt.scorePercent}% • {new Date(attempt.submittedAt).toLocaleDateString()} • {attempt.trusted ? 'Verified' : 'Legacy / unverified'} {attempt.passed ? 'passed' : 'not passed'}
                 </span>
               ))}
             </div>
@@ -356,10 +356,11 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
                 onClick={handleStartFullRetake}
+                disabled={retakeLoading}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:bg-slate-50 shadow-xs"
               >
                 <RotateCcw size={14} />
-                <span>Retake Exam</span>
+                <span>{retakeLoading ? 'Preparing full retake…' : 'Start Full Course Retake'}</span>
               </button>
 
               {examPassed && onNavigateToCertificates && (

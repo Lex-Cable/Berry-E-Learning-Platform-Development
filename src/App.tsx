@@ -144,13 +144,17 @@ export default function App() {
     void loadLearningProgress(uid)
       .then((cloudRecords) => {
         if (cancelled) return;
-        setMasteryRecords((current) => ({ ...current, ...cloudRecords }));
+        const enrolledLessonIds = new Set(courses
+          .filter((course) => learner.enrolledCourseIds.includes(course.id))
+          .flatMap((course) => course.chapters.flatMap((chapter) => chapter.lessons.map((lesson) => lesson.id))));
+        const legacyOnly = Object.fromEntries(Object.entries(cloudRecords).filter(([lessonId]) => !enrolledLessonIds.has(lessonId)));
+        setMasteryRecords((current) => ({ ...current, ...legacyOnly }));
       })
       .catch((error) => {
         console.warn('Could not load cloud learning progress; keeping this device cache:', error);
       });
     return () => { cancelled = true; };
-  }, [learner.id, isLoggedIn, authStateReady]);
+  }, [learner.id, learner.enrolledCourseIds.join('|'), courses, isLoggedIn, authStateReady]);
 
 
   useEffect(() => {
@@ -254,7 +258,7 @@ export default function App() {
       });
       setExamAttempts((current) => {
         const merged = new Map(current.map((attempt) => [attempt.id, attempt]));
-        trusted.forEach(({ status }) => status.examAttempts.forEach((attempt) => merged.set(`trusted-${attempt.cycle}-${attempt.id}`, { ...attempt, id: `trusted-${attempt.cycle}-${attempt.id}` })));
+        trusted.forEach(({ status }) => status.examHistory.forEach((attempt) => merged.set(`trusted-${attempt.cycle}-${attempt.id}`, { ...attempt, id: `trusted-${attempt.cycle}-${attempt.id}`, trusted: true })));
         return Array.from(merged.values());
       });
     });
@@ -515,6 +519,9 @@ export default function App() {
       [record.lessonId]: record,
     }));
     if (record.isMastered) {
+      const course = courses.find((item) => item.chapters.some((chapter) => chapter.lessons.some((lesson) => lesson.id === record.lessonId)));
+      const passedTrustedAttempt = examAttempts.find((attempt) => attempt.courseId === course?.id && attempt.passed && attempt.trusted);
+      if (course && passedTrustedAttempt) void handleClaimCertificate(course, passedTrustedAttempt.scorePercent);
       const newNotif: AppNotification = {
         id: `notif-${Date.now()}`,
         title: 'Mastery Demonstrated! 🎉',

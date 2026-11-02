@@ -303,9 +303,13 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const { course, uid } = context;
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
-    const [cycleSnapshot, progress, attempts, assignments] = await Promise.all([
+    const [cycleSnapshot, progress, attempts, assignments, allCycles] = await Promise.all([
       ref.get(), ref.collection('lessonProgress').get(), ref.collection('examAttempts').get(), ref.collection('assignments').get(),
+      adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id).collection('cycles').get(),
     ]);
+    const historySnapshots = await Promise.all(allCycles.docs.map((cycleDocument) => cycleDocument.ref.collection('examAttempts').get()));
+    const examHistory = historySnapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data()))
+      .sort((left, right) => String(left.submittedAt || '').localeCompare(String(right.submittedAt || '')));
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
     const progressRecords = progress.docs.map((doc) => doc.data());
     const completedCount = progressRecords.filter((record) => record.isCompleted === true).length;
@@ -318,6 +322,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
       courseMasteryPercent,
       lessonProgress: Object.fromEntries(progressRecords.map((record) => [record.lessonId, record])),
       examAttempts: attempts.docs.map((doc) => doc.data()),
+      examHistory,
       assignments: Object.fromEntries(assignments.docs.map((doc) => [doc.id, doc.data()])),
       examAttempted: cycleSnapshot.data()?.examAttempted === true,
       examPassed: cycleSnapshot.data()?.examPassed === true,

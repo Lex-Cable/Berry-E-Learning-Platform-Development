@@ -182,6 +182,7 @@ export async function loadExamAttempts(uid: string): Promise<import('../types').
         passingScorePercent: data.passingScorePercent,
         answers: data.answers as Record<string, number>,
         submittedAt: data.submittedAt,
+        trusted: data.trusted === true,
       } satisfies import('../types').ExamAttemptRecord;
     })
     .filter((attempt): attempt is import('../types').ExamAttemptRecord => attempt !== null);

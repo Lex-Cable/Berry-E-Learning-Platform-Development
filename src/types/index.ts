@@ -214,6 +214,8 @@ export interface ExamAttemptRecord {
   passingScorePercent: number;
   answers: Record<string, number>;
   submittedAt: string;
+  trusted?: boolean;
+  cycle?: number;
 }
 
 export interface AppNotification {
