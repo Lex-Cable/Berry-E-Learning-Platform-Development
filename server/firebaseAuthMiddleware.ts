@@ -38,7 +38,9 @@ export async function requireFirebaseAuth(
   }
 
   try {
-    const decodedToken = await adminAuth.verifyIdToken(idToken);
+    // Check revocation as well as signature, issuer, audience and expiry so a signed-out
+    // or administratively disabled account cannot keep using protected Berry endpoints.
+    const decodedToken = await adminAuth.verifyIdToken(idToken, true);
 
     req.user = {
       uid: decodedToken.uid,
