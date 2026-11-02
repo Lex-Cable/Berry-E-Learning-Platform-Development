@@ -67,6 +67,7 @@ export type ActivityType = 'matching' | 'ordering' | 'fill-blank' | 'interactive
 export interface MatchingPair {
   id: string;
   left: string;
+  right?: string;
 }
 
 export interface InteractiveActivity {
@@ -77,9 +78,10 @@ export interface InteractiveActivity {
   data: {
     matchingPairs?: MatchingPair[];
     matchingOptions?: string[];
-    orderingItems?: { id: string; text: string }[];
+    orderingItems?: { id: string; text: string; correctOrder: number }[];
     fillBlankTemplate?: string;
-    choices?: { id: string; label: string }[];
+    blankSolutions?: string[];
+    choices?: { id: string; label: string; isCorrect: boolean; feedback: string }[];
   };
 }
 
@@ -87,6 +89,9 @@ export interface QuizQuestion {
   id: string;
   question: string;
   options: string[];
+  correctIndex: number;
+  explanation: string;
+  misconceptions: Record<number, string>; // explanation for why that distractor is wrong
   learningObjective: string;
 }
 
@@ -122,6 +127,8 @@ export interface ExamQuestion {
   id: string;
   question: string;
   options: string[];
+  correctIndex: number;
+  explanation: string;
   topic: string;
 }
 
