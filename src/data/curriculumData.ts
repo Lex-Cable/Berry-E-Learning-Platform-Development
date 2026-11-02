@@ -8,7 +8,7 @@ import {
   LearnerProfile,
   CertificateRecord,
   AiConversation,
-} from '../src/types';
+} from '../types';
 
 export const INITIAL_LEARNER: LearnerProfile = {
   id: 'learner-1',
