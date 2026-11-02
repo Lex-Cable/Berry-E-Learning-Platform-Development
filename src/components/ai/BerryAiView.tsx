@@ -295,14 +295,16 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
     const contextMessages = retryIndex >= 0 ? activeConversation.messages.slice(0, retryIndex) : activeConversation.messages;
 
     try {
+      const currentUser = firebaseAuth?.currentUser;
+      if (!currentUser || currentUser.uid !== learner.id) throw new Error('Please sign in again to use Berry AI securely.');
+      const idToken = await currentUser.getIdToken();
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         signal: controller.signal,
         body: JSON.stringify({
           message: textToSend,
           stream: true,
-          stage: learner.stage,
           courseTitle: activeCourse?.title,
           currentTopic: activeCourse?.chapters[0]?.title,
           history: contextMessages
