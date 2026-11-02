@@ -571,6 +571,7 @@ export default function App() {
       actionUrl: 'my-learning',
     };
     setNotifications((prev) => [attemptNotification, ...prev]);
+    const uid = firebaseAuth?.currentUser?.uid;
     if (uid) void saveLearnerNotification(uid, attemptNotification).catch(() => undefined);
   };
 
