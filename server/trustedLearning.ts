@@ -4,6 +4,7 @@ import { adminDb } from './firebaseAdmin';
 import { requireFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMiddleware';
 import { COURSES } from './privateCurriculumData';
 import { markAssignmentSubmission } from '../src/utils/assignments';
+import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
 
 const router = express.Router();
@@ -141,10 +142,8 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
       return { ...progress };
     });
     const allProgress = await cycleRef(uid, course.id, cycle).collection('lessonProgress').get();
-    const completedCount = allProgress.docs.filter((document) => document.data().isCompleted === true).length;
-    const masteredCount = allProgress.docs.filter((document) => document.data().isMastered === true).length;
-    const courseMasteryPercent = Math.round((masteredCount / Math.max(course.chapters.reduce((n, chapter) => n + chapter.lessons.length, 0), 1)) * 100);
-    const courseCompleted = completedCount === course.chapters.reduce((n, chapter) => n + chapter.lessons.length, 0);
+    const summary = summarizeCourseProgress(allProgress.docs.map((document) => document.data()), course.chapters.reduce((n, chapter) => n + chapter.lessons.length, 0));
+    const { courseMasteryPercent, courseCompleted } = summary;
     await cycleRef(uid, course.id, cycle).set({ courseMasteryPercent, courseCompleted, updatedAt: now }, { merge: true });
     return res.json({ scorePercent, results, progress: result, courseMasteryPercent, courseCompleted, cycle });
   } catch (error) {
@@ -204,7 +203,7 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
     const passingScorePercent = Math.max(PASS_MARK, course.exam.passingScorePercent || PASS_MARK);
-    const passed = scorePercent >= passingScorePercent;
+    const passed = isPassingExamScore(scorePercent, passingScorePercent);
     const results = Object.fromEntries(questions.map((question) => [question.id, {
       correct: answers[question.id] === question.correctIndex,
       correctAnswerIndex: question.correctIndex,
@@ -250,8 +249,8 @@ router.post('/api/learning/courses/:courseId/retake', requireFirebaseAuth, async
       const currentCycle = Number(state.data()?.activeCycle || 1);
       const currentRef = cycleRef(uid, course.id, currentCycle);
       const progress = await transaction.get(currentRef.collection('lessonProgress'));
-      const completed = progress.docs.filter((document) => document.data().isCompleted === true).length;
-      if (completed !== totalLessons) throw new Error('COURSE_NOT_COMPLETED');
+      const progressRecords = progress.docs.map((document) => document.data());
+      if (!canStartFullRetake(progressRecords, totalLessons)) throw new Error('COURSE_NOT_COMPLETED');
       const next = currentCycle + 1;
       transaction.set(stateRef, { courseId: course.id, activeCycle: next, updatedAt: new Date().toISOString() }, { merge: true });
       transaction.create(cycleRef(uid, course.id, next), { cycle: next, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
@@ -312,10 +311,8 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
       .sort((left, right) => String(left.submittedAt || '').localeCompare(String(right.submittedAt || '')));
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
     const progressRecords = progress.docs.map((doc) => doc.data());
-    const completedCount = progressRecords.filter((record) => record.isCompleted === true).length;
-    const masteredCount = progressRecords.filter((record) => record.isMastered === true).length;
-    const courseMasteryPercent = Math.round(masteredCount / Math.max(totalLessons, 1) * 100);
-    const courseCompleted = completedCount === totalLessons;
+    const summary = summarizeCourseProgress(progressRecords, totalLessons);
+    const { courseMasteryPercent, courseCompleted } = summary;
     return res.json({
       cycle,
       courseCompleted,
@@ -345,21 +342,17 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
       adminDb!.collection('users').doc(uid).collection('trustedCertificates').where('courseId', '==', course.id).get(),
     ]);
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
-    const completed = progress.docs.filter((document) => document.data().isCompleted === true).length;
-    const mastered = progress.docs.filter((document) => document.data().isMastered === true).length;
-    const courseMasteryPercent = Math.round(mastered / Math.max(totalLessons, 1) * 100);
+    const progressRecords = progress.docs.map((document) => document.data());
     const requiredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
-    const assignmentRecords = new Map(assignments.docs.map((document) => [document.id, document.data()]));
-    const unmet: string[] = [];
-    if (requiredAssignments.length === 0) unmet.push('approved assignment and marking rubric not configured for this course');
-    if (completed !== totalLessons) unmet.push(`course completion (${completed}/${totalLessons} lessons)`);
-    if (courseMasteryPercent < PASS_MARK) unmet.push(`course mastery (${courseMasteryPercent}% / ${PASS_MARK}%)`);
-    if (cycleSnapshot.data()?.examPassed !== true) unmet.push('final exam pass (75% or higher)');
-    for (const assignment of requiredAssignments) {
-      const record = assignmentRecords.get(assignment.id);
-      if (!record || record.status !== 'graded' || Number(record.scorePercent) < 50) unmet.push(`assignment: ${assignment.title}`);
-    }
-    if (!previousCertificates.empty) unmet.push('certificate already issued for this course');
+    const assignmentRecords = assignments.docs.map((document) => document.data());
+    const unmet = certificateUnmetRequirements({
+      totalLessons,
+      progress: progressRecords,
+      examPassed: cycleSnapshot.data()?.examPassed === true,
+      assignments: assignmentRecords,
+      approvedAssignmentCount: requiredAssignments.length,
+      certificateAlreadyIssued: !previousCertificates.empty,
+    });
     if (unmet.length) return res.status(409).json({ eligible: false, unmet, cycle, courseMasteryPercent });
     const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
     const certificate: CertificateRecord & { uid: string; trusted: true; cycle: number } = {
