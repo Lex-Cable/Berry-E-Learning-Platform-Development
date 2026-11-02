@@ -161,31 +161,31 @@ export async function saveAssignmentMarking(
 
 export async function loadExamAttempts(uid: string): Promise<import('../types').ExamAttemptRecord[]> {
   const snapshot = await getDocs(collection(requireDatabase(), 'users', uid, 'examAttempts'));
-  return snapshot.docs
-    .map((entry) => {
-      const data = entry.data();
-      if (
-        typeof data.courseId !== 'string' ||
-        typeof data.examId !== 'string' ||
-        typeof data.scorePercent !== 'number' ||
-        typeof data.passed !== 'boolean' ||
-        typeof data.passingScorePercent !== 'number' ||
-        typeof data.submittedAt !== 'string' ||
-        typeof data.answers !== 'object' || data.answers === null
-      ) return null;
-      return {
-        id: entry.id,
-        courseId: data.courseId,
-        examId: data.examId,
-        scorePercent: data.scorePercent,
-        passed: data.passed,
-        passingScorePercent: data.passingScorePercent,
-        answers: data.answers as Record<string, number>,
-        submittedAt: data.submittedAt,
-        trusted: data.trusted === true,
-      } satisfies import('../types').ExamAttemptRecord;
-    })
-    .filter((attempt): attempt is import('../types').ExamAttemptRecord => attempt !== null);
+  const attempts: import('../types').ExamAttemptRecord[] = [];
+  for (const entry of snapshot.docs) {
+    const data = entry.data();
+    if (
+      typeof data.courseId !== 'string' ||
+      typeof data.examId !== 'string' ||
+      typeof data.scorePercent !== 'number' ||
+      typeof data.passed !== 'boolean' ||
+      typeof data.passingScorePercent !== 'number' ||
+      typeof data.submittedAt !== 'string' ||
+      typeof data.answers !== 'object' || data.answers === null
+    ) continue;
+    attempts.push({
+      id: entry.id,
+      courseId: data.courseId,
+      examId: data.examId,
+      scorePercent: data.scorePercent,
+      passed: data.passed,
+      passingScorePercent: data.passingScorePercent,
+      answers: data.answers as Record<string, number>,
+      submittedAt: data.submittedAt,
+      trusted: data.trusted === true,
+    });
+  }
+  return attempts;
 }
 
 export async function saveExamAttempt(uid: string, attempt: import('../types').ExamAttemptRecord): Promise<void> {
