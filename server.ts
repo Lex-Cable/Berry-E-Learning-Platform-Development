@@ -315,25 +315,24 @@ app.post('/api/ai/summarize-transcript', async (req, res) => {
   try {
     const { transcript, title } = req.body;
     if (!adminDb) return res.status(503).json({ error: 'Secure learner services are unavailable.' });
-    const stage = await getAuthenticatedLearnerStage(req);
-    if (!stage) return res.status(403).json({ error: 'A valid Berry learner profile is required.' });
+    const trustedStage = (req as AuthenticatedRequest).user?.learnerStage;
+    if (!trustedStage || !['advance', 'university', 'professionals'].includes(trustedStage)) {
+      return res.status(403).json({ error: 'Live transcription is available only to accounts provisioned for Berry Advance, University, or Professionals.' });
+    }
 
     if (typeof transcript !== 'string' || transcript.trim().length === 0 || transcript.length > 400000) {
       return res.status(400).json({ error: 'No transcript text provided' });
     }
 
-    if (!['advance', 'university', 'professionals'].includes(stage)) {
-      return res.status(403).json({ error: 'Live transcription analysis is restricted to University and Professional stages.' });
-    }
-
     if (aiClient) {
-      const prompt = `You are Berry Academic Assistant. Provide a structured, highly useful lecture summary of the following lecture/meeting transcript for a ${stage} learner.
+      const safeTitle = typeof title === 'string' ? title.slice(0, 120) : 'Lecture';
+      const prompt = `You are Berry Academic Assistant. Provide a structured, highly useful lecture summary of the following lecture/meeting transcript for a ${trustedStage} learner.
 Include:
 1. Executive Summary (2-3 sentences)
 2. Key Takeaways & Core Concepts (bullet points)
 3. Action Items & Follow-up Study Questions
 
-Title: ${title}
+Title: ${safeTitle}
 Transcript:
 ${transcript}`;
 
