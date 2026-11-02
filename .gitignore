@@ -7,3 +7,7 @@ coverage/
 .env
 .env*
 !.env.example
+# Firebase Admin service-account credentials - NEVER COMMIT
+*service-account*.json
+*serviceAccount*.json
+*firebase-adminsdk*.json
