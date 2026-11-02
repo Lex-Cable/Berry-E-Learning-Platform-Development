@@ -192,7 +192,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     } finally { setQuizSubmitting(false); }
   };
 
-  const currentEval = evaluateMastery(quizScore, currentLesson?.masteryThresholdPercent || 80);
+  const currentEval = evaluateMastery(quizScore, 75);
 
   return (
     <div className="space-y-6 pb-16 max-w-5xl mx-auto">
