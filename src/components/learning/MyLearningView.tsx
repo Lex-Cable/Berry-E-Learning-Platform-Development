@@ -28,6 +28,7 @@ import { isLessonUnlocked } from '../../utils/mastery';
 import { loadLastOpenedLesson, saveLastOpenedLesson } from '../../services/learningProgress';
 import { findFallbackLesson } from '../../utils/curriculumCoverage';
 import { firebaseAuth } from '../../lib/firebase';
+import { getCourseExam, submitCourseExam } from '../../services/assessments';
 
 interface MyLearningViewProps {
   learner: LearnerProfile;
@@ -132,6 +133,11 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
 
   // Exam state
   const [examAnswers, setExamAnswers] = useState<Record<string, number>>({});
+  const [examQuestions, setExamQuestions] = useState<import('../../types').ExamQuestion[]>([]);
+  const [examResults, setExamResults] = useState<Record<string, { correct: boolean; correctAnswerIndex?: number; explanation?: string }>>({});
+  const [examLoading, setExamLoading] = useState(false);
+  const [examSubmitting, setExamSubmitting] = useState(false);
+  const [examError, setExamError] = useState<string | null>(null);
   const [examSubmitted, setExamSubmitted] = useState<boolean>(false);
   const [examScore, setExamScore] = useState<number>(0);
   const [examPassed, setExamPassed] = useState<boolean>(false);
@@ -177,38 +183,26 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setExamSubmitted(false);
     setExamAnswers({});
   };
+  useEffect(() => {
+    if (!takingExam || !activeCourse?.exam) return;
+    let cancelled = false;
+    setExamLoading(true); setExamError(null); setExamQuestions([]);
+    getCourseExam(activeCourse.id).then((questions) => { if (!cancelled) setExamQuestions(questions); })
+      .catch((error) => { if (!cancelled) setExamError(error instanceof Error ? error.message : 'Unable to load exam.'); })
+      .finally(() => { if (!cancelled) setExamLoading(false); });
+    return () => { cancelled = true; };
+  }, [takingExam, activeCourse?.id]);
 
-  const handleSubmitExam = () => {
-    if (!activeCourse || !activeCourse.exam) return;
-    const questions = activeCourse.exam.questions;
-    let correct = 0;
-    questions.forEach((q) => {
-      if (examAnswers[q.id] === q.correctIndex) {
-        correct++;
-      }
-    });
-    const calculatedScore = Math.round((correct / questions.length) * 100);
-    const passingScore = activeCourse.exam.passingScorePercent || 75;
-    const passed = calculatedScore >= passingScore;
 
-    setExamScore(calculatedScore);
-    setExamPassed(passed);
-    setExamSubmitted(true);
-
-    // Persist the attempt so results and eligibility history survive refresh and devices.
-    onExamAttemptSubmitted?.(activeCourse, {
-      courseId: activeCourse.id,
-      examId: activeCourse.exam.id,
-      scorePercent: calculatedScore,
-      passed,
-      passingScorePercent: passingScore,
-      answers: { ...examAnswers },
-      submittedAt: new Date().toISOString(),
-    });
-
-    if (passed && onClaimCertificate) {
-      onClaimCertificate(activeCourse, calculatedScore);
-    }
+  const handleSubmitExam = async () => {
+    if (!activeCourse?.exam || examSubmitting || examLoading || !examQuestions.length) return;
+    setExamSubmitting(true); setExamError(null);
+    try {
+      const result = await submitCourseExam(activeCourse.id, examAnswers);
+      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true);
+    } catch (error) {
+      setExamError(error instanceof Error ? error.message : 'Exam submission failed.');
+    } finally { setExamSubmitting(false); }
   };
 
   const courseExamAttempts = examAttempts.filter(
@@ -364,9 +358,10 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
 
         {/* Exam Questions */}
         <div className="space-y-4">
-          {exam.questions.map((q, idx) => {
+          {examLoading ? <p>Loading secure exam questions…</p> : examError && !examQuestions.length ? <p role="alert">{examError}</p> : examQuestions.map((q, idx) => {
             const selectedOpt = examAnswers[q.id];
-            const isCorrect = selectedOpt === q.correctIndex;
+            const result = examResults[q.id];
+            const isCorrect = result?.correct === true;
 
             return (
               <div
@@ -413,7 +408,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                             ? 'bg-purple-50 border-purple-400 text-purple-950 font-bold'
                             : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                         } ${
-                          examSubmitted && optIdx === q.correctIndex
+                          examSubmitted && result?.correctAnswerIndex === optIdx
                             ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold'
                             : ''
                         }`}
@@ -428,7 +423,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                 {examSubmitted && (
                   <div className="p-3 bg-slate-50 rounded-2xl text-xs text-slate-600 border border-slate-200/80">
                     <span className="font-bold text-slate-800">Explanation: </span>
-                    {q.explanation}
+                    {result?.explanation || 'Review the related lesson notes.'}
                   </div>
                 )}
               </div>
@@ -436,6 +431,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           })}
         </div>
 
+        {examError && <p role="alert">{examError}</p>}
         {/* Submit Bar */}
         {!examSubmitted && (
           <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -444,10 +440,10 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             </span>
             <button
               onClick={handleSubmitExam}
-              disabled={Object.keys(examAnswers).length < exam.questions.length}
+              disabled={examSubmitting || examLoading || Object.keys(examAnswers).length < examQuestions.length || !examQuestions.length}
               className="px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all active:scale-95"
             >
-              Submit & Grade Exam
+              {examSubmitting ? 'Submitting securely…' : 'Submit & Grade Exam'}
             </button>
           </div>
         )}

@@ -20,7 +20,8 @@ import {
   Lock,
 } from 'lucide-react';
 import { Course, Lesson, QuizQuestion, LessonMasteryState } from '../../types';
-import { calculateScore, evaluateMastery, getMisconceptionExplanation } from '../../utils/mastery';
+import { evaluateMastery } from '../../utils/mastery';
+import { getLessonAssessment, submitLessonAssessment } from '../../services/assessments';
 import { loadLessonNotes, saveLessonNotes } from '../../services/learningProgress';
 import { firebaseAuth } from '../../lib/firebase';
 
@@ -105,6 +106,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizResults, setQuizResults] = useState<Record<string, { correct: boolean; feedback?: string; correctAnswerIndex?: number }>>({});
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [submittedQuiz, setSubmittedQuiz] = useState(false);
   const [quizScore, setQuizScore] = useState<number>(masteryRecord?.scorePercent || 0);
 
@@ -119,6 +125,15 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setSubmittedQuiz(false);
     setQuizScore(masteryRecord?.scorePercent || 0);
   }, [lessonId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setQuizLoading(true); setQuizError(null); setQuizQuestions([]);
+    getLessonAssessment(course.id, lessonId).then((questions) => { if (!cancelled) setQuizQuestions(questions); })
+      .catch((error) => { if (!cancelled) setQuizError(error instanceof Error ? error.message : 'Unable to load assessment.'); })
+      .finally(() => { if (!cancelled) setQuizLoading(false); });
+    return () => { cancelled = true; };
+  }, [course.id, lessonId]);
 
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
@@ -167,38 +182,16 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setSelectedLeft(null);
   };
 
-  // Submit Quiz & Evaluate Mastery
-  const handleSubmitQuiz = () => {
-    if (!currentLesson) return;
-    let correctCount = 0;
-    const identifiedMisconceptions: string[] = [];
-
-    currentLesson.quizQuestions.forEach((q) => {
-      const selected = selectedAnswers[q.id];
-      if (selected === q.correctIndex) {
-        correctCount += 1;
-      } else if (selected !== undefined) {
-        const feedbackObj = getMisconceptionExplanation(q, selected);
-        identifiedMisconceptions.push(feedbackObj.feedback);
-      }
-    });
-
-    const score = calculateScore(correctCount, currentLesson.quizQuestions.length);
-    setQuizScore(score);
-    setSubmittedQuiz(true);
-
-    const evaluation = evaluateMastery(score, currentLesson.masteryThresholdPercent);
-
-    onSaveMastery({
-      lessonId: currentLesson.id,
-      isCompleted: true,
-      isMastered: evaluation.isMastered,
-      scorePercent: score,
-      attemptsCount: (masteryRecord?.attemptsCount || 0) + 1,
-      lastAttemptDate: new Date().toISOString(),
-      identifiedMisconceptions,
-      remedialActivitiesCompleted: false,
-    });
+  // Assessment scores and answer keys are evaluated by the authenticated server.
+  const handleSubmitQuiz = async () => {
+    if (!currentLesson || quizSubmitting || quizLoading || !quizQuestions.length) return;
+    setQuizSubmitting(true); setQuizError(null);
+    try {
+      const result = await submitLessonAssessment(course.id, lessonId, selectedAnswers);
+      setQuizScore(result.scorePercent); setQuizResults(result.results); setSubmittedQuiz(true);
+    } catch (error) {
+      setQuizError(error instanceof Error ? error.message : 'Assessment submission failed.');
+    } finally { setQuizSubmitting(false); }
   };
 
   const currentEval = evaluateMastery(quizScore, currentLesson?.masteryThresholdPercent || 80);
@@ -516,7 +509,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                   {act.data.choices.map((choice) => (
                     <button
                       key={choice.id}
-                      onClick={() => alert(choice.feedback)}
+                      onClick={() => setMatchingFeedback('Option selected. Continue to the assessment to check your understanding.')}
                       className="w-full text-left p-3 rounded-xl border border-slate-200 bg-white hover:bg-purple-50 hover:border-purple-300 text-xs font-semibold text-slate-800 transition-colors"
                     >
                       {choice.label}
@@ -565,11 +558,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
 
           {/* Quiz Questions */}
           <div className="space-y-6">
-            {currentLesson?.quizQuestions.map((q, qIndex) => {
+            {quizLoading ? <p>Loading secure assessment questions…</p> : quizError && !quizQuestions.length ? <p role="alert">{quizError}</p> : quizQuestions.map((q, qIndex) => {
               const selected = selectedAnswers[q.id];
               const isSubmitted = submittedQuiz;
-              const isCorrect = selected === q.correctIndex;
-              const misconceptionInfo = selected !== undefined ? getMisconceptionExplanation(q, selected) : null;
+              const result = quizResults[q.id];
+              const isCorrect = result?.correct === true;
 
               return (
                 <div
@@ -607,7 +600,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                               ? 'bg-purple-100 border-purple-500 text-purple-900 font-bold ring-2 ring-purple-300'
                               : 'bg-white border-slate-200 text-slate-800 hover:border-purple-300'
                           } ${
-                            isSubmitted && optIndex === q.correctIndex
+                            isSubmitted && result?.correctAnswerIndex === optIndex
                               ? '!bg-emerald-100 !border-emerald-500 !text-emerald-900 font-bold'
                               : ''
                           }`}
@@ -622,7 +615,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                   </div>
 
                   {/* Targeted Misconception Remediation Feedback */}
-                  {isSubmitted && misconceptionInfo && (
+                  {isSubmitted && result && (
                     <div
                       className={`mt-4 p-4 rounded-xl text-xs leading-relaxed border ${
                         isCorrect
@@ -643,7 +636,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                           </>
                         )}
                       </div>
-                      <p>{misconceptionInfo.feedback}</p>
+                      <p>{result.feedback || 'Review this topic and try again.'}</p>
                     </div>
                   )}
                 </div>
@@ -651,14 +644,15 @@ export const LessonView: React.FC<LessonViewProps> = ({
             })}
           </div>
 
+          {quizError && <p role="alert">{quizError}</p>}
           {/* Assessment Action / Score Display */}
           {!submittedQuiz ? (
             <button
               onClick={handleSubmitQuiz}
-              disabled={Object.keys(selectedAnswers).length < (currentLesson?.quizQuestions.length || 1)}
+              disabled={quizSubmitting || quizLoading || Object.keys(selectedAnswers).length < quizQuestions.length || !quizQuestions.length}
               className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white font-bold text-sm shadow transition-all active:scale-95"
             >
-              Submit Assessment for Mastery Evaluation
+              {quizSubmitting ? 'Submitting securely…' : 'Submit Assessment for Evaluation'}
             </button>
           ) : (
             <div className="p-6 rounded-2xl bg-slate-900 text-white space-y-4">
