@@ -48,6 +48,8 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   // Recognition ref
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
+  const shouldContinueRef = useRef(false);
+  const pausedRef = useRef(false);
 
   useEffect(() => {
     // Timer during recording
@@ -92,12 +94,81 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
     );
   }
 
-  // Speech recognition initialization with browser Web Speech API
+  // Browser speech recognition is session-based: browsers may end a continuous
+  // session after silence. Restart it while the learner is still recording.
+  const startRecognition = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition || !shouldContinueRef.current || pausedRef.current) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const spokenText = String(event.results[i][0]?.transcript || '').trim();
+        if (!spokenText) continue;
+        if (event.results[i].isFinal) {
+          setCurrentText((previous) => previous ? `${previous} ${spokenText}` : spokenText);
+        } else {
+          interimTranscript += `${interimTranscript ? ' ' : ''}${spokenText}`;
+        }
+      }
+      setInterimText(interimTranscript.trim());
+    };
+
+    recognition.onerror = (event: any) => {
+      const error = String(event.error || 'unknown');
+      console.warn('Speech recognition status:', error);
+      if (error === 'no-speech' || error === 'aborted') return;
+      if (['not-allowed', 'service-not-allowed', 'audio-capture', 'network'].includes(error)) {
+        shouldContinueRef.current = false;
+        setRecordingError(
+          error === 'not-allowed' || error === 'service-not-allowed'
+            ? 'Microphone access was denied. Allow microphone access in your browser settings and try again.'
+            : error === 'audio-capture'
+              ? 'No microphone was detected. Connect a microphone and try again.'
+              : 'The speech recognition service is unavailable. Check your connection and try again.'
+        );
+        setIsRecording(false);
+        setIsPaused(false);
+      }
+    };
+
+    recognition.onend = () => {
+      setInterimText('');
+      if (recognitionRef.current === recognition && shouldContinueRef.current && !pausedRef.current) {
+        // Some browsers close a continuous session after a quiet period. Restart
+        // only after onend, avoiding InvalidStateError from overlapping sessions.
+        window.setTimeout(() => {
+          if (shouldContinueRef.current && !pausedRef.current && recognitionRef.current === recognition) {
+            try {
+              recognition.start();
+            } catch {
+              // A browser may have permanently closed this recognition instance.
+              // The learner can still stop/save the captured transcript safely.
+              setRecordingError('Speech recognition paused unexpectedly. Press Start Transcription to begin a new session.');
+              shouldContinueRef.current = false;
+              setIsRecording(false);
+            }
+          }
+        }, 250);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
   const startRecording = () => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     setRecordingError(null);
+    setCurrentText('');
     setInterimText('');
     setRecordingSeconds(0);
     setAiSummary(null);
@@ -111,49 +182,13 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
     }
 
     try {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-
-      recognition.onresult = (event: any) => {
-        let interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const text = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            setCurrentText((prev) => (prev ? prev + ' ' + text : text));
-          } else {
-            interimTranscript += text;
-          }
-        }
-        setInterimText(interimTranscript.trim());
-      };
-
-      recognition.onerror = (event: any) => {
-        const error = String(event.error || 'unknown');
-        console.warn('Speech recognition status:', error);
-        if (['not-allowed', 'service-not-allowed', 'audio-capture', 'network'].includes(error)) {
-          setRecordingError(
-            error === 'not-allowed' || error === 'service-not-allowed'
-              ? 'Microphone access was denied. Allow microphone access in your browser settings and try again.'
-              : error === 'audio-capture'
-                ? 'No microphone was detected. Connect a microphone and try again.'
-                : 'The speech recognition service is unavailable. Check your connection and try again.'
-          );
-          setIsRecording(false);
-          setIsPaused(false);
-        }
-      };
-
-      recognition.onend = () => {
-        setInterimText('');
-      };
-
-      recognition.start();
-      recognitionRef.current = recognition;
+      shouldContinueRef.current = true;
+      pausedRef.current = false;
+      startRecognition();
       setIsRecording(true);
       setIsPaused(false);
     } catch (error) {
+      shouldContinueRef.current = false;
       console.warn('Could not start speech recognition', error);
       setRecordingError('Could not start speech recognition. Check microphone permissions and try again.');
       setIsRecording(false);
@@ -161,28 +196,44 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   };
 
   const pauseRecording = () => {
-    setIsPaused(!isPaused);
-    if (recognitionRef.current) {
+    const nextPaused = !isPaused;
+    pausedRef.current = nextPaused;
+    setIsPaused(nextPaused);
+    if (nextPaused && recognitionRef.current) {
       try {
-        if (!isPaused) recognitionRef.current.stop();
-        else recognitionRef.current.start();
-      } catch (err) {}
+        recognitionRef.current.stop();
+      } catch {
+        // Recognition may already have stopped.
+      }
+    } else if (!nextPaused) {
+      try {
+        startRecognition();
+      } catch (error) {
+        setRecordingError('Could not resume speech recognition. Check microphone permissions and try again.');
+        setIsRecording(false);
+        shouldContinueRef.current = false;
+      }
     }
   };
 
   const stopRecording = () => {
+    shouldContinueRef.current = false;
+    pausedRef.current = false;
     setIsRecording(false);
     setIsPaused(false);
     setInterimText('');
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch (err) {}
+      } catch {
+        // Recognition may already have stopped.
+      }
     }
   };
 
   const handleSaveTranscript = () => {
-    if (!currentText.trim()) return;
+    const transcriptToSave = [currentText.trim(), interimText.trim()].filter(Boolean).join(' ');
+    if (!transcriptToSave) return;
 
     const newSession: LiveTranscriptSession = {
       id: `trans-${Date.now()}`,
@@ -191,12 +242,12 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
       stage: stage as 'university' | 'professionals',
       date: new Date().toISOString().split('T')[0],
       durationSeconds: recordingSeconds,
-      transcript: currentText,
+      transcript: transcriptToSave,
       summary: aiSummary || undefined,
     };
 
     onSaveSession(newSession);
-    alert('Lecture transcript saved to your historical sessions!');
+    setRecordingError('Transcript added to your saved sessions. Cloud synchronization may take a moment.');
   };
 
   const handleCopyTranscript = () => {
@@ -227,7 +278,7 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
       const res = await fetch('/api/ai/summarize-transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ transcript: currentText, title: sessionTitle }),
+        body: JSON.stringify({ transcript: [currentText.trim(), interimText.trim()].filter(Boolean).join(' '), title: sessionTitle }),
       });
 
       if (!res.ok) {
