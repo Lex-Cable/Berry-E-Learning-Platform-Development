@@ -150,6 +150,28 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   const activeConversation =
     conversations.find((c) => c.id === activeConvId) || conversations[0];
 
+  // A brand-new account (or an empty history after deleting local data) still
+  // needs a real thread so the learner can send the first message immediately.
+  useEffect(() => {
+    if (loadedForLearner !== learner.id || persistenceMode === null || conversations.length > 0) return;
+    const id = `conv-${Date.now()}`;
+    const now = new Date().toISOString();
+    const welcome: AiConversation = {
+      id,
+      title: 'New Conversation',
+      createdAt: now,
+      updatedAt: now,
+      messages: [{
+        id: `welcome-${id}`,
+        sender: 'assistant',
+        text: `Hello ${learner.name}! I am Berry AI, your Socratic study companion for **${activeCourse?.title || 'your curriculum'}**.\\n\\nWhat would you like to learn today?`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }],
+    };
+    setConversations([welcome]);
+    setActiveConvId(id);
+  }, [loadedForLearner, learner.id, learner.name, persistenceMode, conversations.length, activeCourse?.title]);
+
   // Stage-tailored prompt suggestions
   const promptSuggestions = {
     early: [
