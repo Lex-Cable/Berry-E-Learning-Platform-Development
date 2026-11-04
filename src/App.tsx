@@ -1030,7 +1030,8 @@ export default function App() {
 
           {currentView === 'transcription' && (
             <LiveTranscriptionView
-              stage={learner.stage as 'advance' | 'university' | 'professionals'}
+              stage={learner.stage}
+              courseTitle={activeCourse.title}
               sessions={transcriptSessions}
               onSaveSession={handleSaveTranscriptSession}
             />
