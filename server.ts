@@ -1,5 +1,5 @@
+import './server/loadEnv';
 import express from 'express';
-import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -7,7 +7,6 @@ import { adminDb } from './server/firebaseAdmin';
 import { COURSES as PRIVATE_COURSES } from './server/privateCurriculumData';
 import { requireFirebaseAuth, type AuthenticatedRequest } from './server/firebaseAuthMiddleware';
 
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -321,7 +320,7 @@ app.post('/api/ai/summarize-transcript', async (req, res) => {
   try {
     const { transcript, title } = req.body;
     if (!adminDb) return res.status(503).json({ error: 'Secure learner services are unavailable.' });
-    const trustedStage = (req as AuthenticatedRequest).user?.learnerStage;
+    const trustedStage = await getAuthenticatedLearnerStage(req);
     if (!trustedStage || !['advance', 'university', 'professionals'].includes(trustedStage)) {
       return res.status(403).json({ error: 'Live transcription is available only to accounts provisioned for Berry Advance, University, or Professionals.' });
     }
@@ -343,7 +342,7 @@ Transcript:
 ${transcript}`;
 
       const response = await aiClient.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
         contents: prompt,
       });
 
