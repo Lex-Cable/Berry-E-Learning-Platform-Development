@@ -22,12 +22,14 @@ import { firebaseAuth } from '../../lib/firebase';
 
 interface LiveTranscriptionViewProps {
   stage: LearnerStage;
+  courseTitle: string;
   sessions: LiveTranscriptSession[];
   onSaveSession: (session: LiveTranscriptSession) => void;
 }
 
 export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   stage,
+  courseTitle,
   sessions,
   onSaveSession,
 }) => {
@@ -67,6 +69,8 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
 
   useEffect(() => {
     return () => {
+      shouldContinueRef.current = false;
+      pausedRef.current = true;
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
@@ -238,8 +242,8 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
     const newSession: LiveTranscriptSession = {
       id: `trans-${Date.now()}`,
       title: sessionTitle,
-      courseTitle: stage === 'university' ? 'CS 201: Data Structures' : 'Applied Data Analysis & AI',
-      stage: stage as 'university' | 'professionals',
+      courseTitle,
+      stage,
       date: new Date().toISOString().split('T')[0],
       durationSeconds: recordingSeconds,
       transcript: transcriptToSave,
@@ -257,7 +261,8 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   };
 
   const handleExportMarkdown = () => {
-    const content = `# ${sessionTitle}\n**Date:** ${new Date().toLocaleDateString()}\n**Stage:** ${stage}\n\n## Transcript\n${currentText}\n\n${aiSummary ? `## AI Summary\n${aiSummary}` : ''}`;
+    const transcriptToExport = [currentText.trim(), interimText.trim()].filter(Boolean).join(' ');
+    const content = `# ${sessionTitle}\n**Date:** ${new Date().toLocaleDateString()}\n**Stage:** ${stage}\n\n## Transcript\n${transcriptToExport}\n\n${aiSummary ? `## AI Summary\n${aiSummary}` : ''}`;
     const blob = new Blob([content], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
