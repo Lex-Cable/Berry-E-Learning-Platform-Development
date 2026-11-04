@@ -243,7 +243,7 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
       id: `trans-${Date.now()}`,
       title: sessionTitle,
       courseTitle,
-      stage,
+      stage: stage as LiveTranscriptSession['stage'],
       date: new Date().toISOString().split('T')[0],
       durationSeconds: recordingSeconds,
       transcript: transcriptToSave,
