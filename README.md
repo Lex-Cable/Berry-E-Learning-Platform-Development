@@ -173,7 +173,7 @@ VITE_FIREBASE_APP_ID=...
 
 The Firebase web configuration identifies the project; authorization is enforced by Firebase Authentication and its security controls. Do not place service-account credentials or private server keys in `VITE_*` variables. Keep `.env.local` out of Git.
 
-If using Berry AI locally, also set `GEMINI_API_KEY` in `.env.local`. Never commit API keys or other server secrets to GitHub.
+If using Berry AI locally, set `GEMINI_API_KEY` in `.env.local`. The Express server loads `.env.local` before initializing Firebase Admin. For local protected AI endpoints, also provide `FIREBASE_SERVICE_ACCOUNT_JSON` using a service account for the configured Firebase project, or run with Google Application Default Credentials. You may set `GEMINI_MODEL` to override the default `gemini-3.8-flash`. Never commit API keys, service-account JSON, or other server secrets to GitHub.
 
  4. Start the Development Server
 
