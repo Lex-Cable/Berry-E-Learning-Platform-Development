@@ -52,7 +52,7 @@ function makeCourse(overrides: Partial<Course> = {}): Course {
 
 test('buildCourseAssignments creates assignments bound to real courses', () => {
   const assignments = buildCourseAssignments([makeCourse()]);
-  assert.equal(assignments.length, 1);
+  assert.equal(assignments.length, 1); // one lesson in this fixture produces one topic assignment
   assert.equal(assignments[0].courseId, 'course-test');
   assert.equal(assignments[0].totalMarks, 20);
   assert.equal(assignments[0].rubric.length, 3);
@@ -61,11 +61,13 @@ test('buildCourseAssignments creates assignments bound to real courses', () => {
   assert.equal(empty.length, 0);
 });
 
-test('buildCourseAssignments emits only one assignment per unique course ID', () => {
+test('buildCourseAssignments creates one assignment per lesson and ignores duplicate course IDs', () => {
   const course = makeCourse();
   const assignments = buildCourseAssignments([course, { ...course, title: 'Duplicate course record' }]);
   assert.equal(assignments.length, 1);
   assert.equal(assignments[0].courseId, course.id);
+  assert.match(assignments[0].instructions, /10\\./);
+  assert.match(assignments[0].title, /Counting to Ten/);
 });
 
 test('markAssignmentSubmission grades a strong submission as passed', () => {
