@@ -6,6 +6,7 @@ import express from 'express';
 import { adminDb } from './firebaseAdmin';
 import { requireFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMiddleware';
 import { COURSES } from './privateCurriculumData';
+import { INTERNATIONAL_STARTER_COURSES } from '../src/data/internationalStarterCourses';
 import { markAssignmentSubmission } from '../src/utils/assignments';
 import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
@@ -15,8 +16,16 @@ const PASS_MARK = 75;
 type AnswerQuestion = { id: string; options: string[] };
 type PrivateCourse = Course;
 
+// Server-side trusted catalogue: private production courses plus the
+// Berry-authored international starter courses. Never accept course content
+// or answer keys supplied by the browser.
+const TRUSTED_COURSES: PrivateCourse[] = [
+  ...(COURSES as PrivateCourse[]),
+  ...INTERNATIONAL_STARTER_COURSES,
+];
+
 function findCourse(id: string): PrivateCourse | undefined {
-  return (COURSES as PrivateCourse[]).find((course) => course.id === id);
+  return TRUSTED_COURSES.find((course) => course.id === id);
 }
 function safeQuestions(questions: Array<{ id: string; question: string; options: string[]; topic?: string; learningObjective?: string }>) {
   return questions.map(({ id, question, options, topic, learningObjective }) => ({
@@ -99,7 +108,7 @@ router.post('/api/learning/courses/:courseId/enroll', requireFirebaseAuth, async
 
     const uid = req.user.uid;
     const courseId = String(req.params.courseId);
-    const course = COURSES.find((item) => item.id === courseId);
+    const course = findCourse(courseId);
 
     if (!course) {
       return res.status(404).json({ error: 'Course not found.' });
