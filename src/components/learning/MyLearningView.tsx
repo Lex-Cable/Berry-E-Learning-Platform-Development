@@ -172,7 +172,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [examScore, setExamScore] = useState<number>(0);
   const [examPassed, setExamPassed] = useState<boolean>(false);
 
-  const currentMasteryRecords: Record<string, LessonMasteryState> = { ...trustedLessonProgress, ...masteryRecords };
+  const currentMasteryRecords: Record<string, LessonMasteryState> = { ...masteryRecords, ...trustedLessonProgress };
 
   // Available grade options based on learner stage
   // My Learning must show only courses this learner has actually enrolled in.
@@ -543,11 +543,11 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   // ==========================================
   if (activeCourse && !activeLessonId && !takingExam) {
     const progress = getCourseProgress(activeCourse);
-    const completedLessonIds = Object.keys(masteryRecords).filter(
-      (id) => masteryRecords[id]?.isCompleted
+    const completedLessonIds = Object.keys(currentMasteryRecords).filter(
+      (id) => currentMasteryRecords[id]?.isCompleted
     );
-    const masteredLessonIds = Object.keys(masteryRecords).filter(
-      (id) => masteryRecords[id]?.isMastered
+    const masteredLessonIds = Object.keys(currentMasteryRecords).filter(
+      (id) => currentMasteryRecords[id]?.isMastered
     );
 
     return (
@@ -644,9 +644,9 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                   <p className="text-xs text-slate-500 mt-0.5">{chapter.description}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
-                      {chapter.lessons.filter((lesson) => masteryRecords[lesson.id]?.isMastered).length}/{chapter.lessons.length} lessons mastered
+                      {chapter.lessons.filter((lesson) => currentMasteryRecords[lesson.id]?.isMastered).length}/{chapter.lessons.length} lessons mastered
                     </span>
-                    {chapter.lessons.length > 0 && chapter.lessons.every((lesson) => masteryRecords[lesson.id]?.isMastered) && (
+                    {chapter.lessons.length > 0 && chapter.lessons.every((lesson) => currentMasteryRecords[lesson.id]?.isMastered) && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
                         <Award size={12} /> Chapter badge earned
                       </span>
