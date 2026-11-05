@@ -102,7 +102,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
   // Matching activity state
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({});
-  const [matchingFeedback, setMatchingFeedback] = useState<string | null>(null);\n  const [activityAnswers, setActivityAnswers] = useState<Record<string, string>>({});\n  const [activityTextResponses, setActivityTextResponses] = useState<Record<string, string>>({});\n  const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});\n  const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
+  const [matchingFeedback, setMatchingFeedback] = useState<string | null>(null);
+  const [activityAnswers, setActivityAnswers] = useState<Record<string, string>>({});
+  const [activityTextResponses, setActivityTextResponses] = useState<Record<string, string>>({});
+  const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});
+  const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -227,7 +231,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
   };
 
   const renderLessonNotes = (source: string) => {
-    const lines = source.split(/\r?\n/);
+    const lines = source.split(/\r?
+/);
     return lines.map((line, index) => {
       const trimmed = line.trim();
       if (!trimmed) return <div key={index} className="h-2" />;
