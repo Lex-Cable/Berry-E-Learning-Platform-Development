@@ -75,6 +75,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [activeCourse, setActiveCourse] = useState<Course | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [takingExam, setTakingExam] = useState<boolean>(false);
+  const [trustedAssignments, setTrustedAssignments] = useState<Record<string, { status?: string; scorePercent?: number }>>({});
+  const [trustedAssignmentsLoading, setTrustedAssignmentsLoading] = useState(false);
 
   useEffect(() => {
     if (!initialCourseId) return;
@@ -130,6 +132,24 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       });
     }
   }, [activeCourse, activeLessonId, learner.id]);
+
+  useEffect(() => {
+    if (!activeCourse || !learner.enrolledCourseIds.includes(activeCourse.id)) {
+      setTrustedAssignments({});
+      return;
+    }
+    let cancelled = false;
+    setTrustedAssignmentsLoading(true);
+    getCourseStatus(activeCourse.id)
+      .then((status) => {
+        if (!cancelled) setTrustedAssignments(status.assignments as Record<string, { status?: string; scorePercent?: number }>);
+      })
+      .catch((error) => {
+        if (!cancelled) console.warn('Could not refresh trusted topic assignments:', error);
+      })
+      .finally(() => { if (!cancelled) setTrustedAssignmentsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeCourse?.id, learner.id, learner.enrolledCourseIds.join('|')]);
 
   // Grade filter (defaults to learner's current grade level, e.g. Grade 1, Grade 7, Grade 10, PP1, Bachelor Year 2)
   const [gradeFilter, setGradeFilter] = useState<string>('all');
@@ -629,11 +649,23 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
 
                 <div className="space-y-2">
                   {chapter.lessons.map((lesson) => {
-                    const isUnlocked = isLessonUnlocked(
+                    const isPrerequisiteUnlocked = isLessonUnlocked(
                       lesson,
                       completedLessonIds,
                       masteredLessonIds
                     );
+                    const orderedLessons = activeCourse.chapters.flatMap((item) => item.lessons);
+                    const lessonIndex = orderedLessons.findIndex((item) => item.id === lesson.id);
+                    const previousLesson = lessonIndex > 0 ? orderedLessons[lessonIndex - 1] : undefined;
+                    const previousAssignment = previousLesson
+                      ? trustedAssignments[`assignment-${activeCourse.id}-${previousLesson.id}`]
+                      : undefined;
+                    const previousTopicComplete = !previousLesson || (
+                      masteryRecords[previousLesson.id]?.isMastered === true &&
+                      previousAssignment?.status === 'graded' &&
+                      Number(previousAssignment.scorePercent || 0) >= 50
+                    );
+                    const isUnlocked = isPrerequisiteUnlocked && previousTopicComplete && !trustedAssignmentsLoading;
                     const mastery = masteryRecords[lesson.id];
                     const isMastered = mastery?.isMastered;
 
@@ -691,7 +723,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">
-                              Prerequisite Locked
+                              {trustedAssignmentsLoading ? 'Checking requirements' : !previousTopicComplete ? 'Complete previous topic assignment' : 'Prerequisite Locked'}
                             </span>
                           )}
                           {isUnlocked && <ChevronRight size={16} className="text-slate-400" />}
