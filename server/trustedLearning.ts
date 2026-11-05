@@ -60,6 +60,20 @@ function cycleRef(uid: string, courseId: string, cycle: number) {
   return adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(courseId)
     .collection('cycles').doc(String(cycle));
 }
+async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, lessonId: string, cycle: number): Promise<boolean> {
+  const lessons = course.chapters.flatMap((chapter) => chapter.lessons);
+  const index = lessons.findIndex((lesson) => lesson.id === lessonId);
+  if (index <= 0) return index === 0;
+  const previous = lessons[index - 1];
+  const previousAssignmentId = `assignment-${course.id}-${previous.id}`;
+  const previousProgressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(previous.id);
+  const previousAssignmentRef = cycleRef(uid, course.id, cycle).collection('assignments').doc(previousAssignmentId);
+  const [progress, assignment] = await Promise.all([previousProgressRef.get(), previousAssignmentRef.get()]);
+  return progress.data()?.isMastered === true &&
+    assignment.data()?.status === 'graded' &&
+    Number(assignment.data()?.scorePercent || 0) >= 50;
+}
+
 async function getEnrolledCourse(req: AuthenticatedRequest, res: express.Response, courseId: string) {
   if (!adminDb || !req.user?.uid) {
     res.status(503).json({ error: 'Secure learner services are unavailable.' });
@@ -148,7 +162,10 @@ router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', req
     if (!context) return;
     const lesson = context.course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
-    await ensureCycle(context.uid, context.course.id);
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    if (!(await previousTopicRequirementsMet(context.uid, context.course, lesson.id, cycle))) {
+      return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before opening this lesson.' });
+    }
     return res.json({ questions: safeQuestions(lesson.quizQuestions) });
   } catch (error) {
     console.error('Trusted lesson question retrieval failed:', error);
@@ -163,6 +180,10 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
     const { course, uid } = context;
     const lesson = course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
+    const currentCycle = await ensureCycle(uid, course.id);
+    if (!(await previousTopicRequirementsMet(uid, course, lesson.id, currentCycle))) {
+      return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before attempting this lesson.' });
+    }
     const questions = lesson.quizQuestions;
     if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every question.' });
     const cycle = await ensureCycle(uid, course.id);
@@ -219,6 +240,10 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
     const { course, uid } = context;
     const lesson = course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
+    const cycle = await ensureCycle(uid, course.id);
+    if (!(await previousTopicRequirementsMet(uid, course, lesson.id, cycle))) {
+      return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before attempting this activity.' });
+    }
     const activity = lesson.activities.find((item) => item.id === req.params.activityId);
     if (!activity) return res.status(404).json({ error: 'Interactive activity not found.' });
 
@@ -245,7 +270,6 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
       correct = choice?.isCorrect === true;
     }
 
-    const cycle = await ensureCycle(uid, course.id);
     const now = new Date().toISOString();
     const submission = {
       activityId: activity.id,
