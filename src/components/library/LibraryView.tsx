@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { LibraryCurriculumGroup, LibraryMaterialType, LibraryResource, LearnerProfile, LearnerStage } from '../../types';
+import { resolveCanonicalStage, type CanonicalStageId } from '../../curriculum/repository';
 
 interface LibraryViewProps {
   resources: LibraryResource[];
@@ -18,17 +19,16 @@ interface LibraryViewProps {
   onToggleBookmark: (resourceId: string, resource?: LibraryResource) => void;
 }
 
-type StageFilter = 'all' | 'early' | 'junior' | 'senior' | 'university' | 'advanced';
+type StageFilter = 'all' | CanonicalStageId;
 type CurriculumFilter = 'all' | LibraryCurriculumGroup;
 type MaterialFilter = 'all' | LibraryMaterialType;
 
 const stageOptions: { id: StageFilter; label: string; emoji: string }[] = [
   { id: 'all', label: 'Every level', emoji: '🌍' },
-  { id: 'early', label: 'Berry Early', emoji: '🌱' },
-  { id: 'junior', label: 'Berry Junior', emoji: '🧭' },
-  { id: 'senior', label: 'Berry Senior', emoji: '🚀' },
-  { id: 'university', label: 'University', emoji: '🎓' },
-  { id: 'advanced', label: 'Advanced', emoji: '✨' },
+  { id: 'early_years', label: 'Early Years', emoji: '🌱' },
+  { id: 'primary', label: 'Primary & Junior', emoji: '🧭' },
+  { id: 'secondary', label: 'Secondary & Senior', emoji: '🚀' },
+  { id: 'advanced', label: 'Advanced Learning', emoji: '✨' },
 ];
 
 const curriculumOptions: { id: CurriculumFilter; label: string }[] = [
@@ -67,18 +67,13 @@ const typeLabels: Record<LibraryMaterialType, string> = {
   open_catalog: 'Open catalog',
 };
 
-const selectedStageFor = (stage: LearnerStage): StageFilter => {
-  if (stage === 'advance' || stage === 'professionals') return 'advanced';
-  return stage;
-};
+const selectedStageFor = (stage: LearnerStage): StageFilter =>
+  resolveCanonicalStage(stage);
 
 const matchesStage = (resource: LibraryResource, selectedStage: StageFilter) => {
   if (selectedStage === 'all') return true;
   if (resource.levels.length === 0) return true;
-  if (selectedStage === 'advanced') {
-    return resource.levels.includes('advance') || resource.levels.includes('professionals');
-  }
-  return resource.levels.includes(selectedStage);
+  return resource.levels.some((level) => resolveCanonicalStage(level) === selectedStage);
 };
 
 const ResourceCover: React.FC<{ resource: LibraryResource }> = ({ resource }) => {
