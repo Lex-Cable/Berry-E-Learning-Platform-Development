@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Course, Lesson, QuizQuestion, LessonMasteryState } from '../../types';
 import { evaluateMastery } from '../../utils/mastery';
-import { getLessonAssessment, submitLessonAssessment } from '../../services/assessments';
+import { getLessonAssessment, submitLessonAssessment, submitInteractiveActivity } from '../../services/assessments';
 import { loadLessonNotes, saveLessonNotes } from '../../services/learningProgress';
 import { firebaseAuth } from '../../lib/firebase';
 
@@ -107,6 +107,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activityTextResponses, setActivityTextResponses] = useState<Record<string, string>>({});
   const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});
   const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
+  const [activitySubmitting, setActivitySubmitting] = useState<Record<string, boolean>>({});
+  const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>({});
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -228,6 +230,47 @@ export const LessonView: React.FC<LessonViewProps> = ({
       ...previous,
       [activityId]: choice.feedback || (choice.isCorrect ? 'Correct. Well done!' : 'Not quite. Review the lesson and try again.'),
     }));
+  };
+
+  const handleSubmitInteractiveActivity = async (activity: Lesson['activities'][number]) => {
+    setActivitySubmitting((previous) => ({ ...previous, [activity.id]: true }));
+    setActivitySubmissionResults((previous) => ({ ...previous, [activity.id]: '' }));
+    try {
+      let answer: { pairs: Record<string, string> } | { order: string[] } | { response: string } | { choiceId: string };
+      if (activity.type === 'matching') {
+        answer = { pairs: Object.fromEntries((activity.data.matchingPairs || []).map((pair) => [pair.id, matchedPairs[pair.id] || ''])) };
+      } else if (activity.type === 'ordering') {
+        answer = { order: activityOrder[activity.id] || [] };
+      } else if (activity.type === 'fill-blank') {
+        answer = { response: activityTextResponses[activity.id] || '' };
+      } else {
+        answer = { choiceId: activityAnswers[activity.id] || '' };
+      }
+      const result = await submitInteractiveActivity(course.id, lessonId, activity.id, answer);
+      setActivitySubmissionResults((previous) => ({
+        ...previous,
+        [activity.id]: result.submission.feedback + ` Interactive score: ${result.interactiveScorePercent}%.`,
+      }));
+      if (result.lessonCompleted) {
+        onSaveMastery({
+          lessonId,
+          isCompleted: true,
+          isMastered: true,
+          scorePercent: masteryRecord?.scorePercent || 0,
+          attemptsCount: masteryRecord?.attemptsCount || 0,
+          lastAttemptDate: new Date().toISOString(),
+          identifiedMisconceptions: masteryRecord?.identifiedMisconceptions || [],
+          remedialActivitiesCompleted: true,
+        });
+      }
+    } catch (error) {
+      setActivitySubmissionResults((previous) => ({
+        ...previous,
+        [activity.id]: error instanceof Error ? error.message : 'Unable to submit this activity.',
+      }));
+    } finally {
+      setActivitySubmitting((previous) => ({ ...previous, [activity.id]: false }));
+    }
   };
 
   const renderLessonNotes = (source: string) => {
@@ -634,6 +677,19 @@ export const LessonView: React.FC<LessonViewProps> = ({
                   )}
                 </div>
               )}
+              <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleSubmitInteractiveActivity(act)}
+                  disabled={!!activitySubmitting[act.id]}
+                  className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {activitySubmitting[act.id] ? 'Checking and saving…' : 'Submit activity for scored review'}
+                </button>
+                {activitySubmissionResults[act.id] && (
+                  <p role="status" aria-live="polite" className="text-xs text-slate-700">{activitySubmissionResults[act.id]}</p>
+                )}
+              </div>
             </div>
           ))}
 
