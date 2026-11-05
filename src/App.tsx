@@ -634,6 +634,23 @@ export default function App() {
   // not a government-issued credential.
   const handleClaimCertificate = async (course: Course, _scorePercent: number) => {
     try {
+      // Check trusted progress before asking the issuer to create a credential.
+      // Exam completion alone is not certificate eligibility, and attempting
+      // issuance early produced noisy 409 responses for otherwise valid learners.
+      const status = await getCourseStatus(course.id);
+      const requiredAssignments = buildCourseAssignments([course]);
+      const trustedAssignments = status.assignments as Record<string, { status?: string; scorePercent?: number }>;
+      const assignmentsComplete = requiredAssignments.length > 0 && requiredAssignments.every((assignment) => {
+        const saved = trustedAssignments[assignment.id];
+        return saved?.status === 'graded' && Number(saved.scorePercent) >= 50;
+      });
+      const requirementsComplete =
+        status.courseCompleted &&
+        status.courseMasteryPercent >= 75 &&
+        status.examPassed &&
+        assignmentsComplete;
+      if (!requirementsComplete) return;
+
       const result = await issueTrustedCertificate(course.id);
       setCertificates((prev) => [result.certificate, ...prev.filter((item) => item.credentialId !== result.certificate.credentialId)]);
       const newNotif: AppNotification = {
