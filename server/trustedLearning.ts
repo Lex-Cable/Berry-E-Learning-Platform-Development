@@ -444,6 +444,10 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
     if (!context) return;
 
     const { course, profile, uid } = context;
+    const recipientName = typeof profile.name === 'string' ? profile.name.trim() : '';
+    if (!recipientName) {
+      return res.status(409).json({ error: 'Please complete your learner profile name before requesting a certificate.' });
+    }
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
@@ -460,7 +464,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
       credentialId,
       courseId: course.id,
       courseTitle: course.title,
-      recipientName: typeof profile.name === 'string' ? profile.name : 'Berry Learner',
+      recipientName,
       stage: profile.stage,
       gradeLevel: course.gradeLevel,
       curriculum: course.curriculum,
