@@ -33,6 +33,7 @@ interface LessonViewProps {
   masteryRecord?: LessonMasteryState;
   onSaveMastery: (record: LessonMasteryState) => void;
   userId?: string;
+  canAdvanceToNextLesson?: boolean;
 }
 
 export const LessonView: React.FC<LessonViewProps> = ({
@@ -43,6 +44,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   masteryRecord,
   onSaveMastery,
   userId,
+  canAdvanceToNextLesson = false,
 }) => {
   // Find current lesson and chapter
   let currentLesson: Lesson | undefined;
@@ -851,7 +853,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                   <span>Re-take Assessment</span>
                 </button>
 
-                {currentEval.isMastered && nextLesson ? (
+                {currentEval.isMastered && nextLesson && canAdvanceToNextLesson ? (
                   <button
                     onClick={() => onNavigateLesson(nextLesson.id)}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs shadow transition-all"
@@ -859,6 +861,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
                     <span>Proceed to Next Lesson</span>
                     <ArrowRight size={14} />
                   </button>
+                ) : currentEval.isMastered && nextLesson ? (
+                  <div className="flex items-center gap-2 text-xs text-amber-300">
+                    <Lock size={14} />
+                    <span>Complete and pass this topic's assignment before moving to the next lesson.</span>
+                  </div>
                 ) : !currentEval.isMastered ? (
                   <div className="flex items-center gap-2 text-xs text-amber-300">
                     <Lock size={14} />
