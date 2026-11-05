@@ -21,6 +21,7 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { LearnerProfile, Course, AiConversation, AiChatMessage } from '../../types';
+import { resolveCanonicalStage, type CurriculumRepository } from '../../curriculum/repository';
 import { INITIAL_CONVERSATIONS } from '../../data/curriculumData';
 import { firebaseAuth } from '../../lib/firebase';
 import {
@@ -32,17 +33,34 @@ import {
 interface BerryAiViewProps {
   learner: LearnerProfile;
   courses: Course[];
+  curriculumRepository: CurriculumRepository;
   onOpenLesson: (course: Course, lessonId: string) => void;
 }
 
 export const BerryAiView: React.FC<BerryAiViewProps> = ({
   learner,
   courses,
+  curriculumRepository,
   onOpenLesson,
 }) => {
-  // Find current active course for context
+  // Find current active course and its normalized international-curriculum placement.
   const activeCourse =
     courses.find((c) => learner.enrolledCourseIds.includes(c.id)) || courses[0];
+  const activeCourseEntry = activeCourse ? curriculumRepository.byId[activeCourse.id] : undefined;
+  const learnerStage = curriculumRepository.stages.find(
+    (stage) => stage.id === resolveCanonicalStage(learner.stage),
+  );
+  const curriculumContext = activeCourseEntry
+    ? [
+        `Curriculum: ${curriculumRepository.curricula.find((item) => item.id === activeCourseEntry.placement.curriculum)?.label || activeCourseEntry.placement.curriculum}`,
+        `Learning stage: ${curriculumRepository.stages.find((stage) => stage.id === activeCourseEntry.placement.canonicalStage)?.label || activeCourseEntry.placement.canonicalStage}`,
+        `Grade or level: ${activeCourseEntry.placement.gradeLevel}`,
+        `Subject: ${activeCourseEntry.placement.subject}`,
+        activeCourseEntry.placement.advanceTrack
+          ? `Advanced pathway: ${activeCourseEntry.placement.advanceTrack === 'professional' ? 'Professional' : 'University'}`
+          : '',
+      ].filter(Boolean).join('\n')
+    : `Learner learning stage: ${learnerStage?.label || learner.stage}`;
 
   const [conversations, setConversations] = useState<AiConversation[]>([]);
 
@@ -329,6 +347,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           stream: true,
           courseTitle: activeCourse?.title,
           currentTopic: activeCourse?.chapters[0]?.title,
+          curriculumContext,
           history: contextMessages
             .slice(-12)
             .map((message) => ({
