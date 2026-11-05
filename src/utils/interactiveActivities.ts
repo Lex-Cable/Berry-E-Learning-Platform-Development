@@ -10,8 +10,7 @@ export function withInteractivePractice(courses: Course[], targetCount = 5): Cou
     chapters: course.chapters.map((chapter) => ({
       ...chapter,
       lessons: chapter.lessons.map((lesson) => {
-        const existing = lesson.activities || [];
-        if (existing.length >= targetCount) return lesson;
+        const existing = (lesson.activities || []).slice(0, targetCount);
         const needed = targetCount - existing.length;
         const usedQuestionIds = new Set(existing.map((activity) => activity.id));
         const derived: InteractiveActivity[] = lesson.quizQuestions
