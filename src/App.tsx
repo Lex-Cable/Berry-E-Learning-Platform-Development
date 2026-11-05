@@ -54,6 +54,7 @@ import {
 import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, type AssignmentMarkingResult } from './utils/assignments';
 import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
 import { buildCurriculumRepository } from './curriculum/repository';
+import { INTERNATIONAL_STARTER_COURSES } from './data/internationalStarterCourses';
 import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
 import { loadLearningCertificates, loadLearningProgress } from './services/learningProgress';
 import { enrollInCourse, getCourseStatus, issueTrustedCertificate, loadTrustedCertificates } from './services/assessments';
@@ -65,9 +66,11 @@ import {
   signOutBerryUser,
 } from './services/firebaseAuth';
 
+const INITIAL_COURSE_CATALOGUE: Course[] = [...COURSES, ...INTERNATIONAL_STARTER_COURSES];
+
 export default function App() {
   const [learner, setLearner] = useState<LearnerProfile>(INITIAL_LEARNER);
-  const [courses, setCourses] = useState<Course[]>(COURSES);
+  const [courses, setCourses] = useState<Course[]>(INITIAL_COURSE_CATALOGUE);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [libraryResources, setLibraryResources] = useState<LibraryResource[]>(LIBRARY_RESOURCES);
@@ -105,7 +108,7 @@ export default function App() {
   const [history, setHistory] = useState<string[]>([]);
 
   // Active course and lesson state
-  const [activeCourse, setActiveCourse] = useState<Course>(COURSES[0]);
+  const [activeCourse, setActiveCourse] = useState<Course>(INITIAL_COURSE_CATALOGUE[0]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [learningTargetCourseId, setLearningTargetCourseId] = useState<string | null>(null);
 
