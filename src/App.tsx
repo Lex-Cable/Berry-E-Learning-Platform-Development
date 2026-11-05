@@ -98,53 +98,54 @@ export default function App() {
   const coverageReport = useMemo(() => auditCurriculumCoverage(curriculumRepository.courses), [curriculumRepository]);
   const assignments = useMemo(() => buildCourseAssignments(courses), [courses]);
 
-  // Turn each enrolled course assignment deadline into a real planner task and
-  // a persistent notification. Stable IDs prevent duplicate reminders on refresh.
+  // Every enrolled course assignment gets one planner task and one reminder.
+  // Reconcile tasks and notifications independently so a missing reminder is restored.
   useEffect(() => {
     if (workspaceLoadedFor !== learner.id) return;
     const enrolledAssignments = assignments.filter((assignment) => learner.enrolledCourseIds.includes(assignment.courseId));
-    const missingTasks = enrolledAssignments.filter((assignment) =>
-      !tasks.some((task) => task.id === `assignment-deadline-${assignment.id}`),
-    );
-    if (missingTasks.length === 0) return;
-    const createdTasks: TaskItem[] = missingTasks.map((assignment) => {
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const generatedTasks: TaskItem[] = enrolledAssignments.map((assignment) => {
+      const id = `assignment-deadline-${assignment.id}`;
+      const existing = taskById.get(id);
+      if (existing) return existing;
       const course = courses.find((item) => item.id === assignment.courseId);
       return {
-        id: `assignment-deadline-${assignment.id}`,
-        title: assignment.title,
-        subject: course?.subject || assignment.courseTitle,
-        courseId: assignment.courseId,
-        stage: course?.stage || learner.stage,
-        dueDate: assignment.dueDate,
-        urgency: 'medium',
-        status: 'pending',
-        type: 'assignment',
+        id, title: assignment.title, subject: course?.subject || assignment.courseTitle,
+        courseId: assignment.courseId, stage: course?.stage || learner.stage,
+        dueDate: assignment.dueDate, urgency: 'medium', status: 'pending', type: 'assignment',
       };
     });
-    setTasks((current) => {
-      const existing = new Set(current.map((task) => task.id));
-      return [...createdTasks.filter((task) => !existing.has(task.id)), ...current];
-    });
-    const createdNotifications: AppNotification[] = createdTasks.map((task) => ({
-      id: `notif-deadline-${task.id}`,
-      title: 'Assignment deadline added to your calendar',
-      message: `${task.title} is due ${new Date(task.dueDate).toLocaleString()}. It is now listed in your planner.`,
-      stage: task.stage,
-      type: 'deadline',
-      date: 'Just now',
-      unread: true,
-      actionUrl: 'calendar',
-    }));
-    setNotifications((current) => {
-      const existing = new Set(current.map((notification) => notification.id));
-      return [...createdNotifications.filter((notification) => !existing.has(notification.id)), ...current];
-    });
+    const existingTaskIds = new Set(tasks.map((task) => task.id));
+    const missingTasks = generatedTasks.filter((task) => !existingTaskIds.has(task.id));
+    if (missingTasks.length) {
+      setTasks((current) => {
+        const known = new Set(current.map((task) => task.id));
+        return [...missingTasks.filter((task) => !known.has(task.id)), ...current];
+      });
+    }
+    const existingNotificationIds = new Set(notifications.map((item) => item.id));
+    const missingNotifications: AppNotification[] = generatedTasks
+      .filter((task) => !existingNotificationIds.has(`notif-deadline-${task.id}`))
+      .map((task) => ({
+        id: `notif-deadline-${task.id}`,
+        title: 'Assignment deadline added to your calendar',
+        message: `${task.title} is due ${new Date(task.dueDate).toLocaleString()}. It is now listed in your planner.`,
+        stage: task.stage, type: 'deadline', date: 'Just now', unread: true, actionUrl: 'calendar',
+      }));
+    if (missingNotifications.length) {
+      setNotifications((current) => {
+        const known = new Set(current.map((item) => item.id));
+        return [...missingNotifications.filter((item) => !known.has(item.id)), ...current];
+      });
+    }
     const uid = firebaseAuth?.currentUser?.uid;
     if (uid) {
-      createdTasks.forEach((task) => void saveLearnerTask(uid, task).catch((error) => console.warn('Assignment deadline remains on this device; cloud sync failed:', error)));
-      createdNotifications.forEach((notification) => void saveLearnerNotification(uid, notification).catch((error) => console.warn('Assignment reminder remains on this device; cloud sync failed:', error)));
+      missingTasks.forEach((task) => void saveLearnerTask(uid, task).catch((error) =>
+        console.warn('Assignment deadline remains on this device; cloud sync failed:', error)));
+      missingNotifications.forEach((notification) => void saveLearnerNotification(uid, notification).catch((error) =>
+        console.warn('Assignment reminder remains on this device; cloud sync failed:', error)));
     }
-  }, [workspaceLoadedFor, learner.id, learner.stage, learner.enrolledCourseIds.join('|'), assignments, courses, tasks]);
+  }, [workspaceLoadedFor, learner.id, learner.stage, learner.enrolledCourseIds.join('|'), assignments, courses, tasks, notifications]);
 
   // Surface due-soon and overdue reminders from saved planner deadlines.
   // The stable notification IDs make this safe to run on every app refresh.
