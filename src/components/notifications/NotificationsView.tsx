@@ -28,7 +28,12 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
 }) => {
   const [filterType, setFilterType] = useState<string>('all');
 
-  const filtered = notifications.filter((n) => {
+  // Cloud sync and the device cache can contain the same reminder more than once.
+  // Render one current record per stable notification ID.
+  const uniqueNotifications = Array.from(
+    new Map(notifications.map((notification) => [notification.id, notification])).values(),
+  );
+  const filtered = uniqueNotifications.filter((n) => {
     if (filterType !== 'all' && n.type !== filterType) return false;
     return true;
   });
