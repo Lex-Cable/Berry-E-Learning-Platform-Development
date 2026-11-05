@@ -36,7 +36,7 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   onEnrollCourse,
 }) => {
   const [selectedStage, setSelectedStage] = useState<LearnerStage | 'all'>(learner.stage);
-  const [selectedGrade, setSelectedGrade] = useState<string>(learner.gradeLevel);
+  const [selectedGrade, setSelectedGrade] = useState<string>('all');
 
   const stageGrades = useMemo(() => {
     if (selectedStage === 'all') {
@@ -261,6 +261,7 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Grade or Level</label>
             <select value={selectedGrade} onChange={(e) => setSelectedGrade(e.target.value)} className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300">
+              <option value="all">All grades and levels</option>
               {stageGrades.map((grade) => <option key={grade} value={grade}>{grade}</option>)}
             </select>
           </div>
