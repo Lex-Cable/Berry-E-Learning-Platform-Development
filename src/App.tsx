@@ -862,6 +862,15 @@ export default function App() {
               criterionScores: marking.criterionScores,
             },
           }));
+          // Assignment completion may be the final missing certificate requirement.
+          // Recheck only after the trusted server has returned its authoritative mark.
+          const course = courses.find((item) => item.id === assignment.courseId);
+          const passedExam = examAttempts.some((attempt) =>
+            attempt.courseId === assignment.courseId && attempt.passed && attempt.trusted
+          );
+          if (course && passedExam && marking.status === 'graded') {
+            void handleClaimCertificate(course, 0);
+          }
         })
         .catch((error) => {
           console.warn('Trusted assignment marking is unavailable; local practice feedback remains visible:', error);
