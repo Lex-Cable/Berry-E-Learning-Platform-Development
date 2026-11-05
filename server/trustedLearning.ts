@@ -186,7 +186,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
     }
     const questions = lesson.quizQuestions;
     if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every question.' });
-    const cycle = await ensureCycle(uid, course.id);
+    const cycle = currentCycle;
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
     const results = Object.fromEntries(questions.map((question) => [question.id, {
