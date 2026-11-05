@@ -1,4 +1,4 @@
-import type { ExamQuestion, QuizQuestion, LessonMasteryState, ExamAttemptRecord, CertificateRecord } from '../types';
+import type { ExamQuestion, QuizQuestion, LessonMasteryState, ExamAttemptRecord, CertificateRecord, AssignmentSubmissionStatus } from '../types';
 import { firebaseAuth } from '../lib/firebase';
 type LessonResult = { scorePercent: number; results: Record<string, { correct: boolean; feedback?: string; correctAnswerIndex?: number }>; progress: LessonMasteryState; courseMasteryPercent: number; courseCompleted: boolean; cycle: number };
 type ExamResult = { scorePercent: number; passed: boolean; passingScorePercent: number; results: Record<string, { correct: boolean; correctAnswerIndex?: number; explanation?: string }>; attempt: ExamAttemptRecord & { cycle: number; trusted: true }; cycle: number; alreadySubmitted?: boolean };
@@ -20,6 +20,6 @@ export const getCourseStatus=(courseId:string)=>request<CourseStatus>(`/api/lear
 export const enrollInCourse = (courseId: string) => request<{ enrolled: true; courseId: string }>(`/api/learning/courses/${encodeURIComponent(courseId)}/enroll`, {});
 export const startCourseRetake=(courseId:string)=>request<{courseId:string;cycle:number;message:string}>(`/api/learning/courses/${encodeURIComponent(courseId)}/retake`,{});
 export const issueTrustedCertificate=(courseId:string)=>request<{eligible:true;certificate:CertificateRecord}>(`/api/certificates/courses/${encodeURIComponent(courseId)}/issue`,{});
-export const submitTrustedAssignment=(courseId:string,assignmentId:string,content:string)=>request<{submission:unknown;marking:unknown}>(`/api/assignments/courses/${encodeURIComponent(courseId)}/${encodeURIComponent(assignmentId)}/submit`,{content});
+export const submitTrustedAssignment=(courseId:string,assignmentId:string,content:string)=>request<{submission:unknown;marking:{status:AssignmentSubmissionStatus;scorePercent:number;marksAwarded:number;totalMarks:number;markerFeedback:string;criterionScores:{criterionId:string;awarded:number;outOf:number}[]}}>(`/api/assignments/courses/${encodeURIComponent(courseId)}/${encodeURIComponent(assignmentId)}/submit`,{content});
 
 export const loadTrustedCertificates=()=>request<{certificates:CertificateRecord[]}>(`/api/certificates/mine`).then(x=>x.certificates);
