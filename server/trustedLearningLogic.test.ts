@@ -31,6 +31,7 @@ test('certificate eligibility rejects missing requirements and accepts a fully e
   const base = { totalLessons: 2, progress: [{ isCompleted: true, isMastered: true }, { isCompleted: true, isMastered: true }], examPassed: true, assignments: [{ status: 'graded', scorePercent: 75 }], approvedAssignmentCount: 1, certificateAlreadyIssued: false };
   assert.deepEqual(certificateUnmetRequirements(base), []);
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 0, assignments: [] }).some((item) => item.includes('rubric')));
+  assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 2, assignments: [{ status: 'graded', scorePercent: 90 }] }).some((item) => item.includes('topic assignments completed')));
   assert.ok(certificateUnmetRequirements({ ...base, examPassed: false }).some((item) => item.includes('exam')));
   assert.ok(certificateUnmetRequirements({ ...base, certificateAlreadyIssued: true }).some((item) => item.includes('already issued')));
   assert.ok(certificateUnmetRequirements({ ...base, progress: [{ isCompleted: true, isMastered: true }, { isCompleted: true, isMastered: false }] }).some((item) => item.includes('mastery')));
