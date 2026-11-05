@@ -449,19 +449,19 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
 
   // Render AI markdown as readable chat typography instead of exposing raw
   // markdown markers in the conversation bubble.
-  const renderAiText = (source: string) => source.split(/\\r?\\n/).map((line, index) => {
+  const renderAiText = (source: string) => source.split(/\r?\n/).map((line, index) => {
     const value = line.trim();
     if (!value) return <div key={index} className="h-1.5" />;
-    if (/^#{1,3}\\s/.test(value)) {
-      return <h3 key={index} className="pt-2 text-sm font-extrabold text-slate-900">{value.replace(/^#{1,3}\\s*/, '')}</h3>;
+    if (/^#{1,3}\s/.test(value)) {
+      return <h3 key={index} className="pt-2 text-sm font-extrabold text-slate-900">{value.replace(/^#{1,3}\s*/, '')}</h3>;
     }
-    if (/^[-*]\\s/.test(value)) {
-      return <div key={index} className="flex items-start gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{value.replace(/^[-*]\\s*/, '').replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</span></div>;
+    if (/^[-*]\s/.test(value)) {
+      return <div key={index} className="flex items-start gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{value.replace(/^[-*]\s*/, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</span></div>;
     }
-    if (/^\\d+[.)]\\s/.test(value)) {
-      return <p key={index} className="pl-1">{value.replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</p>;
+    if (/^\d+[.)]\s/.test(value)) {
+      return <p key={index} className="pl-1">{value.replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</p>;
     }
-    return <p key={index}>{value.replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</p>;
+    return <p key={index}>{value.replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</p>;
   });
 
   // Filter conversations matching search query
