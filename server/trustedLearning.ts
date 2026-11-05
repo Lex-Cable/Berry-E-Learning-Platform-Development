@@ -9,7 +9,7 @@ import { COURSES } from './privateCurriculumData';
 import { INTERNATIONAL_STARTER_COURSES } from '../src/data/internationalStarterCourses';
 import { buildCourseAssignments, markAssignmentSubmission } from '../src/utils/assignments';
 import { withInteractivePractice } from '../src/utils/interactiveActivities';
-import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
+import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, selectRequiredQuestionSet, summarizeCourseProgress } from './trustedLearningLogic';
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
 
 const router = express.Router();
@@ -167,7 +167,9 @@ router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', req
     if (!(await previousTopicRequirementsMet(context.uid, context.course, lesson.id, cycle))) {
       return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before opening this lesson.' });
     }
-    return res.json({ questions: safeQuestions(lesson.quizQuestions) });
+    const masteryQuestions = selectRequiredQuestionSet(lesson.quizQuestions, 10);
+    if (!masteryQuestions) return res.status(422).json({ error: `This topic has ${lesson.quizQuestions.length} approved mastery questions; 10 are required. Please ask the course administrator to complete the question bank.` });
+    return res.json({ questions: safeQuestions(masteryQuestions) });
   } catch (error) {
     console.error('Trusted lesson question retrieval failed:', error);
     return res.status(500).json({ error: 'Unable to load assessment questions.' });
@@ -185,7 +187,8 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
     if (!(await previousTopicRequirementsMet(uid, course, lesson.id, currentCycle))) {
       return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before attempting this lesson.' });
     }
-    const questions = lesson.quizQuestions;
+    const questions = selectRequiredQuestionSet(lesson.quizQuestions, 10);
+    if (!questions) return res.status(422).json({ error: `This topic has ${lesson.quizQuestions.length} approved mastery questions; 10 are required. Please ask the course administrator to complete the question bank.` });
     if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every question.' });
     const cycle = currentCycle;
     const answers = req.body.answers as Record<string, number>;
@@ -328,7 +331,9 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     if (!existingAttempt.empty) return res.status(409).json({ error: 'This enrolment cycle already has a final-exam attempt. Complete a full course retake to unlock another attempt.' });
     let session = await sessionCollection.doc('active').get();
     if (!session.exists) {
-      const questionIds = shuffle(course.exam.questions.map((question) => question.id));
+      const requiredExamQuestions = selectRequiredQuestionSet(course.exam.questions, 30);
+      if (!requiredExamQuestions) return res.status(422).json({ error: `This course has ${course.exam.questions.length} approved final-exam questions; 30 are required. Please ask the course administrator to complete the exam bank.` });
+      const questionIds = shuffle(requiredExamQuestions.map((question) => question.id));
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
       await adminDb!.runTransaction(async (transaction) => {
@@ -342,7 +347,9 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     }
     const questionIds = session.data()?.questionIds;
     if (!Array.isArray(questionIds)) return res.status(503).json({ error: 'Unable to prepare a secure exam session.' });
-    const byId = new Map(course.exam.questions.map((question) => [question.id, question]));
+    const approvedExamQuestions = selectRequiredQuestionSet(course.exam.questions, 30);
+    if (!approvedExamQuestions) return res.status(422).json({ error: `This course has ${course.exam.questions.length} approved final-exam questions; 30 are required.` });
+    const byId = new Map(approvedExamQuestions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
     if (questions.length !== course.exam.questions.length) return res.status(500).json({ error: 'The exam question set is incomplete.' });
     const sessionData = session.data() ?? {};
@@ -376,7 +383,9 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     if (!Number.isFinite(expiresAt) || Date.now() > expiresAt + 30_000) {
       return res.status(409).json({ error: 'The 60-minute exam time has expired. Please contact your instructor if a connection issue prevented submission.' });
     }
-    const questionById = new Map(course.exam.questions.map((question) => [question.id, question]));
+    const approvedExamQuestions = selectRequiredQuestionSet(course.exam.questions, 30);
+    if (!approvedExamQuestions) return res.status(422).json({ error: `This course has ${course.exam.questions.length} approved final-exam questions; 30 are required.` });
+    const questionById = new Map(approvedExamQuestions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => questionById.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
     if (!validAnswers(questions, req.body?.answers, true)) return res.status(400).json({ error: 'Submit valid answers for the questions you attempted.' });
     const answers = req.body.answers as Record<string, number>;
