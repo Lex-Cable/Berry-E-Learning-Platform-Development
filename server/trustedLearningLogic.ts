@@ -56,7 +56,8 @@ export function certificateUnmetRequirements(input: CertificateRequirements): st
   if (!summary.courseCompleted) unmet.push(`course completion (${summary.completedCount}/${input.totalLessons} lessons)`);
   if (summary.courseMasteryPercent < 75) unmet.push(`course mastery (${summary.courseMasteryPercent}% / 75%)`);
   if (!input.examPassed) unmet.push('final exam pass (75% or higher)');
-  if ((input.approvedInteractiveLessonCount || 0) > 0 && (input.interactiveScorePercent || 0) < 75) unmet.push(`interactive practice (${input.interactiveScorePercent || 0}% / 75%)`);
+  if ((input.approvedInteractiveLessonCount || 0) === 0) unmet.push('approved interactive practice not configured for this course');
+  else if ((input.interactiveScorePercent || 0) < 75) unmet.push(`interactive practice (${input.interactiveScorePercent || 0}% / 75%)`);
   if (input.approvedAssignmentCount === 0) unmet.push('approved assignment and marking rubric not configured for this course');
   if (input.assignments.length < input.approvedAssignmentCount) unmet.push(`topic assignments completed (${input.assignments.length}/${input.approvedAssignmentCount})`);
   input.assignments.forEach((assignment, index) => {
