@@ -85,7 +85,8 @@ export async function saveLearnerProfile(
   const normalized = normalizeLearnerProfile(uid, displayName, profile);
   await setDoc(
     doc(requireFirestore(), 'users', uid),
-    { ...profileDocument(normalized), updatedAt: serverTimestamp() }
+    { ...profileDocument(normalized), updatedAt: serverTimestamp() },
+    { merge: true }
   );
   return normalized;
 }
@@ -104,11 +105,16 @@ export async function getOrCreateLearnerProfile(
       snapshot.exists() ? (snapshot.data() as Partial<LearnerProfile>) : {}
     );
 
-    // Create missing profiles and repair outdated ones without racing signup writes.
-    transaction.set(reference, {
-      ...profileDocument(profile),
-      updatedAt: serverTimestamp(),
-    });
+    // Existing profiles are read-only here. Rewriting the full document on every
+    // sign-in caused avoidable transaction contention with profile edits and
+    // other authentication events. Only the first sign-in creates the document;
+    // the transaction retries safely if two sign-ins create it concurrently.
+    if (!snapshot.exists()) {
+      transaction.set(reference, {
+        ...profileDocument(profile),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
     return profile;
   });
 }
