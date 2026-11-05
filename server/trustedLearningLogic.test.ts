@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateWeightedCertificateScore, canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
+import { calculateWeightedCertificateScore, selectRequiredQuestionSet, canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
 
 test('exam pass mark is at least 75 percent', () => {
   assert.equal(isPassingExamScore(74), false);
@@ -45,4 +45,11 @@ test('weighted certificate score uses the approved 25/35/20/20 components', () =
     masteryScores: [70, 90],
     interactiveScores: [100, 80],
   }), 86);
+});
+
+test('required assessment question sets have the exact requested length and never fabricate missing items', () => {
+  const pool = Array.from({ length: 35 }, (_, index) => ({ id: `q-${index + 1}` }));
+  assert.equal(selectRequiredQuestionSet(pool, 10)?.length, 10);
+  assert.equal(selectRequiredQuestionSet(pool, 30)?.length, 30);
+  assert.equal(selectRequiredQuestionSet(pool.slice(0, 8), 10), null);
 });
