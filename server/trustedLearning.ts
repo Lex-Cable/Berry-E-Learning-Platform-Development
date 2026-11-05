@@ -1,3 +1,6 @@
+﻿import { hasActiveTrustedEnrollment } from './trustedEnrollment';
+import { issueTrustedCertificateTransaction } from './trustedCertificateIssuance';
+
 import { randomInt as secureRandomInt, randomUUID } from 'node:crypto';
 import express from 'express';
 import { adminDb } from './firebaseAdmin';
@@ -49,13 +52,18 @@ async function getEnrolledCourse(req: AuthenticatedRequest, res: express.Respons
     res.status(503).json({ error: 'Secure learner services are unavailable.' });
     return null;
   }
-  const profile = await adminDb.collection('users').doc(req.user.uid).get();
+
+  const uid = req.user.uid;
+const profile = await adminDb.collection('users').doc(req.user.uid).get();
   if (!profile.exists) {
     res.status(403).json({ error: 'A learner profile is required.' });
     return null;
   }
-  const enrolled = profile.data()?.enrolledCourseIds;
-  if (!Array.isArray(enrolled) || !enrolled.includes(courseId)) {
+  const enrollment = await adminDb
+    .collection('users').doc(uid)
+    .collection('enrollments').doc(courseId).get();
+
+  if (!hasActiveTrustedEnrollment({ exists: enrollment.exists, status: enrollment.data()?.status })) {
     res.status(403).json({ error: 'You must be enrolled in this course.' });
     return null;
   }
@@ -82,6 +90,44 @@ async function ensureCycle(uid: string, courseId: string): Promise<number> {
     return cycle;
   });
 }
+
+router.post('/api/learning/courses/:courseId/enroll', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!adminDb || !req.user?.uid) {
+      return res.status(503).json({ error: 'Secure learner services are unavailable.' });
+    }
+
+    const uid = req.user.uid;
+    const courseId = String(req.params.courseId);
+    const course = COURSES.find((item) => item.id === courseId);
+
+    if (!course) {
+      return res.status(404).json({ error: 'Course not found.' });
+    }
+
+    const enrollmentRef = adminDb
+      .collection('users').doc(uid)
+      .collection('enrollments').doc(courseId);
+
+    const existing = await enrollmentRef.get();
+
+    if (!existing.exists || existing.data()?.status !== 'active') {
+      await enrollmentRef.set({
+        uid,
+        courseId,
+        status: 'active',
+        source: 'self_enrollment',
+        enrolledAt: new Date(),
+        updatedAt: new Date(),
+      }, { merge: true });
+    }
+
+    return res.json({ enrolled: true, courseId });
+  } catch (error) {
+    console.error('Course enrollment failed:', error);
+    return res.status(500).json({ error: 'Could not complete course enrollment.' });
+  }
+});
 
 router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
   try {
@@ -334,52 +380,63 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
   try {
     const context = await getEnrolledCourse(req, res, req.params.courseId);
     if (!context) return;
+
     const { course, profile, uid } = context;
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
-    const [cycleSnapshot, progress, assignments, previousCertificates] = await Promise.all([
-      ref.get(), ref.collection('lessonProgress').get(), ref.collection('assignments').get(),
-      adminDb!.collection('users').doc(uid).collection('trustedCertificates').where('courseId', '==', course.id).get(),
-    ]);
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
-    const progressRecords = progress.docs.map((document) => document.data());
-    const courseMasteryPercent = summarizeCourseProgress(progressRecords, totalLessons).courseMasteryPercent;
     const requiredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
-    const assignmentRecords = assignments.docs.map((document) => document.data());
-    const unmet = certificateUnmetRequirements({
-      totalLessons,
-      progress: progressRecords,
-      examPassed: cycleSnapshot.data()?.examPassed === true,
-      assignments: assignmentRecords,
-      approvedAssignmentCount: requiredAssignments.length,
-      certificateAlreadyIssued: !previousCertificates.empty,
-    });
-    if (unmet.length) return res.status(409).json({ eligible: false, unmet, cycle, courseMasteryPercent });
+
     const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
-    const certificate: CertificateRecord & { uid: string; trusted: true; cycle: number } = {
-      id: credentialId, credentialId, courseId: course.id, courseTitle: course.title,
-      recipientName: typeof profile.name === 'string' ? profile.name : 'Berry Learner',
-      stage: profile.stage, gradeLevel: course.gradeLevel, curriculum: course.curriculum,
-      issuedDate: new Date().toISOString(), scorePercent: Number(cycleSnapshot.data()?.examScorePercent || 0),
-      authority: 'Berry Learning Platform', verified: true, uid, trusted: true, cycle,
-    };
     const certificateRef = adminDb!.collection('trustedCertificates').doc(credentialId);
-    await adminDb!.runTransaction(async (transaction) => {
-      const existing = await transaction.get(certificateRef);
-      const duplicate = await transaction.get(adminDb!.collection('users').doc(uid).collection('trustedCertificates').doc(course.id));
-      if (existing.exists || duplicate.exists) throw new Error('CERTIFICATE_ALREADY_EXISTS');
-      transaction.create(certificateRef, certificate);
-      transaction.create(duplicate.ref, certificate);
+    const learnerCertificateRef = adminDb!
+      .collection('users').doc(uid)
+      .collection('trustedCertificates').doc(course.id);
+
+    const certificate: CertificateRecord & { uid: string; trusted: true; cycle: number } = {
+      id: credentialId,
+      credentialId,
+      courseId: course.id,
+      courseTitle: course.title,
+      recipientName: typeof profile.name === 'string' ? profile.name : 'Berry Learner',
+      stage: profile.stage,
+      gradeLevel: course.gradeLevel,
+      curriculum: course.curriculum,
+      issuedDate: new Date().toISOString(),
+      scorePercent: Number((await ref.get()).data()?.examScorePercent || 0),
+      authority: 'Berry Learning Platform',
+      verified: true,
+      uid,
+      trusted: true,
+      cycle,
+    };
+
+    const issuance = await issueTrustedCertificateTransaction({
+      db: adminDb!,
+      cycleRef: ref,
+      certificateRef,
+      learnerCertificateRef,
+      certificate,
+      totalLessons,
+      approvedAssignmentCount: requiredAssignments.length,
+      cycle,
     });
-    return res.status(201).json({ eligible: true, certificate });
+
+    if (!issuance.eligible) {
+      return res.status(409).json({
+        eligible: false,
+        unmet: issuance.unmet,
+        cycle: issuance.cycle,
+        courseMasteryPercent: issuance.courseMasteryPercent,
+      });
+    }
+
+    return res.status(201).json({ eligible: true, certificate: issuance.certificate });
   } catch (error) {
-    if (error instanceof Error && error.message === 'CERTIFICATE_ALREADY_EXISTS') return res.status(409).json({ eligible: false, error: 'A certificate has already been issued for this course.' });
     console.error('Trusted certificate issuance failed:', error);
     return res.status(500).json({ error: 'Unable to issue the certificate.' });
   }
 });
-
-
 router.get('/api/certificates/mine', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
   try {
     if (!adminDb || !req.user?.uid) return res.status(503).json({ error: 'Certificate records are temporarily unavailable.' });
@@ -405,3 +462,6 @@ router.get('/api/certificates/verify/:credentialId', async (req, res) => {
 });
 
 export default router;
+
+
+

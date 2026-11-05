@@ -17,6 +17,7 @@ export const submitLessonAssessment=(courseId:string,lessonId:string,answers:Rec
 export const getCourseExam=(courseId:string)=>request<{questions:ExamQuestion[];cycle:number}>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/questions`);
 export const submitCourseExam=(courseId:string,answers:Record<string,number>)=>request<ExamResult>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/submit`,{answers});
 export const getCourseStatus=(courseId:string)=>request<CourseStatus>(`/api/learning/courses/${encodeURIComponent(courseId)}/status`);
+export const enrollInCourse = (courseId: string) => request<{ enrolled: true; courseId: string }>(`/api/learning/courses/${encodeURIComponent(courseId)}/enroll`, {});
 export const startCourseRetake=(courseId:string)=>request<{courseId:string;cycle:number;message:string}>(`/api/learning/courses/${encodeURIComponent(courseId)}/retake`,{});
 export const issueTrustedCertificate=(courseId:string)=>request<{eligible:true;certificate:CertificateRecord}>(`/api/certificates/courses/${encodeURIComponent(courseId)}/issue`,{});
 export const submitTrustedAssignment=(courseId:string,assignmentId:string,content:string)=>request<{submission:unknown;marking:unknown}>(`/api/assignments/courses/${encodeURIComponent(courseId)}/${encodeURIComponent(assignmentId)}/submit`,{content});

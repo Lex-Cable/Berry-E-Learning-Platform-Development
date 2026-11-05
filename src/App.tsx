@@ -46,9 +46,7 @@ import {
   loadAssignmentSubmission,
   loadExamAttempts,
   loadLearnerNotifications,
-  loadLearnerTasks,
-  saveAssignmentMarking,
-  saveAssignmentSubmission,
+  loadLearnerTasks,  saveAssignmentSubmission,
   saveExamAttempt,
   saveLearnerNotification,
   saveLearnerTask,
@@ -57,7 +55,7 @@ import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, ty
 import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
 import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
 import { loadLearningCertificates, loadLearningProgress } from './services/learningProgress';
-import { getCourseStatus, issueTrustedCertificate, loadTrustedCertificates } from './services/assessments';
+import { enrollInCourse, getCourseStatus, issueTrustedCertificate, loadTrustedCertificates } from './services/assessments';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
@@ -244,7 +242,7 @@ export default function App() {
     if (!authStateReady || !isLoggedIn || !learner.enrolledCourseIds.length) return;
     let cancelled = false;
     void Promise.all(learner.enrolledCourseIds.map((courseId) =>
-      getCourseStatus(courseId).then((status) => ({ courseId, status })).catch((error) => {
+      enrollInCourse(courseId).then(() => getCourseStatus(courseId)).then((status) => ({ courseId, status })).catch((error) => {
         console.warn(`Could not load trusted status for ${courseId}:`, error);
         return null;
       }),
@@ -583,14 +581,20 @@ export default function App() {
   };
 
   // Enroll in course
-  const handleEnrollCourse = (courseId: string) => {
-    if (!learner.enrolledCourseIds.includes(courseId)) {
+  const handleEnrollCourse = async (courseId: string) => {
+    if (learner.enrolledCourseIds.includes(courseId)) return;
+
+    try {
+      if (firebaseAuth?.currentUser?.uid) {
+        await enrollInCourse(courseId);
+      }
+
       const enrolledCourseIds = [...learner.enrolledCourseIds, courseId];
       setLearner((prev) => ({ ...prev, enrolledCourseIds }));
-      void handlePersistLearnerProfile({ enrolledCourseIds }).catch((error) => {
-        setAuthNotice(getLearnerProfileErrorMessage(error));
-        setTimeout(() => setAuthNotice(null), 6000);
-      });
+      await handlePersistLearnerProfile({ enrolledCourseIds });
+    } catch (error) {
+      setAuthNotice(getLearnerProfileErrorMessage(error));
+      setTimeout(() => setAuthNotice(null), 6000);
     }
   };
 
@@ -716,11 +720,14 @@ export default function App() {
             }
           : {}),
       };
-      const persist = result.status === 'submitted'
-        ? saveAssignmentSubmission(uid, payload as Parameters<typeof saveAssignmentSubmission>[1])
-        : saveAssignmentMarking(uid, payload as Parameters<typeof saveAssignmentMarking>[1]);
-      void persist.catch((error) => {
-        console.warn('Assignment submission kept locally; cloud sync failed:', error);
+      void saveAssignmentSubmission(uid, {
+        assignmentId: assignment.id,
+        content,
+        submittedAt,
+        attemptNumber,
+        status: 'submitted',
+      }).catch((error) => {
+        console.warn('Practice assignment kept locally; cloud sync failed:', error);
       });
     }
 

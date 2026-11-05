@@ -106,7 +106,7 @@ export async function loadAssignmentSubmission(
   uid: string,
   assignmentId: string,
 ): Promise<{ content: string; status: string; scorePercent: number; markerFeedback: string; gradedAt: string } | null> {
-  const snapshot = await getDoc(doc(requireDatabase(), 'users', uid, 'assignmentSubmissions', assignmentId));
+  const snapshot = await getDoc(doc(requireDatabase(), 'users', uid, 'practiceAssignmentSubmissions', assignmentId));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
   return {
@@ -128,36 +128,12 @@ export async function saveAssignmentSubmission(
     status: string;
   },
 ): Promise<void> {
-  await setDoc(doc(requireDatabase(), 'users', uid, 'assignmentSubmissions', submission.assignmentId), {
+  await setDoc(doc(requireDatabase(), 'users', uid, 'practiceAssignmentSubmissions', submission.assignmentId), {
     ...submission,
     content: submission.content.slice(0, ASSIGNMENT_MAX),
     updatedAt: serverTimestamp(),
   });
 }
-
-export async function saveAssignmentMarking(
-  uid: string,
-  marking: {
-    assignmentId: string;
-    content: string;
-    submittedAt: string;
-    attemptNumber: number;
-    status: string;
-    scorePercent: number;
-    markerFeedback: string;
-    gradedAt: string;
-    criterionScores: { criterionId: string; awarded: number; outOf: number }[];
-  },
-): Promise<void> {
-  await setDoc(doc(requireDatabase(), 'users', uid, 'assignmentSubmissions', marking.assignmentId), {
-    ...marking,
-    content: marking.content.slice(0, ASSIGNMENT_MAX),
-    markerFeedback: marking.markerFeedback.slice(0, 5000),
-    updatedAt: serverTimestamp(),
-  });
-}
-
-// ------------------------------------------------------- exam attempts
 
 export async function loadExamAttempts(uid: string): Promise<import('../types').ExamAttemptRecord[]> {
   const snapshot = await getDocs(collection(requireDatabase(), 'users', uid, 'examAttempts'));
@@ -182,7 +158,7 @@ export async function loadExamAttempts(uid: string): Promise<import('../types').
       passingScorePercent: data.passingScorePercent,
       answers: data.answers as Record<string, number>,
       submittedAt: data.submittedAt,
-      trusted: data.trusted === true,
+      trusted: false,
     });
   }
   return attempts;
