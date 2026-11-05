@@ -139,6 +139,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [examQuestions, setExamQuestions] = useState<import('../../types').ExamQuestion[]>([]);
   const [examResults, setExamResults] = useState<Record<string, { correct: boolean; correctAnswerIndex?: number; explanation?: string }>>({});
   const [examLoading, setExamLoading] = useState(false);
+  const [examExpiresAt, setExamExpiresAt] = useState<string | null>(null);
+  const [examTimeRemaining, setExamTimeRemaining] = useState(60 * 60);
   const [examSubmitting, setExamSubmitting] = useState(false);
   const [examError, setExamError] = useState<string | null>(null);
   const [retakeLoading, setRetakeLoading] = useState(false);
@@ -202,7 +204,11 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
         return;
       }
       const exam = await getCourseExam(activeCourse.id);
-      if (!cancelled) setExamQuestions(exam.questions);
+      if (!cancelled) {
+        setExamQuestions(exam.questions);
+        setExamExpiresAt(exam.expiresAt);
+        setExamTimeRemaining(Math.max(0, Math.ceil((Date.parse(exam.expiresAt) - Date.now()) / 1000)));
+      }
     }).catch((error) => { if (!cancelled) setExamError(error instanceof Error ? error.message : 'Unable to load exam.'); })
       .finally(() => { if (!cancelled) setExamLoading(false); });
     return () => { cancelled = true; };
@@ -219,6 +225,20 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       setExamError(error instanceof Error ? error.message : 'Exam submission failed.');
     } finally { setExamSubmitting(false); }
   };
+
+  useEffect(() => {
+    if (!takingExam || examSubmitted || !examExpiresAt) return;
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((Date.parse(examExpiresAt) - Date.now()) / 1000));
+      setExamTimeRemaining(remaining);
+      if (remaining === 0) {
+        setExamError('The 60-minute exam time has expired. Submit the answers you have selected.');
+      }
+    };
+    updateRemaining();
+    const timer = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(timer);
+  }, [takingExam, examSubmitted, examExpiresAt]);
 
   const handleStartFullRetake = async () => {
     if (!activeCourse || retakeLoading) return;
@@ -381,6 +401,16 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           </div>
         )}
 
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div>
+            <p className="text-xs font-bold text-amber-900">Final exam time remaining</p>
+            <p className="text-[11px] text-amber-800">One-hour timed assessment</p>
+          </div>
+          <span role="timer" aria-live="off" className="font-mono text-xl font-black tabular-nums text-amber-950">
+            {String(Math.floor(examTimeRemaining / 3600)).padStart(2, '0')}:{String(Math.floor((examTimeRemaining % 3600) / 60)).padStart(2, '0')}:{String(examTimeRemaining % 60).padStart(2, '0')}
+          </span>
+        </div>
+
         {/* Exam Questions */}
         <div className="space-y-4">
           {examLoading ? <p>Loading secure exam questions…</p> : examError && !examQuestions.length ? <p role="alert">{examError}</p> : examQuestions.map((q, idx) => {
@@ -465,10 +495,10 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             </span>
             <button
               onClick={handleSubmitExam}
-              disabled={examSubmitting || examLoading || Object.keys(examAnswers).length < examQuestions.length || !examQuestions.length}
+              disabled={examSubmitting || examLoading || Object.keys(examAnswers).length < examQuestions.length || !examQuestions.length || examTimeRemaining === 0}
               className="px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all active:scale-95"
             >
-              {examSubmitting ? 'Submitting securely…' : 'Submit & Grade Exam'}
+              {examSubmitting ? 'Submitting securely…' : examTimeRemaining === 0 ? 'Time expired' : 'Submit & Grade Exam'}
             </button>
           </div>
         )}
