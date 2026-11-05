@@ -251,18 +251,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
         ...previous,
         [activity.id]: result.submission.feedback + ` Interactive score: ${result.interactiveScorePercent}%.`,
       }));
-      if (result.lessonCompleted) {
-        onSaveMastery({
-          lessonId,
-          isCompleted: true,
-          isMastered: true,
-          scorePercent: masteryRecord?.scorePercent || 0,
-          attemptsCount: masteryRecord?.attemptsCount || 0,
-          lastAttemptDate: new Date().toISOString(),
-          identifiedMisconceptions: masteryRecord?.identifiedMisconceptions || [],
-          remedialActivitiesCompleted: true,
-        });
-      }
+      if (result.lessonCompleted) onSaveMastery(result.progress);
     } catch (error) {
       setActivitySubmissionResults((previous) => ({
         ...previous,
