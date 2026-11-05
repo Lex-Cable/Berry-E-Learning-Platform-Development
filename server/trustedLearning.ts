@@ -223,11 +223,14 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     let session = await sessionCollection.doc('active').get();
     if (!session.exists) {
       const questionIds = shuffle(course.exam.questions.map((question) => question.id));
-      const now = new Date().toISOString();
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
       await adminDb!.runTransaction(async (transaction) => {
         const current = await transaction.get(sessionCollection.doc('active'));
         const attempt = await transaction.get(cycleDocument.collection('examAttempts').limit(1));
-        if (!current.exists && attempt.empty) transaction.create(sessionCollection.doc('active'), { cycle, questionIds, createdAt: now });
+        if (!current.exists && attempt.empty) transaction.create(sessionCollection.doc('active'), {
+          cycle, questionIds, createdAt: now.toISOString(), expiresAt,
+        });
       });
       session = await sessionCollection.doc('active').get();
     }
@@ -236,7 +239,16 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     const byId = new Map(course.exam.questions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
     if (questions.length !== course.exam.questions.length) return res.status(500).json({ error: 'The exam question set is incomplete.' });
-    return res.json({ questions: safeQuestions(questions.map((question) => ({ ...question, topic: question.topic }))), cycle });
+    const sessionData = session.data() ?? {};
+    let expiresAt = typeof sessionData.expiresAt === 'string' ? sessionData.expiresAt : '';
+    if (!expiresAt) {
+      expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      await session.ref.set({ expiresAt }, { merge: true });
+    }
+    if (Date.parse(expiresAt) <= Date.now()) {
+      return res.status(409).json({ error: 'The 60-minute exam time has expired. Submit your saved answers or request a new full-course retake.' });
+    }
+    return res.json({ questions: safeQuestions(questions.map((question) => ({ ...question, topic: question.topic }))), cycle, expiresAt });
   } catch (error) {
     console.error('Trusted exam session creation failed:', error);
     return res.status(500).json({ error: 'Unable to prepare the final exam.' });
@@ -254,6 +266,10 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     const session = await cycleDocument.collection('examSessions').doc('active').get();
     const questionIds = session.data()?.questionIds;
     if (!session.exists || !Array.isArray(questionIds)) return res.status(409).json({ error: 'Start the final exam before submitting answers.' });
+    const expiresAt = Date.parse(String(session.data()?.expiresAt || ''));
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+      return res.status(409).json({ error: 'The 60-minute exam time has expired. Your answers can no longer be changed.' });
+    }
     const questionById = new Map(course.exam.questions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => questionById.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
     if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every exam question in your active session.' });
