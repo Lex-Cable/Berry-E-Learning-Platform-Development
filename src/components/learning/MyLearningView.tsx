@@ -23,6 +23,7 @@ import {
   LessonMasteryState,
   CertificateRecord,
 } from '../../types';
+import type { CurriculumRepository } from '../../curriculum/repository';
 import { LessonView } from '../lessons/LessonView';
 import { isLessonUnlocked } from '../../utils/mastery';
 import { loadLastOpenedLesson, saveLastOpenedLesson } from '../../services/learningProgress';
@@ -33,6 +34,7 @@ import { getCourseExam, getCourseStatus, submitCourseExam, startCourseRetake } f
 interface MyLearningViewProps {
   learner: LearnerProfile;
   courses: Course[];
+  curriculumRepository: CurriculumRepository;
   masteryRecords: Record<string, LessonMasteryState>;
   onSaveMastery: (record: LessonMasteryState) => void;
   onNavigateToCertificates?: () => void;
@@ -53,6 +55,7 @@ interface MyLearningViewProps {
 export const MyLearningView: React.FC<MyLearningViewProps> = ({
   learner,
   courses,
+  curriculumRepository,
   masteryRecords,
   onSaveMastery,
   onNavigateToCertificates,
@@ -145,7 +148,9 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
 
   // Available grade options based on learner stage
   // My Learning must show only courses this learner has actually enrolled in.
-  const enrolledCourses = courses.filter((course) => learner.enrolledCourseIds.includes(course.id));
+  const enrolledCourses = curriculumRepository.entries
+    .filter(({ course }) => learner.enrolledCourseIds.includes(course.id))
+    .map(({ course }) => course);
   const availableGrades = Array.from(new Set(enrolledCourses.map((course) => course.gradeLevel)))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
