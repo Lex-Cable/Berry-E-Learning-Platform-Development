@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
+import { calculateWeightedCertificateScore, canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
 
 test('exam pass mark is at least 75 percent', () => {
   assert.equal(isPassingExamScore(74), false);
@@ -28,7 +28,7 @@ test('full retake is unavailable until every course lesson is completed', () => 
 });
 
 test('certificate eligibility rejects missing requirements and accepts a fully eligible course', () => {
-  const base = { totalLessons: 2, progress: [{ isCompleted: true, isMastered: true }, { isCompleted: true, isMastered: true }], examPassed: true, assignments: [{ status: 'graded', scorePercent: 75 }], approvedAssignmentCount: 1, certificateAlreadyIssued: false };
+  const base = { totalLessons: 2, progress: [{ isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }, { isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }], examPassed: true, assignments: [{ status: 'graded', scorePercent: 75 }], approvedAssignmentCount: 1, approvedInteractiveLessonCount: 2, interactiveScorePercent: 90, certificateAlreadyIssued: false };
   assert.deepEqual(certificateUnmetRequirements(base), []);
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 0, assignments: [] }).some((item) => item.includes('rubric')));
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 2, assignments: [{ status: 'graded', scorePercent: 90 }] }).some((item) => item.includes('topic assignments completed')));
@@ -36,4 +36,13 @@ test('certificate eligibility rejects missing requirements and accepts a fully e
   assert.ok(certificateUnmetRequirements({ ...base, certificateAlreadyIssued: true }).some((item) => item.includes('already issued')));
   assert.ok(certificateUnmetRequirements({ ...base, progress: [{ isCompleted: true, isMastered: true }, { isCompleted: true, isMastered: false }] }).some((item) => item.includes('mastery')));
   assert.ok(certificateUnmetRequirements({ ...base, assignments: [{ status: 'graded', scorePercent: 49 }] }).some((item) => item.includes('assignment')));
+});
+
+test('weighted certificate score uses the approved 25/35/20/20 components', () => {
+  assert.equal(calculateWeightedCertificateScore({
+    assignmentScores: [80],
+    examScorePercent: 90,
+    masteryScores: [70, 90],
+    interactiveScores: [100, 80],
+  }), 86);
 });
