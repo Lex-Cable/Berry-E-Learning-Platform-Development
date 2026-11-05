@@ -49,7 +49,7 @@ test('builds searchable curriculum, stage, grade and subject indexes without mut
   const courses = [
     course(),
     course({ id: 'cambridge-y7-science', curriculum: 'cambridge', stage: 'senior', gradeLevel: 'Year 7', subject: 'Science' }),
-    course({ id: 'uni-cs-101', stage: 'university', advanceTrack: 'university', gradeLevel: 'Bachelor Year 1', subject: 'Computer Science' }),
+    course({ id: 'uni-cs-101', curriculum: 'ib', stage: 'university', advanceTrack: 'university', gradeLevel: 'Bachelor Year 1', subject: 'Computer Science' }),
   ];
   const repository = buildCurriculumRepository(courses);
 
