@@ -227,17 +227,17 @@ export const LessonView: React.FC<LessonViewProps> = ({
   };
 
   const renderLessonNotes = (source: string) => {
-    const lines = source.split(/\\r?\\n/);
+    const lines = source.split(/\r?\n/);
     return lines.map((line, index) => {
       const trimmed = line.trim();
       if (!trimmed) return <div key={index} className="h-2" />;
-      if (/^#{1,3}\\s/.test(trimmed)) {
-        return <h3 key={index} className="pt-2 text-lg font-extrabold tracking-tight text-slate-900">{trimmed.replace(/^#{1,3}\\s*/, '')}</h3>;
+      if (/^#{1,3}\s/.test(trimmed)) {
+        return <h3 key={index} className="pt-2 text-lg font-extrabold tracking-tight text-slate-900">{trimmed.replace(/^#{1,3}\s*/, '')}</h3>;
       }
-      if (/^[-*]\\s/.test(trimmed)) {
-        return <div key={index} className="flex items-start gap-2 pl-2 text-sm leading-7 text-slate-700"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{trimmed.replace(/^[-*]\\s*/, '').replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</span></div>;
+      if (/^[-*]\s/.test(trimmed)) {
+        return <div key={index} className="flex items-start gap-2 pl-2 text-sm leading-7 text-slate-700"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{trimmed.replace(/^[-*]\s*/, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</span></div>;
       }
-      return <p key={index} className="text-sm leading-7 text-slate-700">{trimmed.replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</p>;
+      return <p key={index} className="text-sm leading-7 text-slate-700">{trimmed.replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</p>;
     });
   };
 
