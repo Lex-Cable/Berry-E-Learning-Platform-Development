@@ -61,6 +61,13 @@ test('buildCourseAssignments creates assignments bound to real courses', () => {
   assert.equal(empty.length, 0);
 });
 
+test('buildCourseAssignments emits only one assignment per unique course ID', () => {
+  const course = makeCourse();
+  const assignments = buildCourseAssignments([course, { ...course, title: 'Duplicate course record' }]);
+  assert.equal(assignments.length, 1);
+  assert.equal(assignments[0].courseId, course.id);
+});
+
 test('markAssignmentSubmission grades a strong submission as passed', () => {
   const assignment = buildCourseAssignments([makeCourse()])[0];
   const content =
