@@ -8,6 +8,7 @@ import { requireFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMi
 import { COURSES } from './privateCurriculumData';
 import { INTERNATIONAL_STARTER_COURSES } from '../src/data/internationalStarterCourses';
 import { buildCourseAssignments, markAssignmentSubmission } from '../src/utils/assignments';
+import { withInteractivePractice } from '../src/utils/interactiveActivities';
 import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
 
@@ -19,10 +20,10 @@ type PrivateCourse = Course;
 // Server-side trusted catalogue: private production courses plus the
 // Berry-authored international starter courses. Never accept course content
 // or answer keys supplied by the browser.
-const TRUSTED_COURSES: PrivateCourse[] = [
+const TRUSTED_COURSES: PrivateCourse[] = withInteractivePractice([
   ...(COURSES as PrivateCourse[]),
   ...INTERNATIONAL_STARTER_COURSES,
-];
+]);
 // Same Berry-authored, course-specific rubric catalogue as the learner UI.
 const TRUSTED_ASSIGNMENTS = buildCourseAssignments(TRUSTED_COURSES);
 
