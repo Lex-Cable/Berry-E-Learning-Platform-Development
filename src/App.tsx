@@ -146,6 +146,48 @@ export default function App() {
     }
   }, [workspaceLoadedFor, learner.id, learner.stage, learner.enrolledCourseIds.join('|'), assignments, courses, tasks]);
 
+  // Surface due-soon and overdue reminders from saved planner deadlines.
+  // The stable notification IDs make this safe to run on every app refresh.
+  useEffect(() => {
+    const checkUpcomingDeadlines = () => {
+      const now = Date.now();
+      const dueWindow = 24 * 60 * 60 * 1000;
+      const reminders: AppNotification[] = [];
+      tasks.forEach((task) => {
+        if (task.status === 'completed') return;
+        const dueAt = new Date(task.dueDate).getTime();
+        if (!Number.isFinite(dueAt)) return;
+        const overdue = dueAt <= now;
+        if (!overdue && dueAt - now > dueWindow) return;
+        const reminderId = `notif-task-reminder-${task.id}-${overdue ? 'overdue' : 'due-soon'}`;
+        if (notifications.some((notification) => notification.id === reminderId)) return;
+        reminders.push({
+          id: reminderId,
+          title: overdue ? 'Assignment or task is overdue' : 'Deadline coming up',
+          message: overdue
+            ? `${task.title} was due ${new Date(task.dueDate).toLocaleString()}. Open your planner to update its status.`
+            : `${task.title} is due ${new Date(task.dueDate).toLocaleString()} (within 24 hours).`,
+          stage: task.stage,
+          type: 'deadline',
+          date: 'Just now',
+          unread: true,
+          actionUrl: 'calendar',
+        });
+      });
+      if (reminders.length) {
+        setNotifications((current) => {
+          const existing = new Set(current.map((notification) => notification.id));
+          return [...reminders.filter((item) => !existing.has(item.id)), ...current];
+        });
+        const uid = firebaseAuth?.currentUser?.uid;
+        if (uid) reminders.forEach((item) => void saveLearnerNotification(uid, item).catch((error) => console.warn('Deadline reminder could not sync:', error)));
+      }
+    };
+    checkUpcomingDeadlines();
+    const interval = window.setInterval(checkUpcomingDeadlines, 60_000);
+    return () => window.clearInterval(interval);
+  }, [tasks, notifications]);
+
   // Auth / Session State (starts logged out on landing page as requested)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [authStateReady, setAuthStateReady] = useState(false);
