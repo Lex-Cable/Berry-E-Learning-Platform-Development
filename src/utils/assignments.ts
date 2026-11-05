@@ -6,8 +6,13 @@ import type { Assignment, AssignmentRubricCriterion, AssignmentSubmissionStatus,
  * Berry never fabricates curriculum content.
  */
 export function buildCourseAssignments(courses: Course[]): Assignment[] {
+  const seenCourseIds = new Set<string>();
   return courses
-    .filter((course) => course.chapters.some((chapter) => chapter.lessons.length > 0))
+    .filter((course) => {
+      if (seenCourseIds.has(course.id) || !course.chapters.some((chapter) => chapter.lessons.length > 0)) return false;
+      seenCourseIds.add(course.id);
+      return true;
+    })
     .map((course) => {
       const firstLessonTitle = course.chapters[0]?.lessons[0]?.title ?? course.subject;
       const lessonIds = course.chapters.flatMap((chapter) => chapter.lessons.map((lesson) => lesson.id));
