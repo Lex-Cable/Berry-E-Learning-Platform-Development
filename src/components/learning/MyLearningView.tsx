@@ -496,7 +496,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
         {!examSubmitted && (
           <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
             <span className="text-xs text-slate-500">
-              Answered: {Object.keys(examAnswers).length} of {exam.questions.length} questions
+              Answered: {Object.keys(examAnswers).length} of {examQuestions.length} questions
             </span>
             <button
               onClick={handleSubmitExam}
