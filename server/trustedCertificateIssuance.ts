@@ -1,5 +1,5 @@
 ﻿import type { DocumentReference, Firestore } from 'firebase-admin/firestore';
-import { certificateUnmetRequirements, summarizeCourseProgress } from './trustedLearningLogic';
+import { calculateWeightedCertificateScore, certificateUnmetRequirements, summarizeCourseProgress } from './trustedLearningLogic';
 
 type IssueTrustedCertificateInput = {
   db: Firestore;
@@ -9,6 +9,7 @@ type IssueTrustedCertificateInput = {
   certificate: object;
   totalLessons: number;
   approvedAssignmentCount: number;
+  approvedInteractiveLessonCount: number;
   cycle: number;
 };
 
@@ -44,6 +45,11 @@ export async function issueTrustedCertificateTransaction(
       input.totalLessons,
     ).courseMasteryPercent;
 
+    const interactiveRecords = progressRecords.filter((record) => Number.isFinite(Number(record.interactiveScorePercent)));
+    const interactiveScorePercent = input.approvedInteractiveLessonCount > 0 &&
+      interactiveRecords.length === input.approvedInteractiveLessonCount
+      ? Math.round(interactiveRecords.reduce((total, record) => total + Number(record.interactiveScorePercent), 0) / interactiveRecords.length)
+      : 0;
     const unmet = certificateUnmetRequirements({
       totalLessons: input.totalLessons,
       progress: progressRecords,
@@ -51,6 +57,8 @@ export async function issueTrustedCertificateTransaction(
       assignments: assignmentRecords,
       approvedAssignmentCount: input.approvedAssignmentCount,
       certificateAlreadyIssued: existingCertificate.exists,
+      interactiveScorePercent,
+      approvedInteractiveLessonCount: input.approvedInteractiveLessonCount,
     });
 
     if (unmet.length) {
@@ -62,7 +70,14 @@ export async function issueTrustedCertificateTransaction(
       };
     }
 
-    const certificate = { ...input.certificate, scorePercent: Number(cycleSnapshot.data()?.examScorePercent || 0) };
+    const examScorePercent = Number(cycleSnapshot.data()?.examScorePercent || 0);
+    const scorePercent = calculateWeightedCertificateScore({
+      assignmentScores: assignmentRecords.map((record) => Number(record.scorePercent) || 0),
+      examScorePercent,
+      masteryScores: progressRecords.map((record) => Number(record.scorePercent) || 0),
+      interactiveScores: interactiveRecords.map((record) => Number(record.interactiveScorePercent) || 0),
+    });
+    const certificate = { ...input.certificate, scorePercent };
 
     transaction.create(input.certificateRef, { ...certificate } as Record<string, unknown>);
     transaction.create(input.learnerCertificateRef, { ...certificate } as Record<string, unknown>);
