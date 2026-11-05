@@ -135,6 +135,39 @@ export const LessonView: React.FC<LessonViewProps> = ({
     return () => { cancelled = true; };
   }, [course.id, lessonId]);
 
+  // Keep hands-on responses on this device so learners can leave a lesson
+  // and return without losing an unfinished activity.
+  useEffect(() => {
+    const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (!saved) return;
+      const state = JSON.parse(saved) as {
+        answers?: Record<string, string>;
+        textResponses?: Record<string, string>;
+        order?: Record<string, string[]>;
+      };
+      setActivityAnswers(state.answers || {});
+      setActivityTextResponses(state.textResponses || {});
+      setActivityOrder(state.order || {});
+    } catch {
+      // A corrupt or unavailable local cache must not block the activity.
+    }
+  }, [lessonId, userId]);
+
+  useEffect(() => {
+    const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        answers: activityAnswers,
+        textResponses: activityTextResponses,
+        order: activityOrder,
+      }));
+    } catch {
+      // Activity remains usable when browser storage is unavailable.
+    }
+  }, [lessonId, userId, activityAnswers, activityTextResponses, activityOrder]);
+
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
   const currentOverallIndex = allLessons.findIndex((l) => l.id === lessonId);
