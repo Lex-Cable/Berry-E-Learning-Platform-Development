@@ -13,10 +13,12 @@ import {
   Info,
 } from 'lucide-react';
 import { Course, LearnerProfile, LearnerStage, Curriculum } from '../../types';
-import { KENYA_CBC_LEVELS } from '../../utils/mastery';
+import type { CurriculumRepository } from '../../curriculum/repository';
+import { resolveCanonicalStage } from '../../curriculum/repository';
 
 interface ExploreCoursesViewProps {
   courses: Course[];
+  curriculumRepository: CurriculumRepository;
   learner: LearnerProfile;
   onSelectCourse: (course: Course) => void;
   onOpenLesson: (course: Course, lessonId: string) => void;
@@ -26,6 +28,7 @@ interface ExploreCoursesViewProps {
 
 export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   courses,
+  curriculumRepository,
   learner,
   onSelectCourse,
   onOpenLesson,
@@ -37,13 +40,14 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   const [selectedGrade, setSelectedGrade] = useState<string>(learner.gradeLevel);
 
   const stageGrades = useMemo(() => {
-    if (selectedStage === 'early') return ['PP1', 'PP2'];
-    if (selectedStage === 'junior') return Array.from({ length: 9 }, (_, index) => `Grade ${index + 1}`);
-    if (selectedStage === 'senior') return ['Grade 10', 'Grade 11', 'Grade 12'];
-    return Array.from(new Set(courses
-      .filter((course) => course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals')
-      .map((course) => course.gradeLevel))).sort((a, b) => a.localeCompare(b));
-  }, [courses, selectedStage]);
+    if (selectedStage === 'all') {
+      return Array.from(new Set(curriculumRepository.entries.map(({ placement }) => placement.gradeLevel)))
+        .sort((a, b) => a.localeCompare(b));
+    }
+    const canonicalStage = resolveCanonicalStage(selectedStage);
+    return Array.from(new Set(curriculumRepository.byStage[canonicalStage].map(({ placement }) => placement.gradeLevel)))
+      .sort((a, b) => a.localeCompare(b));
+  }, [curriculumRepository, selectedStage]);
 
   useEffect(() => {
     if (selectedGrade !== 'all' && !stageGrades.includes(selectedGrade)) {
@@ -63,26 +67,15 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   ];
 
   // Filter courses
-  const filteredCourses = courses.filter((c) => {
-    if (selectedStage !== 'all') {
-      if (selectedStage === 'advance') {
-        if (c.stage !== 'advance' && c.stage !== 'university' && c.stage !== 'professionals') return false;
-      } else if (c.stage !== selectedStage) {
-        return false;
-      }
-    }
-    if (selectedCurriculum !== 'all' && c.curriculum !== selectedCurriculum && !c.isInternationalComparison) return false;
-    if (selectedGrade !== 'all' && c.gradeLevel !== selectedGrade) return false;
-    if (
-      searchQuery &&
-      !c.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !c.subject.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !c.description.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filteredCourses = curriculumRepository.entries
+    .filter(({ placement }) => selectedStage === 'all' || placement.canonicalStage === resolveCanonicalStage(selectedStage))
+    .filter(({ course, placement }) => selectedCurriculum === 'all' || placement.curriculum === selectedCurriculum || course.isInternationalComparison)
+    .filter(({ placement }) => selectedGrade === 'all' || placement.gradeLevel === selectedGrade)
+    .map(({ course }) => course)
+    .filter((course) => !searchQuery
+      || course.title.toLowerCase().includes(searchQuery.toLowerCase())
+      || course.subject.toLowerCase().includes(searchQuery.toLowerCase())
+      || course.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="space-y-6 pb-12">
