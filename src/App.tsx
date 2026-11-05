@@ -1023,6 +1023,7 @@ export default function App() {
             <LibraryView
               resources={libraryResources}
               learner={learner}
+              curriculumRepository={curriculumRepository}
               onToggleBookmark={handleToggleBookmark}
             />
           )}
