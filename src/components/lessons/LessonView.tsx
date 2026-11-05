@@ -231,8 +231,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   };
 
   const renderLessonNotes = (source: string) => {
-    const lines = source.split(/\r?
-/);
+    const lines = source.split(/\r?\n/);
     return lines.map((line, index) => {
       const trimmed = line.trim();
       if (!trimmed) return <div key={index} className="h-2" />;
