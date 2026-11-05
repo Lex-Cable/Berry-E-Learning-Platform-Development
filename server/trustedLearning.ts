@@ -34,12 +34,14 @@ function safeQuestions(questions: Array<{ id: string; question: string; options:
     id, question, options, ...(topic ? { topic } : {}), ...(learningObjective ? { learningObjective } : {}),
   }));
 }
-function validAnswers(questions: AnswerQuestion[], value: unknown): value is Record<string, number> {
+function validAnswers(questions: AnswerQuestion[], value: unknown, allowPartial = false): value is Record<string, number> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const answers = value as Record<string, unknown>;
-  return Object.keys(answers).length === questions.length &&
-    questions.every((question) => Number.isInteger(answers[question.id]) &&
-      Number(answers[question.id]) >= 0 && Number(answers[question.id]) < question.options.length);
+  const answerIds = Object.keys(answers);
+  return (allowPartial ? answerIds.length <= questions.length : answerIds.length === questions.length) &&
+    answerIds.every((id) => questions.some((question) => question.id === id)) &&
+    questions.every((question) => answers[question.id] === undefined ||
+      (Number.isInteger(answers[question.id]) && Number(answers[question.id]) >= 0 && Number(answers[question.id]) < question.options.length));
 }
 function shuffle<T>(values: T[]): T[] {
   const result = [...values];
@@ -267,12 +269,12 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     const questionIds = session.data()?.questionIds;
     if (!session.exists || !Array.isArray(questionIds)) return res.status(409).json({ error: 'Start the final exam before submitting answers.' });
     const expiresAt = Date.parse(String(session.data()?.expiresAt || ''));
-    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
-      return res.status(409).json({ error: 'The 60-minute exam time has expired. Your answers can no longer be changed.' });
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt + 30_000) {
+      return res.status(409).json({ error: 'The 60-minute exam time has expired. Please contact your instructor if a connection issue prevented submission.' });
     }
     const questionById = new Map(course.exam.questions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => questionById.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
-    if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every exam question in your active session.' });
+    if (!validAnswers(questions, req.body?.answers, true)) return res.status(400).json({ error: 'Submit valid answers for the questions you attempted.' });
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
     const passingScorePercent = Math.max(PASS_MARK, course.exam.passingScorePercent || PASS_MARK);
