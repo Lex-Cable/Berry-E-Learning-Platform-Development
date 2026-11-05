@@ -312,7 +312,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           onBackToCourse={() => setActiveLessonId(null)}
           masteryRecord={currentMasteryRecords[activeLessonId]}
           onSaveMastery={onSaveMastery}
-          canAdvanceToNextLesson={trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.status === 'graded' && Number(trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.scorePercent || 0) >= 50}
+          canAdvanceToNextLesson={['graded', 'returned_for_revision'].includes(trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.status || '')}
           userId={learner.id}
         />
       </div>
@@ -669,8 +669,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                       : undefined;
                     const previousTopicComplete = !previousLesson || (
                       currentMasteryRecords[previousLesson.id]?.isMastered === true &&
-                      previousAssignment?.status === 'graded' &&
-                      Number(previousAssignment.scorePercent || 0) >= 50
+                      (previousAssignment?.status === 'graded' || previousAssignment?.status === 'returned_for_revision')
                     );
                     const isUnlocked = isPrerequisiteUnlocked && previousTopicComplete && !trustedAssignmentsLoading;
                     const mastery = currentMasteryRecords[lesson.id];
