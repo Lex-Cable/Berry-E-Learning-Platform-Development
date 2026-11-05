@@ -536,6 +536,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
             <p className="text-xs text-slate-500">
               Demonstrate your comprehension with practical matching, ordering, and concept verification.
             </p>
+            {(currentLesson?.activities.length || 0) < 5 && (
+              <p className="mt-2 text-xs text-amber-700">
+                This lesson currently has {currentLesson?.activities.length || 0} approved interactive tasks. More can be added when additional course-specific practice content is approved.
+              </p>
+            )}
           </div>
 
           {currentLesson?.activities.map((act) => (
