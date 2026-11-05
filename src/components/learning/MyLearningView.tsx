@@ -240,6 +240,11 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     return () => window.clearInterval(timer);
   }, [takingExam, examSubmitted, examExpiresAt]);
 
+  useEffect(() => {
+    if (!takingExam || examSubmitted || examTimeRemaining !== 0 || examSubmitting || !examQuestions.length) return;
+    void handleSubmitExam();
+  }, [takingExam, examSubmitted, examTimeRemaining, examSubmitting, examQuestions.length]);
+
   const handleStartFullRetake = async () => {
     if (!activeCourse || retakeLoading) return;
     setRetakeLoading(true); setExamError(null);
