@@ -7,7 +7,7 @@ import { adminDb } from './firebaseAdmin';
 import { requireFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMiddleware';
 import { COURSES } from './privateCurriculumData';
 import { INTERNATIONAL_STARTER_COURSES } from '../src/data/internationalStarterCourses';
-import { markAssignmentSubmission } from '../src/utils/assignments';
+import { buildCourseAssignments, markAssignmentSubmission } from '../src/utils/assignments';
 import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
 
@@ -23,6 +23,8 @@ const TRUSTED_COURSES: PrivateCourse[] = [
   ...(COURSES as PrivateCourse[]),
   ...INTERNATIONAL_STARTER_COURSES,
 ];
+// Same Berry-authored, course-specific rubric catalogue as the learner UI.
+const TRUSTED_ASSIGNMENTS = buildCourseAssignments(TRUSTED_COURSES);
 
 function findCourse(id: string): PrivateCourse | undefined {
   return TRUSTED_COURSES.find((course) => course.id === id);
@@ -319,13 +321,46 @@ router.post('/api/learning/courses/:courseId/retake', requireFirebaseAuth, async
   }
 });
 
+
+router.post('/api/practice/assignments/:assignmentId/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!adminDb || !req.user?.uid) return res.status(503).json({ error: 'Practice assignment storage is unavailable.' });
+    const uid = req.user.uid;
+    const assignmentId = String(req.params.assignmentId || '');
+    const courseId = typeof req.body?.courseId === 'string' ? req.body.courseId : '';
+    const assignment = TRUSTED_ASSIGNMENTS.find((item) => item.id === assignmentId && item.courseId === courseId);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found in the Berry course catalogue.' });
+    if (typeof req.body?.content !== 'string' || req.body.content.trim().length < 1 || req.body.content.length > 20000) {
+      return res.status(400).json({ error: 'Provide assignment content between 1 and 20,000 characters.' });
+    }
+    const attemptNumber = Number(req.body?.attemptNumber);
+    if (!Number.isInteger(attemptNumber) || attemptNumber < 1 || attemptNumber > 20) {
+      return res.status(400).json({ error: 'The assignment attempt number is invalid.' });
+    }
+    const submittedAt = typeof req.body?.submittedAt === 'string' ? req.body.submittedAt : new Date().toISOString();
+    if (submittedAt.length > 60) return res.status(400).json({ error: 'The submission date is invalid.' });
+    const record = {
+      assignmentId,
+      content: req.body.content.slice(0, 20000),
+      submittedAt,
+      attemptNumber,
+      status: 'submitted',
+      updatedAt: new Date().toISOString(),
+    };
+    await adminDb.collection('users').doc(uid).collection('practiceAssignmentSubmissions').doc(assignmentId).set(record);
+    return res.json({ saved: true, submission: record });
+  } catch (error) {
+    console.error('Practice assignment persistence failed:', error);
+    return res.status(500).json({ error: 'Unable to save this practice assignment.' });
+  }
+});
+
 router.post('/api/assignments/courses/:courseId/:assignmentId/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const context = await getEnrolledCourse(req, res, req.params.courseId);
     if (!context) return;
     const { course, uid } = context;
-    const authoredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
-    const assignment = authoredAssignments.find((item) => item.id === req.params.assignmentId);
+    const assignment = TRUSTED_ASSIGNMENTS.find((item) => item.courseId === course.id && item.id === req.params.assignmentId);
     if (!assignment || !Array.isArray(assignment.rubric) || assignment.rubric.length === 0) return res.status(409).json({ error: 'This course has no approved assignment rubric yet. Your draft is not graded or stored as a trusted result.' });
     if (typeof req.body?.content !== 'string' || req.body.content.trim().length < 1 || req.body.content.length > 20000) {
       return res.status(400).json({ error: 'Provide assignment content between 1 and 20,000 characters.' });
@@ -394,7 +429,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
-    const requiredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
+    const requiredAssignments = TRUSTED_ASSIGNMENTS.filter((assignment) => assignment.courseId === course.id && Array.isArray(assignment.rubric) && assignment.rubric.length > 0);
 
     const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
     const certificateRef = adminDb!.collection('trustedCertificates').doc(credentialId);
