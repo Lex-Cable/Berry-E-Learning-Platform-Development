@@ -71,7 +71,10 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
     }
   }, [learner.gradeLevel, selectedGrade, stageGrades]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showCurriculumComparison, setShowCurriculumComparison] = useState(false);\n  const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});\n  const scrollShelf = (sectionId: string, direction: -1 | 1) => {\n    shelfRefs.current[sectionId]?.scrollBy({ left: direction * 620, behavior: 'smooth' });\n  };
+  const [showCurriculumComparison, setShowCurriculumComparison] = useState(false);
+  const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrollShelf = (sectionId: string, direction: -1 | 1) => {\n    shelfRefs.current[sectionId]?.scrollBy({ left: direction * 620, behavior: 'smooth' });
+  };
 
   // Three independent curriculum pathways requested for Berry Explore Courses.
   // Courses are never copied across curricula based on comparison flags.
