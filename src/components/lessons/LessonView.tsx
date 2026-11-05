@@ -102,7 +102,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   // Matching activity state
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({});
-  const [matchingFeedback, setMatchingFeedback] = useState<string | null>(null);
+  const [matchingFeedback, setMatchingFeedback] = useState<string | null>(null);\n  const [activityAnswers, setActivityAnswers] = useState<Record<string, string>>({});\n  const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -169,15 +169,43 @@ export const LessonView: React.FC<LessonViewProps> = ({
   };
 
   const handleRightClick = (rightText: string) => {
-    if (!selectedLeft) return;
+    if (!selectedLeft) {
+      setMatchingFeedback('Choose a concept on the left first, then choose its matching definition.');
+      return;
+    }
     const activity = currentLesson?.activities.find((a) => a.type === 'matching');
-    const pair = activity?.data.matchingPairs?.find((p) => p.id === selectedLeft);
-
-    if (pair) {
-      setMatchedPairs((prev) => ({ ...prev, [selectedLeft]: rightText }));
-      setMatchingFeedback('Match selected. Your understanding will be checked in the secure assessment.');
+    const pair = activity?.data.matchingPairs?.find((item) => item.id === selectedLeft);
+    if (!pair) return;
+    if (pair.right && pair.right.trim().toLocaleLowerCase() === rightText.trim().toLocaleLowerCase()) {
+      setMatchedPairs((previous) => ({ ...previous, [selectedLeft]: rightText }));
+      setMatchingFeedback('Correct match. Well done!');
+    } else {
+      setMatchingFeedback('Not quite. Review the concept and try a different definition.');
     }
     setSelectedLeft(null);
+  };
+
+  const handleActivityChoice = (activityId: string, choice: { id: string; label: string; isCorrect: boolean; feedback: string }) => {
+    setActivityAnswers((previous) => ({ ...previous, [activityId]: choice.id }));
+    setActivityFeedback((previous) => ({
+      ...previous,
+      [activityId]: choice.feedback || (choice.isCorrect ? 'Correct. Well done!' : 'Not quite. Review the lesson and try again.'),
+    }));
+  };
+
+  const renderLessonNotes = (source: string) => {
+    const lines = source.split(/\\r?\\n/);
+    return lines.map((line, index) => {
+      const trimmed = line.trim();
+      if (!trimmed) return <div key={index} className="h-2" />;
+      if (/^#{1,3}\\s/.test(trimmed)) {
+        return <h3 key={index} className="pt-2 text-lg font-extrabold tracking-tight text-slate-900">{trimmed.replace(/^#{1,3}\\s*/, '')}</h3>;
+      }
+      if (/^[-*]\\s/.test(trimmed)) {
+        return <div key={index} className="flex items-start gap-2 pl-2 text-sm leading-7 text-slate-700"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{trimmed.replace(/^[-*]\\s*/, '').replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</span></div>;
+      }
+      return <p key={index} className="text-sm leading-7 text-slate-700">{trimmed.replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</p>;
+    });
   };
 
   // Assessment scores and answer keys are evaluated by the authenticated server.
@@ -367,11 +395,9 @@ export const LessonView: React.FC<LessonViewProps> = ({
       {activeTab === 'notes' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm space-y-4">
-            <div className="prose prose-slate max-w-none text-slate-800 text-sm leading-relaxed space-y-4">
-              <div className="whitespace-pre-line font-normal">
-                {currentLesson?.notesMarkdown}
-              </div>
-            </div>
+            <article className="max-w-none space-y-2 rounded-2xl bg-slate-50/70 p-5 md:p-6">
+              {renderLessonNotes(currentLesson?.notesMarkdown || 'Study notes for this lesson will be published soon.')}
+            </article>
 
             <div className="pt-6 border-t border-slate-100 flex justify-between items-center">
               <button
@@ -504,15 +530,25 @@ export const LessonView: React.FC<LessonViewProps> = ({
               {/* Multiple Choice interactive activity */}
               {act.type === 'interactive-choice' && act.data.choices && (
                 <div className="space-y-2">
-                  {act.data.choices.map((choice) => (
-                    <button
-                      key={choice.id}
-                      onClick={() => setMatchingFeedback('Option selected. Continue to the assessment to check your understanding.')}
-                      className="w-full text-left p-3 rounded-xl border border-slate-200 bg-white hover:bg-purple-50 hover:border-purple-300 text-xs font-semibold text-slate-800 transition-colors"
-                    >
-                      {choice.label}
-                    </button>
-                  ))}
+                  {act.data.choices.map((choice) => {
+                    const selected = activityAnswers[act.id] === choice.id;
+                    return (
+                      <button
+                        key={choice.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => handleActivityChoice(act.id, choice)}
+                        className={`w-full text-left p-3 rounded-xl border text-xs font-semibold transition-colors ${selected ? (choice.isCorrect ? 'border-emerald-400 bg-emerald-50 text-emerald-900' : 'border-amber-400 bg-amber-50 text-amber-900') : 'border-slate-200 bg-white text-slate-800 hover:bg-purple-50 hover:border-purple-300'}`}
+                      >
+                        {choice.label}
+                      </button>
+                    );
+                  })}
+                  {activityFeedback[act.id] && (
+                    <p role="status" aria-live="polite" className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700">
+                      {activityFeedback[act.id]}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
