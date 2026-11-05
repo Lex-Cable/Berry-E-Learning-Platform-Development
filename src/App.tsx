@@ -57,7 +57,7 @@ import { buildCurriculumRepository } from './curriculum/repository';
 import { INTERNATIONAL_STARTER_COURSES } from './data/internationalStarterCourses';
 import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
 import { loadLearningCertificates, loadLearningProgress } from './services/learningProgress';
-import { enrollInCourse, getCourseStatus, issueTrustedCertificate, loadTrustedCertificates } from './services/assessments';
+import { enrollInCourse, getCourseStatus, issueTrustedCertificate, loadTrustedCertificates, submitTrustedAssignment } from './services/assessments';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
@@ -826,6 +826,29 @@ export default function App() {
       }).catch((error) => {
         console.warn('Practice assignment kept locally; cloud sync failed:', error);
       });
+      // Store the authoritative rubric mark in the trusted course cycle as well.
+      // This is the record used by certificate eligibility; the practice copy above
+      // remains a learner-owned draft/history record only.
+      void submitTrustedAssignment(assignment.courseId, assignment.id, content)
+        .then(({ marking }) => {
+          setAssignmentSubmissions((current) => ({
+            ...current,
+            [assignment.id]: {
+              content,
+              attemptNumber,
+              status: marking.status,
+              scorePercent: marking.scorePercent,
+              marksAwarded: marking.marksAwarded,
+              totalMarks: marking.totalMarks,
+              markerFeedback: marking.markerFeedback,
+              submittedAt,
+              criterionScores: marking.criterionScores,
+            },
+          }));
+        })
+        .catch((error) => {
+          console.warn('Trusted assignment marking is unavailable; local practice feedback remains visible:', error);
+        });
     }
 
     const feedbackNotification: AppNotification = {
