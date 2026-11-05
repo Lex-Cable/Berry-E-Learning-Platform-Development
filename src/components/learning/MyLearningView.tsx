@@ -306,6 +306,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           onBackToCourse={() => setActiveLessonId(null)}
           masteryRecord={masteryRecords[activeLessonId]}
           onSaveMastery={onSaveMastery}
+          canAdvanceToNextLesson={trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.status === 'graded' && Number(trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.scorePercent || 0) >= 50}
           userId={learner.id}
         />
       </div>
