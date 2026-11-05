@@ -270,6 +270,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
       correct = choice?.isCorrect === true;
     }
 
+    const cycle = await ensureCycle(uid, course.id);
     const now = new Date().toISOString();
     const submission = {
       activityId: activity.id,
