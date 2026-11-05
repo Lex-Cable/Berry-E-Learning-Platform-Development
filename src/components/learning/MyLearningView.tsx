@@ -77,6 +77,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [takingExam, setTakingExam] = useState<boolean>(false);
   const [trustedAssignments, setTrustedAssignments] = useState<Record<string, { status?: string; scorePercent?: number }>>({});
   const [trustedAssignmentsLoading, setTrustedAssignmentsLoading] = useState(false);
+  const [trustedLessonProgress, setTrustedLessonProgress] = useState<Record<string, LessonMasteryState>>({});
 
   useEffect(() => {
     if (!initialCourseId) return;
@@ -109,7 +110,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       } else if (!cancelled) {
         // Missing-lesson fallback: a stale or absent resume pointer must never strand
         // the learner; fall back to the first genuinely accessible lesson.
-        const masteredIds = Object.entries(masteryRecords)
+        const masteredIds = Object.entries(currentMasteryRecords)
           .filter(([, state]) => state.isMastered)
           .map(([lessonId]) => lessonId);
         const fallback = findFallbackLesson(targetCourse, masteredIds);
@@ -142,7 +143,10 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setTrustedAssignmentsLoading(true);
     getCourseStatus(activeCourse.id)
       .then((status) => {
-        if (!cancelled) setTrustedAssignments(status.assignments as Record<string, { status?: string; scorePercent?: number }>);
+        if (!cancelled) {
+          setTrustedAssignments(status.assignments as Record<string, { status?: string; scorePercent?: number }>);
+          setTrustedLessonProgress(status.lessonProgress || {});
+        }
       })
       .catch((error) => {
         if (!cancelled) console.warn('Could not refresh trusted topic assignments:', error);
@@ -168,6 +172,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [examScore, setExamScore] = useState<number>(0);
   const [examPassed, setExamPassed] = useState<boolean>(false);
 
+  const currentMasteryRecords: Record<string, LessonMasteryState> = { ...trustedLessonProgress, ...masteryRecords };
+
   // Available grade options based on learner stage
   // My Learning must show only courses this learner has actually enrolled in.
   const enrolledCourses = curriculumRepository.entries
@@ -188,7 +194,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     course.chapters.forEach((chap) => {
       chap.lessons.forEach((les) => {
         totalLessons++;
-        if (masteryRecords[les.id]?.isMastered) {
+        if (currentMasteryRecords[les.id]?.isMastered) {
           masteredCount++;
         }
       });
