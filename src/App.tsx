@@ -1035,6 +1035,7 @@ export default function App() {
             <BerryAiView
               learner={learner}
               courses={courses}
+              curriculumRepository={curriculumRepository}
               onOpenLesson={handleOpenLesson}
             />
           )}
