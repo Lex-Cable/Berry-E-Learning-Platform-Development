@@ -1,4 +1,4 @@
-import { doc, runTransaction, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, runTransaction, serverTimestamp, setDoc } from 'firebase/firestore';
 import { firestoreDb } from '../lib/firebase';
 import type { AdvanceTrack, Curriculum, LearnerProfile, LearnerStage, SeniorPathway } from '../types';
 
@@ -97,26 +97,35 @@ export async function getOrCreateLearnerProfile(
 ): Promise<LearnerProfile> {
   const database = requireFirestore();
   const reference = doc(database, 'users', uid);
-  return runTransaction(database, async (transaction) => {
-    const snapshot = await transaction.get(reference);
-    const profile = normalizeLearnerProfile(
-      uid,
-      displayName,
-      snapshot.exists() ? (snapshot.data() as Partial<LearnerProfile>) : {}
-    );
+  try {
+    return await runTransaction(database, async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      const profile = normalizeLearnerProfile(
+        uid,
+        displayName,
+        snapshot.exists() ? (snapshot.data() as Partial<LearnerProfile>) : {}
+      );
 
-    // Existing profiles are read-only here. Rewriting the full document on every
-    // sign-in caused avoidable transaction contention with profile edits and
-    // other authentication events. Only the first sign-in creates the document;
-    // the transaction retries safely if two sign-ins create it concurrently.
-    if (!snapshot.exists()) {
-      transaction.set(reference, {
-        ...profileDocument(profile),
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-    }
-    return profile;
-  });
+      // Existing profiles are read-only here. Only first sign-in creates a record.
+      if (!snapshot.exists()) {
+        transaction.set(reference, {
+          ...profileDocument(profile),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+      return profile;
+    });
+  } catch (error) {
+    // Two simultaneous auth/profile initialisers can both observe a missing
+    // document; the winning create makes the other transaction's precondition
+    // stale. Recover by reading the winner's saved profile instead of failing
+    // sign-in or attempting to overwrite the learner's latest edits.
+    const code = (error as { code?: string })?.code;
+    if (code !== 'failed-precondition' && code !== 'aborted') throw error;
+    const latest = await getDoc(reference);
+    if (!latest.exists()) throw error;
+    return normalizeLearnerProfile(uid, displayName, latest.data() as Partial<LearnerProfile>);
+  }
 }
 
 /*export function getLearnerProfileErrorMessage(error: unknown): string {
