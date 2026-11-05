@@ -42,3 +42,13 @@ test('does not invent activities when approved mastery questions are unavailable
   const result = withInteractivePractice([source]);
   assert.equal(result[0].chapters[0].lessons[0].activities.length, 0);
 });
+
+test('keeps exactly five interactive activities when the source lesson has extras', () => {
+  const source = courseFixture();
+  source.chapters[0].lessons[0].activities = Array.from({ length: 7 }, (_, index) => ({
+    id: `existing-${index}`, type: 'interactive-choice', title: `Task ${index}`,
+    instructions: 'Approved task', data: { choices: [] },
+  })) as Course['chapters'][0]['lessons'][0]['activities'];
+  const result = withInteractivePractice([source]);
+  assert.equal(result[0].chapters[0].lessons[0].activities.length, 5);
+});
