@@ -447,6 +447,23 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Render AI markdown as readable chat typography instead of exposing raw
+  // markdown markers in the conversation bubble.
+  const renderAiText = (source: string) => source.split(/\\r?\\n/).map((line, index) => {
+    const value = line.trim();
+    if (!value) return <div key={index} className="h-1.5" />;
+    if (/^#{1,3}\\s/.test(value)) {
+      return <h3 key={index} className="pt-2 text-sm font-extrabold text-slate-900">{value.replace(/^#{1,3}\\s*/, '')}</h3>;
+    }
+    if (/^[-*]\\s/.test(value)) {
+      return <div key={index} className="flex items-start gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{value.replace(/^[-*]\\s*/, '').replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</span></div>;
+    }
+    if (/^\\d+[.)]\\s/.test(value)) {
+      return <p key={index} className="pl-1">{value.replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</p>;
+    }
+    return <p key={index}>{value.replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/`/g, '')}</p>;
+  });
+
   // Filter conversations matching search query
   const filteredConversations = conversations.filter(
     (c) =>
@@ -679,7 +696,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
                         : 'bg-slate-50 text-slate-800 border border-slate-200/80 rounded-tl-xs'
                     }`}
                   >
-                    {msg.text}
+                    <div className={isUser ? 'space-y-2' : 'space-y-2 text-sm leading-7'}>{isUser ? msg.text : renderAiText(msg.text)}</div>
 
                     {/* Copy action on assistant response */}
                     {!isUser && (
@@ -723,7 +740,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
             <div className="flex gap-3 mr-auto max-w-3xl">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-400 text-white flex items-center justify-center flex-shrink-0 text-xs"><Bot size={15} /></div>
               <div className="min-w-0 flex-1 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 rounded-tl-xs text-xs sm:text-sm text-slate-800 whitespace-pre-wrap">
-                {streamingReply || <span className="inline-flex items-center gap-2 text-purple-700 font-semibold"><Sparkles size={14} className="animate-spin" />Berry AI is thinking…</span>}
+                {streamingReply ? <div className="space-y-2 text-sm leading-7">{renderAiText(streamingReply)}</div> : <span className="inline-flex items-center gap-2 text-purple-700 font-semibold"><Sparkles size={14} className="animate-spin" />Berry AI is thinking…</span>}
                 {streamingReply && <span className="inline-block w-1.5 h-4 ml-1 bg-purple-500 animate-pulse align-middle" aria-label="Generating response" />}
               </div>
             </div>
