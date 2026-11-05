@@ -220,7 +220,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setExamSubmitting(true); setExamError(null);
     try {
       const result = await submitCourseExam(activeCourse.id, examAnswers);
-      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true); onExamAttemptSubmitted?.(activeCourse, result.attempt); onClaimCertificate?.(activeCourse, result.scorePercent);
+      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true); onExamAttemptSubmitted?.(activeCourse, result.attempt);
     } catch (error) {
       setExamError(error instanceof Error ? error.message : 'Exam submission failed.');
     } finally { setExamSubmitting(false); }
@@ -319,7 +319,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
         <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
             <Award size={14} className="text-blue-600" />
-            <span>Official Kenyan CBC Final Assessment</span>
+            <span>Berry Course Final Assessment</span>
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">{exam.title}</h2>
           <p className="text-xs text-slate-500">
