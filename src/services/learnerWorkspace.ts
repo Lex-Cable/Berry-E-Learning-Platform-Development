@@ -8,7 +8,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import type { AppNotification, TaskItem } from '../types';
-import { firestoreDb } from '../lib/firebase';
+import { firestoreDb, firebaseAuth } from '../lib/firebase';
 
 function requireDatabase() {
   if (!firestoreDb) {
@@ -122,17 +122,33 @@ export async function saveAssignmentSubmission(
   uid: string,
   submission: {
     assignmentId: string;
+    courseId: string;
     content: string;
     submittedAt: string;
     attemptNumber: number;
     status: string;
   },
 ): Promise<void> {
-  await setDoc(doc(requireDatabase(), 'users', uid, 'practiceAssignmentSubmissions', submission.assignmentId), {
-    ...submission,
-    content: submission.content.slice(0, ASSIGNMENT_MAX),
-    updatedAt: serverTimestamp(),
-  });
+  const user = firebaseAuth?.currentUser;
+  if (!user || user.uid !== uid) throw new Error('Please sign in again to sync this assignment.');
+  const token = await user.getIdToken();
+  let response: Response;
+  try {
+    response = await fetch(`/api/practice/assignments/${encodeURIComponent(submission.assignmentId)}/submit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseId: submission.courseId,
+        content: submission.content.slice(0, ASSIGNMENT_MAX),
+        submittedAt: submission.submittedAt,
+        attemptNumber: submission.attemptNumber,
+      }),
+    });
+  } catch {
+    throw new Error('Could not connect to Berry. The assignment remains saved on this device.');
+  }
+  const payload = await response.json().catch(() => ({})) as { error?: string };
+  if (!response.ok) throw new Error(payload.error || 'The practice assignment could not be synced.');
 }
 
 export async function loadExamAttempts(uid: string): Promise<import('../types').ExamAttemptRecord[]> {
