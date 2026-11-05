@@ -183,10 +183,11 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
       const progressSnap = await transaction.get(progressRef);
       const old = progressSnap.data();
       const attemptsCount = Number(old?.attemptsCount || 0) + 1;
+      const masteryThreshold = Math.max(PASS_MARK, lesson.masteryThresholdPercent || PASS_MARK);
       const progress: LessonMasteryState & { updatedAt: string } = {
         lessonId: lesson.id,
-        isCompleted: scorePercent >= PASS_MARK && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
-        isMastered: scorePercent >= PASS_MARK && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
+        isCompleted: scorePercent >= masteryThreshold && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
+        isMastered: scorePercent >= masteryThreshold && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
         scorePercent,
         attemptsCount,
         lastAttemptDate: now,
@@ -269,7 +270,8 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
     const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
     const progressSnapshot = await progressRef.get();
     const progress = progressSnapshot.data();
-    const masteryPassed = Number(progress?.scorePercent || 0) >= PASS_MARK;
+    const masteryThreshold = Math.max(PASS_MARK, lesson.masteryThresholdPercent || PASS_MARK);
+    const masteryPassed = Number(progress?.scorePercent || 0) >= masteryThreshold;
     const allActivitiesSubmitted = lesson.activities.every((item) => scoresById.has(item.id));
     const lessonPassed = masteryPassed && allActivitiesSubmitted && interactiveScorePercent >= PASS_MARK;
     await progressRef.set({
@@ -279,8 +281,9 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
       isMastered: lessonPassed,
       updatedAt: now,
     }, { merge: true });
+    const finalProgress = (await progressRef.get()).data();
 
-    return res.json({ submission, interactiveScorePercent, interactiveActivitiesCompleted: savedActivities.size, lessonCompleted: lessonPassed });
+    return res.json({ submission, interactiveScorePercent, interactiveActivitiesCompleted: savedActivities.size, lessonCompleted: lessonPassed, progress: finalProgress });
   } catch (error) {
     console.error('Trusted interactive activity submission failed:', error);
     return res.status(500).json({ error: 'Unable to check and save this activity.' });
