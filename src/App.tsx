@@ -53,6 +53,7 @@ import {
 } from './services/learnerWorkspace';
 import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, type AssignmentMarkingResult } from './utils/assignments';
 import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
+import { buildCurriculumRepository } from './curriculum/repository';
 import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
 import { loadLearningCertificates, loadLearningProgress } from './services/learningProgress';
 import { enrollInCourse, getCourseStatus, issueTrustedCertificate, loadTrustedCertificates } from './services/assessments';
@@ -90,7 +91,8 @@ export default function App() {
     criterionScores: { criterionId: string; awarded: number; outOf: number }[];
   }>>({});
   // Real curriculum coverage report recomputed whenever the catalogue changes.
-  const coverageReport = useMemo(() => auditCurriculumCoverage(courses), [courses]);
+  const curriculumRepository = useMemo(() => buildCurriculumRepository(courses), [courses]);
+  const coverageReport = useMemo(() => auditCurriculumCoverage(curriculumRepository.courses), [curriculumRepository]);
   const assignments = useMemo(() => buildCourseAssignments(courses), [courses]);
 
   // Auth / Session State (starts logged out on landing page as requested)
