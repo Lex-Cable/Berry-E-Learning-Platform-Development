@@ -985,6 +985,7 @@ export default function App() {
             <MyLearningView
               learner={learner}
               courses={courses}
+              curriculumRepository={curriculumRepository}
               masteryRecords={masteryRecords}
               initialCourseId={learningTargetCourseId}
               onClearInitialCourse={() => setLearningTargetCourseId(null)}
