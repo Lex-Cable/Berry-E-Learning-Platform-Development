@@ -153,7 +153,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       })
       .finally(() => { if (!cancelled) setTrustedAssignmentsLoading(false); });
     return () => { cancelled = true; };
-  }, [activeCourse?.id, learner.id, learner.enrolledCourseIds.join('|')]);
+  }, [activeCourse?.id, activeLessonId, learner.id, learner.enrolledCourseIds.join('|')]);
 
   // Grade filter (defaults to learner's current grade level, e.g. Grade 1, Grade 7, Grade 10, PP1, Bachelor Year 2)
   const [gradeFilter, setGradeFilter] = useState<string>('all');
@@ -310,7 +310,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           lessonId={activeLessonId}
           onNavigateLesson={(nextId) => setActiveLessonId(nextId)}
           onBackToCourse={() => setActiveLessonId(null)}
-          masteryRecord={masteryRecords[activeLessonId]}
+          masteryRecord={currentMasteryRecords[activeLessonId]}
           onSaveMastery={onSaveMastery}
           canAdvanceToNextLesson={trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.status === 'graded' && Number(trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.scorePercent || 0) >= 50}
           userId={learner.id}
@@ -668,12 +668,12 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                       ? trustedAssignments[`assignment-${activeCourse.id}-${previousLesson.id}`]
                       : undefined;
                     const previousTopicComplete = !previousLesson || (
-                      masteryRecords[previousLesson.id]?.isMastered === true &&
+                      currentMasteryRecords[previousLesson.id]?.isMastered === true &&
                       previousAssignment?.status === 'graded' &&
                       Number(previousAssignment.scorePercent || 0) >= 50
                     );
                     const isUnlocked = isPrerequisiteUnlocked && previousTopicComplete && !trustedAssignmentsLoading;
-                    const mastery = masteryRecords[lesson.id];
+                    const mastery = currentMasteryRecords[lesson.id];
                     const isMastered = mastery?.isMastered;
 
                     return (
