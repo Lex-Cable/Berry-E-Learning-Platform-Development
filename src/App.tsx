@@ -817,6 +817,7 @@ export default function App() {
       };
       void saveAssignmentSubmission(uid, {
         assignmentId: assignment.id,
+        courseId: assignment.courseId,
         content,
         submittedAt,
         attemptNumber,
