@@ -29,6 +29,7 @@ export const submitInteractiveActivity = (
   interactiveScorePercent: number;
   interactiveActivitiesCompleted: number;
   lessonCompleted: boolean;
+  progress: LessonMasteryState;
 }>(`/api/assessments/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/activities/${encodeURIComponent(activityId)}/submit`, { answer });
 export const getCourseExam=(courseId:string)=>request<{questions:ExamQuestion[];cycle:number;expiresAt:string}>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/questions`);
 export const submitCourseExam=(courseId:string,answers:Record<string,number>)=>request<ExamResult>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/submit`,{answers});
