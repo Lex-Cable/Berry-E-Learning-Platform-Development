@@ -33,6 +33,12 @@ export function isPassingExamScore(scorePercent: number, configuredThreshold = 7
 export function canStartFullRetake(progress: TrustedProgressSnapshot[], totalLessons: number): boolean {
   return totalLessons > 0 && progress.filter((item) => item.isCompleted === true).length >= totalLessons;
 }
+/** Select an exact assessment length without fabricating missing curriculum questions. */
+export function selectRequiredQuestionSet<T>(questions: T[], requiredCount: number): T[] | null {
+  if (!Number.isInteger(requiredCount) || requiredCount < 1 || questions.length < requiredCount) return null;
+  return questions.slice(0, requiredCount);
+}
+
 export function calculateWeightedCertificateScore(input: {
   assignmentScores: number[];
   examScorePercent: number;
