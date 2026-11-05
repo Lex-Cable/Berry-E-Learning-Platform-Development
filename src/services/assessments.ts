@@ -14,6 +14,22 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 }
 export const getLessonAssessment=(courseId:string,lessonId:string)=>request<{questions:QuizQuestion[]}>(`/api/assessments/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/questions`).then(x=>x.questions);
 export const submitLessonAssessment=(courseId:string,lessonId:string,answers:Record<string,number>)=>request<LessonResult>(`/api/assessments/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/submit`,{answers});
+export type InteractiveActivityAnswer =
+  | { pairs: Record<string, string> }
+  | { order: string[] }
+  | { response: string }
+  | { choiceId: string };
+export const submitInteractiveActivity = (
+  courseId: string,
+  lessonId: string,
+  activityId: string,
+  answer: InteractiveActivityAnswer,
+) => request<{
+  submission: { scorePercent: number; passed: boolean; feedback: string };
+  interactiveScorePercent: number;
+  interactiveActivitiesCompleted: number;
+  lessonCompleted: boolean;
+}>(`/api/assessments/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/activities/${encodeURIComponent(activityId)}/submit`, { answer });
 export const getCourseExam=(courseId:string)=>request<{questions:ExamQuestion[];cycle:number;expiresAt:string}>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/questions`);
 export const submitCourseExam=(courseId:string,answers:Record<string,number>)=>request<ExamResult>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/submit`,{answers});
 export const getCourseStatus=(courseId:string)=>request<CourseStatus>(`/api/learning/courses/${encodeURIComponent(courseId)}/status`);
