@@ -102,7 +102,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   // Matching activity state
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({});
-  const [matchingFeedback, setMatchingFeedback] = useState<string | null>(null);\n  const [activityAnswers, setActivityAnswers] = useState<Record<string, string>>({});\n  const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
+  const [matchingFeedback, setMatchingFeedback] = useState<string | null>(null);\n  const [activityAnswers, setActivityAnswers] = useState<Record<string, string>>({});\n  const [activityTextResponses, setActivityTextResponses] = useState<Record<string, string>>({});\n  const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});\n  const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -524,6 +524,52 @@ export const LessonView: React.FC<LessonViewProps> = ({
                       <span>{matchingFeedback}</span>
                     </div>
                   )}
+                </div>
+              )}
+
+              {act.type === 'fill-blank' && act.data.fillBlankTemplate && (
+                <div className="space-y-3">
+                  <p className="rounded-xl bg-white p-3 text-sm leading-7 text-slate-700">{act.data.fillBlankTemplate}</p>
+                  <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                    <span>Your answer</span>
+                    <input
+                      type="text"
+                      value={activityTextResponses[act.id] || ''}
+                      onChange={(event) => setActivityTextResponses((previous) => ({ ...previous, [act.id]: event.target.value }))}
+                      placeholder="Type your answer here"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-normal text-slate-800 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                    />
+                  </label>
+                  <button type="button" onClick={() => {
+                    const response = (activityTextResponses[act.id] || '').trim().toLocaleLowerCase();
+                    const accepted = (act.data.blankSolutions || []).some((answer) => answer.trim().toLocaleLowerCase() === response);
+                    setActivityFeedback((previous) => ({ ...previous, [act.id]: accepted ? 'Correct. Your answer matches the expected response.' : 'That answer does not match yet. Review the lesson and try again.' }));
+                  }} disabled={!activityTextResponses[act.id]?.trim()} className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Check answer</button>
+                  {activityFeedback[act.id] && <p role="status" className="text-xs text-slate-700">{activityFeedback[act.id]}</p>}
+                </div>
+              )}
+
+              {act.type === 'ordering' && act.data.orderingItems && (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-600">Select the items in the correct order. Tap an item to add it to your sequence.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {act.data.orderingItems.filter((item) => !(activityOrder[act.id] || []).includes(item.id)).map((item) => (
+                      <button key={item.id} type="button" onClick={() => setActivityOrder((previous) => ({ ...previous, [act.id]: [...(previous[act.id] || []), item.id] }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-purple-300">{item.text}</button>
+                    ))}
+                  </div>
+                  <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
+                    {(activityOrder[act.id] || []).map((id) => <li key={id}>{act.data.orderingItems?.find((item) => item.id === id)?.text}</li>)}
+                  </ol>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => {
+                      const chosen = activityOrder[act.id] || [];
+                      const expected = [...act.data.orderingItems!].sort((a, b) => a.correctOrder - b.correctOrder).map((item) => item.id);
+                      const correct = chosen.length === expected.length && chosen.every((id, index) => id === expected[index]);
+                      setActivityFeedback((previous) => ({ ...previous, [act.id]: correct ? 'Correct order. Well done!' : 'The order is not quite right. Rearrange the items and try again.' }));
+                    }} disabled={(activityOrder[act.id] || []).length !== act.data.orderingItems.length} className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Check order</button>
+                    <button type="button" onClick={() => { setActivityOrder((previous) => ({ ...previous, [act.id]: [] })); setActivityFeedback((previous) => ({ ...previous, [act.id]: '' })); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600">Reset</button>
+                  </div>
+                  {activityFeedback[act.id] && <p role="status" className="text-xs text-slate-700">{activityFeedback[act.id]}</p>}
                 </div>
               )}
 
