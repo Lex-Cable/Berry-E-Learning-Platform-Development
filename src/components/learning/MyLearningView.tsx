@@ -495,10 +495,10 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             </span>
             <button
               onClick={handleSubmitExam}
-              disabled={examSubmitting || examLoading || Object.keys(examAnswers).length < examQuestions.length || !examQuestions.length || examTimeRemaining === 0}
+              disabled={examSubmitting || examLoading || (Object.keys(examAnswers).length < examQuestions.length && examTimeRemaining > 0) || !examQuestions.length}
               className="px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all active:scale-95"
             >
-              {examSubmitting ? 'Submitting securely…' : examTimeRemaining === 0 ? 'Time expired' : 'Submit & Grade Exam'}
+              {examSubmitting ? 'Submitting securely…' : examTimeRemaining === 0 ? 'Submit Saved Answers' : 'Submit & Grade Exam'}
             </button>
           </div>
         )}
