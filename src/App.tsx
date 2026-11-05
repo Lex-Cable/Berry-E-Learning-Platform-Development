@@ -1000,6 +1000,7 @@ export default function App() {
           {currentView === 'courses' && (
             <ExploreCoursesView
               courses={courses}
+              curriculumRepository={curriculumRepository}
               learner={learner}
               onSelectCourse={setActiveCourse}
               onOpenLesson={handleOpenLesson}
