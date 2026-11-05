@@ -185,8 +185,8 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
       const attemptsCount = Number(old?.attemptsCount || 0) + 1;
       const progress: LessonMasteryState & { updatedAt: string } = {
         lessonId: lesson.id,
-        isCompleted: true,
-        isMastered: scorePercent >= PASS_MARK,
+        isCompleted: scorePercent >= PASS_MARK && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
+        isMastered: scorePercent >= PASS_MARK && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
         scorePercent,
         attemptsCount,
         lastAttemptDate: now,
@@ -208,6 +208,82 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
   } catch (error) {
     console.error('Trusted lesson grading failed:', error);
     return res.status(500).json({ error: 'Unable to grade this assessment.' });
+  }
+});
+
+router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:activityId/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const { course, uid } = context;
+    const lesson = course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
+    const activity = lesson.activities.find((item) => item.id === req.params.activityId);
+    if (!activity) return res.status(404).json({ error: 'Interactive activity not found.' });
+
+    const answer = req.body?.answer;
+    let correct = false;
+    if (activity.type === 'matching') {
+      const pairs = answer?.pairs;
+      const expected = activity.data.matchingPairs || [];
+      correct = !!pairs && typeof pairs === 'object' && !Array.isArray(pairs) &&
+        expected.length > 0 && expected.every((pair) => typeof pairs[pair.id] === 'string' &&
+          pair.right?.trim().toLowerCase() === pairs[pair.id].trim().toLowerCase());
+    } else if (activity.type === 'ordering') {
+      const order = answer?.order;
+      const expected = [...(activity.data.orderingItems || [])]
+        .sort((left, right) => left.correctOrder - right.correctOrder).map((item) => item.id);
+      correct = Array.isArray(order) && order.length === expected.length &&
+        order.every((id: unknown, index: number) => id === expected[index]);
+    } else if (activity.type === 'fill-blank') {
+      const response = typeof answer?.response === 'string' ? answer.response.trim().toLowerCase() : '';
+      correct = response.length > 0 && (activity.data.blankSolutions || [])
+        .some((solution) => solution.trim().toLowerCase() === response);
+    } else if (activity.type === 'interactive-choice') {
+      const choice = (activity.data.choices || []).find((item) => item.id === answer?.choiceId);
+      correct = choice?.isCorrect === true;
+    }
+
+    const cycle = await ensureCycle(uid, course.id);
+    const now = new Date().toISOString();
+    const submission = {
+      activityId: activity.id,
+      lessonId: lesson.id,
+      courseId: course.id,
+      cycle,
+      scorePercent: correct ? 100 : 0,
+      passed: correct,
+      feedback: correct ? 'Correct. Your answer has been checked and saved.' : 'Not quite. Review the lesson and try again.',
+      submittedAt: now,
+      trusted: true,
+    };
+    const lessonActivitiesRef = cycleRef(uid, course.id, cycle)
+      .collection('lessonProgress').doc(lesson.id).collection('activities');
+    await lessonActivitiesRef.doc(activity.id).set(submission, { merge: true });
+
+    const savedActivities = await lessonActivitiesRef.get();
+    const scoresById = new Map(savedActivities.docs.map((document) => [document.id, Number(document.data().scorePercent) || 0]));
+    const interactiveScorePercent = lesson.activities.length
+      ? Math.round(lesson.activities.reduce((total, item) => total + (scoresById.get(item.id) || 0), 0) / lesson.activities.length)
+      : 100;
+    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
+    const progressSnapshot = await progressRef.get();
+    const progress = progressSnapshot.data();
+    const masteryPassed = Number(progress?.scorePercent || 0) >= PASS_MARK;
+    const allActivitiesSubmitted = lesson.activities.every((item) => scoresById.has(item.id));
+    const lessonPassed = masteryPassed && allActivitiesSubmitted && interactiveScorePercent >= PASS_MARK;
+    await progressRef.set({
+      interactiveScorePercent,
+      interactiveActivitiesCompleted: savedActivities.size,
+      isCompleted: lessonPassed,
+      isMastered: lessonPassed,
+      updatedAt: now,
+    }, { merge: true });
+
+    return res.json({ submission, interactiveScorePercent, interactiveActivitiesCompleted: savedActivities.size, lessonCompleted: lessonPassed });
+  } catch (error) {
+    console.error('Trusted interactive activity submission failed:', error);
+    return res.status(500).json({ error: 'Unable to check and save this activity.' });
   }
 });
 
