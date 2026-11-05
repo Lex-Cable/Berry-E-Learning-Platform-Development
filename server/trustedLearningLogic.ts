@@ -38,6 +38,7 @@ export function certificateUnmetRequirements(input: CertificateRequirements): st
   if (summary.courseMasteryPercent < 75) unmet.push(`course mastery (${summary.courseMasteryPercent}% / 75%)`);
   if (!input.examPassed) unmet.push('final exam pass (75% or higher)');
   if (input.approvedAssignmentCount === 0) unmet.push('approved assignment and marking rubric not configured for this course');
+  if (input.assignments.length < input.approvedAssignmentCount) unmet.push(`topic assignments completed (${input.assignments.length}/${input.approvedAssignmentCount})`);
   input.assignments.forEach((assignment, index) => {
     if (assignment.status !== 'graded' || !Number.isFinite(assignment.scorePercent) || (assignment.scorePercent ?? 0) < 50) {
       unmet.push(`required assignment ${index + 1} is incomplete or below the passing mark`);
