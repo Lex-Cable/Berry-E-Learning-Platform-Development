@@ -556,6 +556,8 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
     const ref = cycleRef(uid, course.id, cycle);
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
     const requiredAssignments = TRUSTED_ASSIGNMENTS.filter((assignment) => assignment.courseId === course.id && Array.isArray(assignment.rubric) && assignment.rubric.length > 0);
+    const approvedInteractiveLessonCount = course.chapters.flatMap((chapter) => chapter.lessons)
+      .filter((lesson) => lesson.activities.length > 0).length;
 
     const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
     const certificateRef = adminDb!.collection('trustedCertificates').doc(credentialId);
@@ -589,6 +591,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
       certificate,
       totalLessons,
       approvedAssignmentCount: requiredAssignments.length,
+      approvedInteractiveLessonCount,
       cycle,
     });
 
