@@ -100,8 +100,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-pp1-1',
                 question: 'How many suns shine in the bright sky today? ☀️',
-                options: ['1', '2', '3', '0']
-                correctIndex: 0,,
+                options: ['1', '2', '3', '0'],
+                correctIndex: 0,
                 learningObjective: 'Recognize the quantity 1',
               },
             ],
@@ -120,15 +120,15 @@ export const COURSES: Course[] = [
         {
           id: 'eq-pp1-1',
           question: 'How many ears do you have? 👂👂',
-          options: ['1 ear', '2 ears', '3 ears', '5 ears']
-                correctIndex: 1,,
+          options: ['1 ear', '2 ears', '3 ears', '5 ears'],
+                correctIndex: 1,
           topic: 'Counting body parts',
         },
         {
           id: 'eq-pp1-2',
           question: 'Which shape is round like a ball or a sweet orange? ⚽🍊',
-          options: ['Circle', 'Square', 'Triangle', 'Star']
-                correctIndex: 0,,
+          options: ['Circle', 'Square', 'Triangle', 'Star'],
+                correctIndex: 0,
           topic: 'Shape recognition',
         },
       ],
@@ -183,8 +183,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-a1',
                 question: 'Which sweet fruit starts with the sound /a/?',
-                options: ['Apple', 'Banana', 'Mango']
-                correctIndex: 0,,
+                options: ['Apple', 'Banana', 'Mango'],
+                correctIndex: 0,
                 learningObjective: 'Phonics initial sound identification',
               },
             ],
@@ -203,8 +203,8 @@ export const COURSES: Course[] = [
         {
           id: 'eq-lang-1',
           question: 'What sound does "Baby" begin with? 👶',
-          options: ['/b/', '/m/', '/s/']
-                correctIndex: 0,,
+          options: ['/b/', '/m/', '/s/'],
+                correctIndex: 0,
           topic: 'Letter sounds',
         },
       ],
@@ -259,8 +259,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-pp2-1',
                 question: 'What do healthy cows eat on the farm?',
-                options: ['Green grass', 'Candy', 'Stones']
-                correctIndex: 0,,
+                options: ['Green grass', 'Candy', 'Stones'],
+                correctIndex: 0,
                 learningObjective: 'Animal care and feeding',
               },
             ],
@@ -279,8 +279,8 @@ export const COURSES: Course[] = [
         {
           id: 'eq-env-1',
           question: 'What do plants need to grow green and tall? 🌱',
-          options: ['Sunlight and water', 'Darkness and soda', 'Nothing']
-                correctIndex: 0,,
+          options: ['Sunlight and water', 'Darkness and soda', 'Nothing'],
+                correctIndex: 0,
           topic: 'Plant care',
         },
       ],
@@ -345,8 +345,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-g1-1',
                 question: 'You see 2 zebras drinking water at the river. Which number shows how many zebras there are?',
-                options: ['1', '2', '3', '0']
-                correctIndex: 1,,
+                options: ['1', '2', '3', '0'],
+                correctIndex: 1,
                 learningObjective: 'Count and identify 2 objects',
               },
             ],
@@ -380,8 +380,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-g1-3',
                 question: 'How many legs does an elephant have?',
-                options: ['2', '3', '4', '5']
-                correctIndex: 2,,
+                options: ['2', '3', '4', '5'],
+                correctIndex: 2,
                 learningObjective: 'Numeral recognition for 4',
               },
             ],
@@ -400,22 +400,22 @@ export const COURSES: Course[] = [
         {
           id: 'eq-g1-1',
           question: 'Kamau has 2 pencils and his sister gives him 3 more pencils. How many pencils does Kamau have in total?',
-          options: ['4 pencils', '5 pencils', '6 pencils', '3 pencils']
-                correctIndex: 1,,
+          options: ['4 pencils', '5 pencils', '6 pencils', '3 pencils'],
+                correctIndex: 1,
           topic: 'Addition within 10',
         },
         {
           id: 'eq-g1-2',
           question: 'Which of the following numbers is the greatest?',
-          options: ['2', '7', '4', '1']
-                correctIndex: 1,,
+          options: ['2', '7', '4', '1'],
+                correctIndex: 1,
           topic: 'Number ordering',
         },
         {
           id: 'eq-g1-3',
           question: 'What is 5 minus 2?',
-          options: ['2', '3', '4', '1']
-                correctIndex: 1,,
+          options: ['2', '3', '4', '1'],
+                correctIndex: 1,
           topic: 'Subtraction within 10',
         },
       ],
@@ -474,8 +474,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-eng-1',
                 question: 'When your friend shares their crayons with you, what is the courteous response?',
-                options: ['Thank you!', 'Go away', 'Give me more', 'Nothing']
-                correctIndex: 0,,
+                options: ['Thank you!', 'Go away', 'Give me more', 'Nothing'],
+                correctIndex: 0,
                 learningObjective: 'Courteous social language',
               },
             ],
@@ -494,8 +494,8 @@ export const COURSES: Course[] = [
         {
           id: 'eq-eng-1',
           question: 'Which word completes the sentence: "The book is on the _____"?',
-          options: ['table', 'sky', 'running']
-                correctIndex: 0,,
+          options: ['table', 'sky', 'running'],
+                correctIndex: 0,
           topic: 'Vocabulary',
         },
       ],
@@ -556,15 +556,15 @@ export const COURSES: Course[] = [
               {
                 id: 'q-g7-1',
                 question: 'If you use a 10× eyepiece with a 40× high-power objective lens, what is the total magnification?',
-                options: ['50×', '400×', '40×', '4000×']
-                correctIndex: 1,,
+                options: ['50×', '400×', '40×', '4000×'],
+                correctIndex: 1,
                 learningObjective: 'Calculate total magnification',
               },
               {
                 id: 'q-g7-2',
                 question: 'Which knob should you NEVER use when focusing under high-power (40×) objective?',
-                options: ['Fine adjustment knob', 'Coarse adjustment knob', 'Diaphragm dial', 'Light dimmer switch']
-                correctIndex: 1,,
+                options: ['Fine adjustment knob', 'Coarse adjustment knob', 'Diaphragm dial', 'Light dimmer switch'],
+                correctIndex: 1,
                 learningObjective: 'Laboratory safety and microscope handling',
               },
             ],
@@ -583,15 +583,15 @@ export const COURSES: Course[] = [
         {
           id: 'eq-sci-1',
           question: 'What is the main function of the cell wall in plant cells?',
-          options: ['Provides mechanical support and rigid structure', 'Produces energy by respiration', 'Controls genetic heredity', 'Synthesizes proteins']
-                correctIndex: 0,,
+          options: ['Provides mechanical support and rigid structure', 'Produces energy by respiration', 'Controls genetic heredity', 'Synthesizes proteins'],
+                correctIndex: 0,
           topic: 'Cell Biology',
         },
         {
           id: 'eq-sci-2',
           question: 'Which organelle is known as the powerhouse of the cell?',
-          options: ['Nucleus', 'Mitochondria', 'Vacuole', 'Ribosome']
-                correctIndex: 1,,
+          options: ['Nucleus', 'Mitochondria', 'Vacuole', 'Ribosome'],
+                correctIndex: 1,
           topic: 'Cell Biology',
         },
       ],
@@ -646,8 +646,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-pt-1',
                 question: 'What angle does the blade of a try square make with its stock?',
-                options: ['90°', '45°', '180°', '60°']
-                correctIndex: 0,,
+                options: ['90°', '45°', '180°', '60°'],
+                correctIndex: 0,
                 learningObjective: 'Measuring tools',
               },
             ],
@@ -666,8 +666,8 @@ export const COURSES: Course[] = [
         {
           id: 'eq-pt-1',
           question: 'What is the color code of the earth wire in a standard British/Kenyan 3-pin plug?',
-          options: ['Green and Yellow stripes', 'Brown', 'Blue', 'Red']
-                correctIndex: 0,,
+          options: ['Green and Yellow stripes', 'Brown', 'Blue', 'Red'],
+                correctIndex: 0,
           topic: 'Electrical Safety',
         },
       ],
@@ -733,8 +733,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-g10-1',
                 question: 'An element has electronic configuration 2.8.7. In which Group and Period does it reside?',
-                options: ['Group 7, Period 3', 'Group 3, Period 7', 'Group 8, Period 2', 'Group 7, Period 2']
-                correctIndex: 0,,
+                options: ['Group 7, Period 3', 'Group 3, Period 7', 'Group 8, Period 2', 'Group 7, Period 2'],
+                correctIndex: 0,
                 learningObjective: 'Map electronic configuration to periodic table coordinates',
               },
             ],
@@ -758,15 +758,15 @@ export const COURSES: Course[] = [
             'Number of electron shells increases',
             'Electrons repel the nucleus more strongly',
             'Atomic mass decreases across a period',
-          ]
-                correctIndex: 0,,
+          ],
+                correctIndex: 0,
           topic: 'Periodic Trends',
         },
         {
           id: 'eq-chem-2',
           question: 'Chlorine has two isotopes: 35-Cl (75% abundance) and 37-Cl (25% abundance). What is its relative atomic mass?',
-          options: ['35.5', '36.0', '35.0', '37.0']
-                correctIndex: 0,,
+          options: ['35.5', '36.0', '35.0', '37.0'],
+                correctIndex: 0,
           topic: 'Isotopes',
         },
       ],
@@ -822,8 +822,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-bus-1',
                 question: 'If a business purchases motor vehicle equipment for KES 100,000 in cash, how does total assets change?',
-                options: ['Total assets remain unchanged', 'Total assets increase by 100,000', 'Total assets decrease by 100,000']
-                correctIndex: 0,,
+                options: ['Total assets remain unchanged', 'Total assets increase by 100,000', 'Total assets decrease by 100,000'],
+                correctIndex: 0,
                 learningObjective: 'Accounting equation mechanics',
               },
             ],
@@ -842,8 +842,8 @@ export const COURSES: Course[] = [
         {
           id: 'eq-bus-1',
           question: 'Which market structure features a single seller with high barriers to market entry?',
-          options: ['Monopoly', 'Perfect Competition', 'Oligopoly', 'Monopolistic Competition']
-                correctIndex: 0,,
+          options: ['Monopoly', 'Perfect Competition', 'Oligopoly', 'Monopolistic Competition'],
+                correctIndex: 0,
           topic: 'Market structures',
         },
       ],
@@ -903,8 +903,8 @@ export const COURSES: Course[] = [
                   'Hypoxia stimulates kidneys to release Erythropoietin (EPO), increasing red blood cell count and VO2 max',
                   'There is more gravity at higher altitudes',
                   'High altitude makes bones heavier',
-                ]
-                correctIndex: 0,,
+                ],
+                correctIndex: 0,
                 learningObjective: 'Cardiovascular altitude adaptation',
               },
             ],
@@ -923,8 +923,8 @@ export const COURSES: Course[] = [
         {
           id: 'eq-spt-1',
           question: 'Which muscle fiber type is fatigue-resistant and dominant in elite endurance distance runners?',
-          options: ['Type I (Slow-twitch fibers)', 'Type IIx (Fast-twitch glycolytic)', 'Smooth muscle fibers']
-                correctIndex: 0,,
+          options: ['Type I (Slow-twitch fibers)', 'Type IIx (Fast-twitch glycolytic)', 'Smooth muscle fibers'],
+                correctIndex: 0,
           topic: 'Exercise Physiology',
         },
       ],
@@ -988,8 +988,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-uni-1',
                 question: 'For recurrence $T(n) = 4T(n/2) + O(n)$, what is the tight asymptotic bound?',
-                options: ['O(n^2)', 'O(n log n)', 'O(n^3)', 'O(n)']
-                correctIndex: 0,,
+                options: ['O(n^2)', 'O(n log n)', 'O(n^3)', 'O(n)'],
+                correctIndex: 0,
                 learningObjective: 'Master Theorem Case 1 application',
               },
             ],
@@ -1008,8 +1008,8 @@ export const COURSES: Course[] = [
         {
           id: 'eq-cs-1',
           question: 'What is the worst-case time complexity of searching an element in a balanced AVL tree with n nodes?',
-          options: ['O(log n)', 'O(n)', 'O(1)', 'O(n log n)']
-                correctIndex: 0,,
+          options: ['O(log n)', 'O(n)', 'O(1)', 'O(n log n)'],
+                correctIndex: 0,
           topic: 'Data Structures',
         },
       ],
@@ -1069,8 +1069,8 @@ export const COURSES: Course[] = [
               {
                 id: 'q-prof-1',
                 question: 'If a fraud detection model flags 100 transactions, and 80 are verified frauds while 20 are innocent users, what is the Precision?',
-                options: ['80%', '20%', '100%', '85%']
-                correctIndex: 0,,
+                options: ['80%', '20%', '100%', '85%'],
+                correctIndex: 0,
                 learningObjective: 'Calculate Precision in business operations',
               },
             ],
@@ -1093,8 +1093,8 @@ export const COURSES: Course[] = [
             'It shrinks weights continuously toward zero without setting them strictly to zero',
             'It drives weights exactly to zero for feature selection',
             'It causes weights to explode exponentially',
-          ]
-                correctIndex: 0,,
+          ],
+                correctIndex: 0,
           topic: 'Regularization',
         },
       ],
