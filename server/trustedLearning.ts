@@ -70,9 +70,9 @@ async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, 
   const previousProgressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(previous.id);
   const previousAssignmentRef = cycleRef(uid, course.id, cycle).collection('assignments').doc(previousAssignmentId);
   const [progress, assignment] = await Promise.all([previousProgressRef.get(), previousAssignmentRef.get()]);
-  return progress.data()?.isMastered === true &&
-    assignment.data()?.status === 'graded' &&
-    Number(assignment.data()?.scorePercent || 0) >= 50;
+  const assignmentStatus = assignment.data()?.status;
+  const assignmentMarked = assignmentStatus === 'graded' || assignmentStatus === 'returned_for_revision';
+  return progress.data()?.isMastered === true && assignmentMarked;
 }
 
 async function getEnrolledCourse(req: AuthenticatedRequest, res: express.Response, courseId: string) {
