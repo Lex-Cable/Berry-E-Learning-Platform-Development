@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   Filter,
@@ -8,6 +8,7 @@ import {
   Globe2,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   ShieldCheck,
   Sparkles,
   Info,
@@ -44,9 +45,25 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
         .sort((a, b) => a.localeCompare(b));
     }
     const canonicalStage = resolveCanonicalStage(selectedStage);
-    return Array.from(new Set(curriculumRepository.byStage[canonicalStage].map(({ placement }) => placement.gradeLevel)))
-      .sort((a, b) => a.localeCompare(b));
-  }, [curriculumRepository, selectedStage]);
+    const authoredGrades = curriculumRepository.byStage[canonicalStage].map(({ placement }) => placement.gradeLevel);
+    const stageGradesById: Record<string, string[]> = {
+      early_years: ['PP1', 'PP2', 'Nursery', 'Reception', 'Pre-K', 'Kindergarten'],
+      primary: [
+        ...Array.from({ length: 9 }, (_, index) => `Grade ${index + 1}`),
+        ...Array.from({ length: 6 }, (_, index) => `Cambridge Primary Stage ${index + 1}`),
+        ...Array.from({ length: 6 }, (_, index) => `Year ${index + 1}`),
+      ],
+      secondary: [
+        ...Array.from({ length: 3 }, (_, index) => `Grade ${index + 10}`),
+        ...Array.from({ length: 7 }, (_, index) => `Year ${index + 7}`),
+        'IGCSE', 'AS Level', 'A Level',
+      ],
+      advanced: ['Bachelor Year 1', 'Bachelor Year 2', 'Bachelor Year 3', 'Bachelor Year 4', 'Masters', 'Doctorate', 'Professional'],
+    };
+    return Array.from(new Set([...stageGradesById[canonicalStage], ...authoredGrades, learner.gradeLevel]))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [curriculumRepository, selectedStage, learner.gradeLevel]);
 
   useEffect(() => {
     if (selectedGrade !== 'all' && !stageGrades.includes(selectedGrade)) {
@@ -54,7 +71,7 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
     }
   }, [learner.gradeLevel, selectedGrade, stageGrades]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showCurriculumComparison, setShowCurriculumComparison] = useState(false);
+  const [showCurriculumComparison, setShowCurriculumComparison] = useState(false);\n  const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});\n  const scrollShelf = (sectionId: string, direction: -1 | 1) => {\n    shelfRefs.current[sectionId]?.scrollBy({ left: direction * 620, behavior: 'smooth' });\n  };
 
   // Three independent curriculum pathways requested for Berry Explore Courses.
   // Courses are never copied across curricula based on comparison flags.
@@ -236,14 +253,8 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
             <button
               key={st.id}
               onClick={() => {
-                const nextStage = st.id as LearnerStage;
-                setSelectedStage(nextStage);
-                const nextGrades = courses.filter((course) =>
-                  nextStage === 'advance'
-                    ? course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals'
-                    : course.stage === nextStage
-                ).map((course) => course.gradeLevel);
-                setSelectedGrade(nextGrades.includes(learner.gradeLevel) ? learner.gradeLevel : nextGrades[0] || 'all');
+                setSelectedStage(st.id as LearnerStage);
+                setSelectedGrade('all');
               }}
               className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
                 selectedStage === st.id
@@ -292,7 +303,21 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
                 </span>
               </div>
               {sectionCourses.length > 0 ? (
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">{sectionCourses.map(renderCourseCard)}</div>
+                <div className="relative">
+                  {sectionCourses.length > 2 && (
+                    <>
+                      <button type="button" aria-label={`Scroll ${section.name} courses left`} onClick={() => scrollShelf(section.id, -1)} className="absolute -left-3 top-1/2 z-10 hidden -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-lg transition hover:bg-purple-50 md:grid">
+                        <ChevronLeft size={20} />
+                      </button>
+                      <button type="button" aria-label={`Scroll ${section.name} courses right`} onClick={() => scrollShelf(section.id, 1)} className="absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-lg transition hover:bg-purple-50 md:grid">
+                        <ChevronRight size={20} />
+                      </button>
+                    </>
+                  )}
+                  <div ref={(node) => { shelfRefs.current[section.id] = node; }} className="flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-4 [scrollbar-width:thin]">
+                    {sectionCourses.map((course) => <div key={course.id} className="w-[285px] shrink-0 snap-start">{renderCourseCard(course)}</div>)}
+                  </div>
+                </div>
               ) : (
                 <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-9 text-center">
                   <BookOpen size={32} className="mx-auto mb-3 text-slate-300" />
