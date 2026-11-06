@@ -111,7 +111,7 @@ export function markAssignmentSubmission(assignment: Assignment, content: string
   if (sentences.length < 2) feedbackParts.push('Use complete sentences to explain your ideas rather than listing isolated terms.');
   feedbackParts.push(status === 'graded'
     ? 'Automated first-pass marking: passed. A teacher may review this feedback.'
-    : 'Returned for revision: address the criterion feedback and submit an improved response.');
+    : 'returned for revision: address the criterion feedback and submit an improved response.');
   return { status, marksAwarded, totalMarks: assignment.totalMarks, scorePercent, criterionScores: adjusted, markerFeedback: feedbackParts.join('\n') };
 }
 
