@@ -43,9 +43,20 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
   curriculumRepository,
   onOpenLesson,
 }) => {
-  // Find current active course and its normalized international-curriculum placement.
+  // Let learners explicitly choose the enrolled course and lesson Berry AI should use.
+  const enrolledCourses = courses.filter((course) => learner.enrolledCourseIds.includes(course.id));
+  const [selectedCourseId, setSelectedCourseId] = useState(
+    enrolledCourses[0]?.id || courses[0]?.id || '',
+  );
+  const [selectedLessonId, setSelectedLessonId] = useState('');
   const activeCourse =
-    courses.find((c) => learner.enrolledCourseIds.includes(c.id)) || courses[0];
+    courses.find((course) => course.id === selectedCourseId) ||
+    enrolledCourses[0] ||
+    courses[0];
+  const activeLesson = activeCourse?.chapters
+    .flatMap((chapter) => chapter.lessons)
+    .find((lesson) => lesson.id === selectedLessonId);
+
   const activeCourseEntry = activeCourse ? curriculumRepository.byId[activeCourse.id] : undefined;
   const learnerStage = curriculumRepository.stages.find(
     (stage) => stage.id === resolveCanonicalStage(learner.stage),
@@ -66,6 +77,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
         `${chapter.title}: ${chapter.lessons.map((lesson) => lesson.title).join(', ')}`,
       ).join('\n').slice(0, 6000)
     : '';
+  const currentTopic = activeLesson?.title || 'Course overview';
 
 
   const [conversations, setConversations] = useState<AiConversation[]>([]);
@@ -641,7 +653,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
                 {activeConversation?.title || 'Berry AI Socratic Tutor'}
               </h2>
               <p className="text-[10px] text-slate-500">
-                Course: {activeCourse?.title} • {learner.stage.toUpperCase()} Mode
+                {activeCourse?.title || 'No course selected'} • {activeLesson?.title || 'Course overview'}
               </p>
             </div>
           </div>
@@ -655,6 +667,41 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
               <span>New Thread</span>
             </button>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/70">
+          <label className="min-w-0 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            Learning course
+            <select
+              value={activeCourse?.id || ''}
+              onChange={(event) => {
+                setSelectedCourseId(event.target.value);
+                setSelectedLessonId('');
+              }}
+              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-800"
+            >
+              {courses.filter((course) => learner.enrolledCourseIds.includes(course.id)).map((course) => (
+                <option key={course.id} value={course.id}>{course.title}</option>
+              ))}
+            </select>
+          </label>
+          <label className="min-w-0 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            Lesson / topic
+            <select
+              value={activeLesson?.id || ''}
+              onChange={(event) => setSelectedLessonId(event.target.value)}
+              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-800"
+            >
+              <option value="">Course overview</option>
+              {activeCourse?.chapters.map((chapter) => (
+                <optgroup key={chapter.id} label={chapter.title}>
+                  {chapter.lessons.map((lesson) => (
+                    <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
         </div>
 
         {/* Messages Scroll View */}
