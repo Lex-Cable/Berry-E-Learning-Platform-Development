@@ -259,7 +259,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
         : 100;
       const lessonPassed = scorePercent >= masteryThreshold &&
         allActivitiesSubmitted && interactiveScorePercent >= 80;
-      const progress: LessonMasteryState & { updatedAt: string } = {
+      const progress: LessonMasteryState & { updatedAt: string; interactiveScorePercent: number; interactiveActivitiesCompleted: number } = {
         lessonId: lesson.id,
         isCompleted: lessonPassed && assignmentSnapshot.data()?.status === 'graded' && Number(assignmentSnapshot.data()?.scorePercent) >= 50,
         isMastered: lessonPassed,
