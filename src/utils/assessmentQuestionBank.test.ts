@@ -37,20 +37,26 @@ function courseFixture(): Course {
   } as Course;
 }
 
-test('every lesson receives ten mastery items and every course receives a 30-question, 60-minute exam', () => {
+test('assessment banks keep only distinct authored questions and cap their size', () => {
   const result = withCompleteAssessmentBanks([courseFixture()]);
   const course = result[0];
-  assert.equal(course.chapters[0].lessons[0].quizQuestions.length, 10);
-  assert.equal(course.exam?.questions.length, 30);
+  const mastery = course.chapters[0].lessons[0].quizQuestions;
+  const exam = course.exam?.questions || [];
+  assert.equal(mastery.length, 1);
+  assert.equal(exam.length, 2);
+  assert.ok(mastery.length <= 10);
+  assert.ok(exam.length <= 30);
+  assert.equal(new Set(mastery.map((question) => question.question.trim().toLowerCase())).size, mastery.length);
+  assert.equal(new Set(exam.map((question) => question.question.trim().toLowerCase())).size, exam.length);
   assert.equal(course.exam?.durationMinutes, 60);
-  assert.ok(course.exam?.questions.every((question) => question.options.length >= 2 && question.correctIndex >= 0));
+  assert.ok(exam.every((question) => question.options.length >= 2 && question.correctIndex >= 0));
 });
 
 test('course-specific banks retain their own question content and answer keys', () => {
   const course = courseFixture();
   const result = withCompleteAssessmentBanks([course]);
   const questions = result[0].chapters[0].lessons[0].quizQuestions;
-  assert.ok(questions.every((question) => question.question.includes('plants') || question.question.includes('Plant')));
+  assert.deepEqual(questions.map((question) => question.question), ['What do plants need to grow?']);
   assert.ok(questions.every((question) => question.correctIndex === 0));
   assert.equal(course.chapters[0].lessons[0].quizQuestions.length, 1);
 });
@@ -63,7 +69,7 @@ test('lessons with no approved source questions are not filled with fabricated a
   assert.equal(result[0].chapters[0].lessons[0].quizQuestions.length, 0);
 });
 
-test('all shipped Berry course catalogues expose ten mastery questions, five activities and thirty final exam questions', () => {
+test('all shipped Berry course catalogues contain no repeated assessment prompts', () => {
   const catalogues = [
     [...CLIENT_COURSES, ...INTERNATIONAL_STARTER_COURSES],
     [...SERVER_COURSES, ...INTERNATIONAL_STARTER_COURSES],
@@ -71,12 +77,17 @@ test('all shipped Berry course catalogues expose ten mastery questions, five act
   for (const catalogue of catalogues) {
     const complete = withInteractivePractice(withCompleteAssessmentBanks(catalogue as Course[]));
     for (const course of complete) {
-      assert.equal(course.exam?.questions.length, 30, `${course.id} final exam`);
+      assert.ok((course.exam?.questions.length || 0) <= 30, `${course.id} final exam cap`);
       assert.equal(course.exam?.durationMinutes, 60, `${course.id} exam duration`);
+      const examPrompts = (course.exam?.questions || []).map((question) => question.question.trim().toLowerCase());
+      assert.equal(new Set(examPrompts).size, examPrompts.length, `${course.id} repeated exam prompt`);
       for (const chapter of course.chapters) {
         for (const lesson of chapter.lessons) {
-          assert.equal(lesson.quizQuestions.length, 10, `${course.id}/${lesson.id} mastery`);
-          assert.equal(lesson.activities.length, 5, `${course.id}/${lesson.id} interactive practice`);
+          assert.ok(lesson.quizQuestions.length <= 10, `${course.id}/${lesson.id} mastery cap`);
+          const prompts = lesson.quizQuestions.map((question) => question.question.trim().toLowerCase());
+          assert.equal(new Set(prompts).size, prompts.length, `${course.id}/${lesson.id} repeated mastery prompt`);
+          const activityPrompts = lesson.activities.map((activity) => activity.instructions.trim().toLowerCase());
+          assert.equal(new Set(activityPrompts).size, activityPrompts.length, `${course.id}/${lesson.id} repeated activity prompt`);
         }
       }
     }
