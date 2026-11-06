@@ -359,9 +359,9 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
       expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       await session.ref.set({ expiresAt }, { merge: true });
     }
-    if (Date.parse(expiresAt) <= Date.now()) {
-      return res.status(409).json({ error: 'The 60-minute exam time has expired. Submit your saved answers or request a new full-course retake.' });
-    }
+    // Return the same expired session as well: the client restores its locally
+    // saved selections and immediately submits them. Never create a fresh timer
+    // merely because the learner refreshed after the deadline.
     return res.json({ questions: safeQuestions(questions.map((question) => ({ ...question, topic: question.topic }))), cycle, expiresAt });
   } catch (error) {
     console.error('Trusted exam session creation failed:', error);
