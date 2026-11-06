@@ -68,31 +68,53 @@ export interface AssignmentMarkingResult {
 /** Automated formative first-pass marker; not an official qualification grade. */
 export function markAssignmentSubmission(assignment: Assignment, content: string): AssignmentMarkingResult {
   const trimmed = content.trim();
-  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
-  const lower = trimmed.toLowerCase();
+  const words = trimmed.match(/[\\p{L}\\p{N}']+/gu) || [];
+  const wordCount = words.length;
+  const normalized = trimmed.toLocaleLowerCase();
+  const sentences = trimmed.split(/[.!?]+/).map((sentence) => sentence.trim()).filter(Boolean);
+  const hasExplanation = /\\b(because|therefore|this means|as a result|for example|for instance|such as|so that|which shows|this demonstrates)\\b/i.test(trimmed);
+  const hasReflection = /\\b(i learned|i understand|i found|i struggled|i improved|i would|next time|i still|my question|i need to)\\b/i.test(trimmed);
+
   const criterionScores: RubricAward[] = assignment.rubric.map((criterion) => {
-    if (criterion.keywords.length === 0) return { criterionId: criterion.id, awarded: 0, outOf: criterion.marks };
-    const matched = criterion.keywords.filter((keyword) => lower.includes(keyword.toLowerCase())).length;
-    const coverage = matched / Math.min(3, criterion.keywords.length);
-    return { criterionId: criterion.id, awarded: Math.min(criterion.marks, Math.round(criterion.marks * coverage)), outOf: criterion.marks };
+    const concepts = Array.from(new Set(criterion.keywords
+      .map((keyword) => keyword.trim().toLocaleLowerCase())
+      .filter((keyword) => keyword.length >= 3)));
+    const matched = concepts.filter((keyword) => {
+      const escaped = keyword.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+      return new RegExp(`(?:^|[^\\\\p{L}\\\\p{N}])${escaped}(?:$|[^\\\\p{L}\\\\p{N}])`, 'u').test(normalized);
+    });
+    const targetConcepts = Math.min(6, Math.max(3, Math.ceil(concepts.length * 0.2)));
+    const conceptCoverage = concepts.length ? Math.min(1, matched.length / targetConcepts) : 0;
+    const criterionText = `${criterion.id} ${criterion.description}`.toLowerCase();
+    let evidenceMultiplier = 1;
+    if (/application|example/.test(criterionText)) evidenceMultiplier = hasExplanation && sentences.length >= 2 ? 1 : 0.65;
+    if (/reflection|reason/.test(criterionText)) evidenceMultiplier = hasReflection && sentences.length >= 2 ? 1 : 0.65;
+    const earned = Math.round(criterion.marks * conceptCoverage * evidenceMultiplier);
+    return { criterionId: criterion.id, awarded: Math.min(criterion.marks, earned), outOf: criterion.marks };
   });
-  const lengthPenalty = wordCount < 40 ? 0.4 : wordCount < 100 ? 0.75 : 1;
-  const adjusted = criterionScores.map((score) => ({ ...score, awarded: Math.max(0, Math.round(score.awarded * lengthPenalty)) }));
+
+  const lengthMultiplier = wordCount < 40 ? 0.25 : wordCount < 100 ? 0.6 : wordCount < 150 ? 0.8 : 1;
+  const structureMultiplier = sentences.length < 2 ? 0.65 : 1;
+  const adjusted = criterionScores.map((score) => ({
+    ...score,
+    awarded: Math.max(0, Math.min(score.outOf, Math.round(score.awarded * lengthMultiplier * structureMultiplier))),
+  }));
   const marksAwarded = adjusted.reduce((sum, score) => sum + score.awarded, 0);
   const scorePercent = assignment.totalMarks > 0 ? Math.round((marksAwarded / assignment.totalMarks) * 100) : 0;
   const status: AssignmentSubmissionStatus = scorePercent >= 50 ? 'graded' : 'returned_for_revision';
   const feedbackParts = adjusted.map((score) => {
     const criterion = assignment.rubric.find((entry) => entry.id === score.criterionId);
     const label = criterion?.description ?? score.criterionId;
-    if (score.awarded >= score.outOf) return `✓ ${label} — full marks (${score.awarded}/${score.outOf}).`;
-    if (score.awarded > 0) return `• ${label} — partial (${score.awarded}/${score.outOf}). Add more specific detail or correct terminology.`;
-    return `• ${label} — not yet demonstrated (0/${score.outOf}). Revisit the lesson notes and try again.`;
+    if (score.awarded >= score.outOf) return `✓ ${label} — fully demonstrated (${score.awarded}/${score.outOf}).`;
+    if (score.awarded > 0) return `• ${label} — partly demonstrated (${score.awarded}/${score.outOf}). Add relevant concepts and explain your reasoning.`;
+    return `• ${label} — not yet demonstrated (0/${score.outOf}). Revisit the lesson objectives and address this criterion directly.`;
   });
-  if (wordCount < 100) feedbackParts.push(`Your submission is ${wordCount} words. Aim for at least 150 words so the marker can assess your understanding fully.`);
+  if (wordCount < 150) feedbackParts.push(`Your response contains ${wordCount} words. The assignment asks for at least 150 words; add detail and examples.`);
+  if (sentences.length < 2) feedbackParts.push('Use complete sentences to explain your ideas rather than listing isolated terms.');
   feedbackParts.push(status === 'graded'
-    ? 'Automated first-pass marking: passed. Your trainer may review and adjust this mark.'
-    : 'Automated first-pass marking: returned for revision. Address the feedback and resubmit.');
-  return { status, marksAwarded, totalMarks: assignment.totalMarks, scorePercent, criterionScores: adjusted, markerFeedback: feedbackParts.join('\n') };
+    ? 'Automated formative marking: the current rubric threshold is met. A teacher may review this feedback.'
+    : 'Returned for revision: address the criterion feedback and submit an improved response.');
+  return { status, marksAwarded, totalMarks: assignment.totalMarks, scorePercent, criterionScores: adjusted, markerFeedback: feedbackParts.join('\\n') };
 }
 
 export function nextAttemptNumber(previousAttempt: number): number {
