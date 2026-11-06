@@ -388,6 +388,28 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     if (!approvedExamQuestions) return res.status(422).json({ error: `This course has ${course.exam.questions.length} approved final-exam questions; 30 are required.` });
     const questionById = new Map(approvedExamQuestions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => questionById.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+    const attemptRef = cycleDocument.collection('examAttempts').doc('final');
+    // Make submission idempotent: if the server saved an attempt but the browser
+    // lost the response, a retry must return that trusted result even after expiry.
+    const previousAttempt = await attemptRef.get();
+    if (previousAttempt.exists) {
+      const savedAttempt = previousAttempt.data()!;
+      const savedAnswers = (savedAttempt.answers ?? {}) as Record<string, number>;
+      const savedResults = Object.fromEntries(questions.map((question) => [question.id, {
+        correct: savedAnswers[question.id] === question.correctIndex,
+        correctAnswerIndex: question.correctIndex,
+        explanation: question.explanation,
+      }]));
+      return res.json({
+        scorePercent: savedAttempt.scorePercent,
+        passed: savedAttempt.passed,
+        passingScorePercent: savedAttempt.passingScorePercent,
+        results: savedResults,
+        attempt: savedAttempt,
+        cycle,
+        alreadySubmitted: true,
+      });
+    }
     if (!validAnswers(questions, req.body?.answers, true)) return res.status(400).json({ error: 'Submit valid answers for the questions you attempted.' });
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
@@ -398,7 +420,6 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
       correctAnswerIndex: question.correctIndex,
       explanation: question.explanation,
     }]));
-    const attemptRef = cycleDocument.collection('examAttempts').doc('final');
     const now = new Date().toISOString();
     const attempt = await adminDb!.runTransaction(async (transaction) => {
       const previous = await transaction.get(attemptRef);
