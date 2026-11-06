@@ -25,14 +25,11 @@ function courseFixture(): Course {
   } as Course;
 }
 
-test('fills five interactive tasks from existing lesson-specific mastery questions', () => {
+test('does not copy mastery questions into interactive tasks', () => {
   const source = courseFixture();
   const result = withInteractivePractice([source]);
   const lesson = result[0].chapters[0].lessons[0];
-  assert.equal(lesson.activities.length, 5);
-  assert.equal(lesson.activities[0].type, 'interactive-choice');
-  assert.equal(lesson.activities[0].instructions, 'Question 1?');
-  assert.equal(lesson.activities[0].data.choices?.[1].isCorrect, true);
+  assert.equal(lesson.activities.length, 0);
   assert.equal(source.chapters[0].lessons[0].activities.length, 0);
 });
 
@@ -43,12 +40,14 @@ test('does not invent activities when approved mastery questions are unavailable
   assert.equal(result[0].chapters[0].lessons[0].activities.length, 0);
 });
 
-test('keeps exactly five interactive activities when the source lesson has extras', () => {
+test('keeps at most five distinct authored interactive activities', () => {
   const source = courseFixture();
   source.chapters[0].lessons[0].activities = Array.from({ length: 7 }, (_, index) => ({
     id: `existing-${index}`, type: 'interactive-choice', title: `Task ${index}`,
-    instructions: 'Approved task', data: { choices: [] },
+    instructions: `Approved task ${index}`, data: { choices: [] },
   })) as Course['chapters'][0]['lessons'][0]['activities'];
   const result = withInteractivePractice([source]);
-  assert.equal(result[0].chapters[0].lessons[0].activities.length, 5);
+  const activities = result[0].chapters[0].lessons[0].activities;
+  assert.equal(activities.length, 5);
+  assert.equal(new Set(activities.map((activity) => activity.instructions)).size, 5);
 });
