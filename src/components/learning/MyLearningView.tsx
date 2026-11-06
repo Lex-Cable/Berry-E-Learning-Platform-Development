@@ -583,7 +583,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     );
 
     return (
-      <div className="space-y-6 pb-12 max-w-5xl mx-auto">
+      <div className="space-y-6 pb-12 max-w-7xl mx-auto">
         {/* Navigation Breadcrumb */}
         <button
           onClick={() => setActiveCourse(null)}
@@ -627,6 +627,29 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Course introduction, objectives and assessment policy */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <section className="lg:col-span-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+            <div className="flex items-center gap-2 mb-3"><BookOpen size={17} className="text-purple-600" /><h3 className="font-extrabold text-slate-900">Course introduction</h3></div>
+            <p className="text-sm leading-6 text-slate-600">{activeCourse.description}</p>
+            <div className="mt-5"><h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-2">Learning objectives</h4>
+              {activeCourse.objectives.length ? <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">{activeCourse.objectives.map((objective, index) => <li key={index} className="flex gap-2 text-xs leading-5 text-slate-700"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-600" />{objective}</li>)}</ul> : <p className="text-xs text-slate-500">Learning objectives will be added for this course.</p>}
+            </div>
+            {activeCourse.prerequisites.length > 0 && <div className="mt-4"><h4 className="text-xs font-extrabold uppercase tracking-wide text-slate-500 mb-1">Prerequisites</h4><p className="text-xs text-slate-600">{activeCourse.prerequisites.join(' • ')}</p></div>}
+          </section>
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+            <div className="flex items-center gap-2 mb-3"><FileCheck size={17} className="text-purple-600" /><h3 className="font-extrabold text-slate-900">Assessment policy</h3></div>
+            <p className="text-[11px] text-slate-500 mb-3">Current Berry grading thresholds</p>
+            <div className="space-y-2 text-xs">{[['Chapter assessment','70%'],['Chapter assignment','50%'],['Module examination','60%'],['Final examination','50%'],['Overall course grade','60%']].map(([label, value]) => <div key={label} className="flex justify-between gap-2 border-b border-slate-100 pb-2"><span className="text-slate-600">{label}</span><strong className="text-slate-900">{value}</strong></div>)}</div>
+            <p className="text-[10px] text-slate-400 mt-3">Practice is formative; 80% is the recommended mastery target.</p>
+          </section>
+        </div>
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
+          <div className="flex items-center justify-between gap-3 mb-3"><h3 className="font-extrabold text-sm text-slate-900">Proposed assessment weighting</h3><span className="text-[10px] font-bold text-amber-700 bg-amber-50 rounded-full px-2.5 py-1">Default policy</span></div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[['Chapter assessments','10%'],['Assignments & projects','30%'],['Module examinations','25%'],['Final examination','35%']].map(([label, value]) => <div key={label} className="rounded-2xl bg-slate-50 p-3"><strong className="block text-xl text-purple-700">{value}</strong><span className="text-[11px] text-slate-600">{label}</span></div>)}</div>
+          <p className="text-[10px] text-slate-400 mt-3">These are the proposed default weights. Course-specific configuration and the complete module examination system are still required before these can determine official grades.</p>
+        </section>
 
         {/* Final Exam Callout Banner */}
         {activeCourse.exam && (
