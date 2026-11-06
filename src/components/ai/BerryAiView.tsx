@@ -466,7 +466,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
       return <h3 key={index} className="pt-2 text-sm font-extrabold text-slate-900">{value.replace(/^#{1,3}\s*/, '')}</h3>;
     }
     if (/^[-*]\s/.test(value)) {
-      return <div key={index} className="flex items-start gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{value.replace(/^[-*]\s*/, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</span></div>;
+      return <div key={index} className="flex items-start gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{renderInlineAiText(value.replace(/^[-*]\s*/, ''))}</span></div>;
     }
     if (/^\d+[.)]\s/.test(value)) {
       return <p key={index} className="pl-1">{renderInlineAiText(value)}</p>;
