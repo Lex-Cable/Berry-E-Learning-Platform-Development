@@ -80,7 +80,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [trustedAssignmentsLoading, setTrustedAssignmentsLoading] = useState(false);
   const [trustedLessonProgress, setTrustedLessonProgress] = useState<Record<string, LessonMasteryState>>({});
   const [trustedActivities, setTrustedActivities] = useState<Record<string, Record<string, { scorePercent: number; passed: boolean; feedback: string; answer?: { pairs?: Record<string, string>; order?: string[]; response?: string; choiceId?: string } }>>>({});
-  const [trustedLessonAttempts, setTrustedLessonAttempts] = useState<Record<string, { answers: Record<string, number>; scorePercent: number; submittedAt: string }>>({});
+  const [trustedLessonAttempts, setTrustedLessonAttempts] = useState<Record<string, { answers: Record<string, number>; scorePercent: number; submittedAt: string; results: Record<string, { correct: boolean; correctAnswerIndex?: number; feedback?: string }> }>>({});
 
   useEffect(() => {
     if (!initialCourseId) return;
@@ -340,6 +340,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           masteryRecord={currentMasteryRecords[activeLessonId]}
           savedActivityResults={trustedActivities[activeLessonId] || {}}
           savedMasteryAnswers={trustedLessonAttempts[activeLessonId]?.answers || {}}
+          savedMasteryResults={trustedLessonAttempts[activeLessonId]?.results || {}}
+          savedMasterySubmitted={Boolean(trustedLessonAttempts[activeLessonId]?.submittedAt)}
           onSaveMastery={onSaveMastery}
           canAdvanceToNextLesson={currentMasteryRecords[activeLessonId]?.isMastered === true && currentMasteryRecords[activeLessonId]?.isCompleted === true}
           userId={learner.id}
