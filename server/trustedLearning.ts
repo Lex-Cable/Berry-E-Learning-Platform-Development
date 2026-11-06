@@ -71,9 +71,10 @@ async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, 
   const previousProgressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(previous.id);
   const previousAssignmentRef = cycleRef(uid, course.id, cycle).collection('assignments').doc(previousAssignmentId);
   const [progress, assignment] = await Promise.all([previousProgressRef.get(), previousAssignmentRef.get()]);
-  const assignmentStatus = assignment.data()?.status;
-  const assignmentMarked = assignmentStatus === 'graded' || assignmentStatus === 'returned_for_revision';
-  return progress.data()?.isMastered === true && assignmentMarked;
+  // A lesson unlocks the next topic only after trusted mastery and all
+  // required interactive activities have been completed. Assignment marking
+  // remains a certificate requirement, not a blocker for learning progression.
+  return progress.data()?.isMastered === true && progress.data()?.isCompleted === true;
 }
 
 async function getEnrolledCourse(req: AuthenticatedRequest, res: express.Response, courseId: string) {
@@ -210,11 +211,24 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
       const old = progressSnap.data();
       const attemptsCount = Number(old?.attemptsCount || 0) + 1;
       const masteryThreshold = Math.max(PASS_MARK, lesson.masteryThresholdPercent || PASS_MARK);
+      const activitySnapshot = await transaction.get(progressRef.collection('activities'));
+      const submittedActivityIds = new Set(activitySnapshot.docs.map((document) => document.id));
+      const allActivitiesSubmitted = lesson.activities.every((activity) => submittedActivityIds.has(activity.id));
+      const interactiveScorePercent = lesson.activities.length
+        ? Math.round(lesson.activities.reduce((total, activity) => {
+            const saved = activitySnapshot.docs.find((document) => document.id === activity.id)?.data();
+            return total + (Number(saved?.scorePercent) || 0);
+          }, 0) / lesson.activities.length)
+        : 100;
+      const lessonPassed = scorePercent >= masteryThreshold &&
+        allActivitiesSubmitted && interactiveScorePercent >= PASS_MARK;
       const progress: LessonMasteryState & { updatedAt: string } = {
         lessonId: lesson.id,
-        isCompleted: scorePercent >= masteryThreshold && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
-        isMastered: scorePercent >= masteryThreshold && (lesson.activities.length === 0 || Number(old?.interactiveScorePercent || 0) >= PASS_MARK),
+        isCompleted: lessonPassed,
+        isMastered: lessonPassed,
         scorePercent,
+        interactiveScorePercent,
+        interactiveActivitiesCompleted: submittedActivityIds.size,
         attemptsCount,
         lastAttemptDate: now,
         identifiedMisconceptions: questions.filter((question) => answers[question.id] !== question.correctIndex)
