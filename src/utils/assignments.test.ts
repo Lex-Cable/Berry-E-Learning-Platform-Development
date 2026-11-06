@@ -66,7 +66,7 @@ test('buildCourseAssignments creates one assignment per lesson and ignores dupli
   const assignments = buildCourseAssignments([course, { ...course, title: 'Duplicate course record' }]);
   assert.equal(assignments.length, 1);
   assert.equal(assignments[0].courseId, course.id);
-  assert.match(assignments[0].instructions, /10\\./);
+  assert.match(assignments[0].instructions, /10\./);
   assert.match(assignments[0].title, /Counting to Ten/);
 });
 
