@@ -926,7 +926,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                 ) : currentEval.isMastered && nextLesson ? (
                   <div className="flex items-center gap-2 text-xs text-amber-300">
                     <Lock size={14} />
-                    <span>Submit this topic's assignment and wait for its marking before moving to the next lesson.</span>
+                    <span>Complete and pass all interactive activities to unlock the next lesson.</span>
                   </div>
                 ) : !currentEval.isMastered ? (
                   <div className="flex items-center gap-2 text-xs text-amber-300">
