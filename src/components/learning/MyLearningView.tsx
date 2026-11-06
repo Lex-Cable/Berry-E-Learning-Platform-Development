@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
   CheckCircle2,
@@ -172,6 +172,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [examSubmitted, setExamSubmitted] = useState<boolean>(false);
   const [examScore, setExamScore] = useState<number>(0);
   const [examPassed, setExamPassed] = useState<boolean>(false);
+  const autoSubmitAttemptedRef = useRef(false);
 
   const currentMasteryRecords: Record<string, LessonMasteryState> = { ...masteryRecords, ...trustedLessonProgress };
   const examDraftKey = activeCourse ? `berry_exam_draft_${learner.id}_${activeCourse.id}` : '';
@@ -268,6 +269,10 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   };
 
   useEffect(() => {
+    autoSubmitAttemptedRef.current = false;
+  }, [examExpiresAt]);
+
+  useEffect(() => {
     if (!takingExam || examSubmitted || !examExpiresAt) return;
     const updateRemaining = () => {
       const remaining = Math.max(0, Math.ceil((Date.parse(examExpiresAt) - Date.now()) / 1000));
@@ -282,7 +287,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   }, [takingExam, examSubmitted, examExpiresAt]);
 
   useEffect(() => {
-    if (!takingExam || examSubmitted || examTimeRemaining !== 0 || examSubmitting || !examQuestions.length) return;
+    if (!takingExam || examSubmitted || examTimeRemaining !== 0 || examSubmitting || !examQuestions.length || autoSubmitAttemptedRef.current) return;
+    autoSubmitAttemptedRef.current = true;
     void handleSubmitExam();
   }, [takingExam, examSubmitted, examTimeRemaining, examSubmitting, examQuestions.length]);
 
