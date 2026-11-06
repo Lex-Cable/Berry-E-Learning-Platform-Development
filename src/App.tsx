@@ -109,42 +109,68 @@ export default function App() {
     const generatedTasks: TaskItem[] = enrolledAssignments.map((assignment) => {
       const id = `assignment-deadline-${assignment.id}`;
       const existing = taskById.get(id);
-      if (existing) return existing;
       const course = courses.find((item) => item.id === assignment.courseId);
       return {
-        id, title: assignment.title, subject: course?.subject || assignment.courseTitle,
-        courseId: assignment.courseId, stage: course?.stage || learner.stage,
-        dueDate: assignment.dueDate, urgency: 'medium', status: 'pending', type: 'assignment',
+        id,
+        title: assignment.title,
+        subject: course?.subject || assignment.courseTitle,
+        courseId: assignment.courseId,
+        stage: course?.stage || learner.stage,
+        dueDate: assignment.dueDate,
+        urgency: existing?.urgency || 'medium',
+        status: existing?.status || 'pending',
+        type: 'assignment',
       };
     });
-    const existingTaskIds = new Set(tasks.map((task) => task.id));
-    const missingTasks = generatedTasks.filter((task) => !existingTaskIds.has(task.id));
-    if (missingTasks.length) {
+    const changedTasks = generatedTasks.filter((task) => {
+      const existing = taskById.get(task.id);
+      return !existing || existing.title !== task.title || existing.subject !== task.subject ||
+        existing.dueDate !== task.dueDate || existing.courseId !== task.courseId || existing.stage !== task.stage;
+    });
+    if (changedTasks.length) {
       setTasks((current) => {
+        const generatedById = new Map(changedTasks.map((task) => [task.id, task]));
         const known = new Set(current.map((task) => task.id));
-        return [...missingTasks.filter((task) => !known.has(task.id)), ...current];
+        return [
+          ...changedTasks.filter((task) => !known.has(task.id)),
+          ...current.map((task) => generatedById.get(task.id) || task),
+        ];
       });
     }
-    const existingNotificationIds = new Set(notifications.map((item) => item.id));
-    const missingNotifications: AppNotification[] = generatedTasks
-      .filter((task) => !existingNotificationIds.has(`notif-deadline-${task.id}`))
-      .map((task) => ({
-        id: `notif-deadline-${task.id}`,
-        title: 'Assignment deadline added to your calendar',
-        message: `${task.title} is due ${new Date(task.dueDate).toLocaleString()}. It is now listed in your planner.`,
-        stage: task.stage, type: 'deadline', date: 'Just now', unread: true, actionUrl: 'calendar',
-      }));
-    if (missingNotifications.length) {
+    const notificationsById = new Map(notifications.map((item) => [item.id, item]));
+    const updatedDeadlineNotifications: AppNotification[] = generatedTasks.map((task) => {
+      const id = `notif-deadline-${task.id}`;
+      const existing = notificationsById.get(id);
+      return {
+        id,
+        title: existing?.title || 'Assignment deadline added to your calendar',
+        message: `${task.title} is due ${new Date(task.dueDate).toLocaleString()}. It is listed in your planner.`,
+        stage: task.stage,
+        type: 'deadline',
+        date: existing?.date || 'Just now',
+        unread: existing?.unread ?? true,
+        actionUrl: 'calendar',
+      };
+    });
+    const changedNotifications = updatedDeadlineNotifications.filter((item) => {
+      const existing = notificationsById.get(item.id);
+      return !existing || existing.message !== item.message || existing.stage !== item.stage;
+    });
+    if (changedNotifications.length) {
       setNotifications((current) => {
+        const updatedById = new Map(changedNotifications.map((item) => [item.id, item]));
         const known = new Set(current.map((item) => item.id));
-        return [...missingNotifications.filter((item) => !known.has(item.id)), ...current];
+        return [
+          ...changedNotifications.filter((item) => !known.has(item.id)),
+          ...current.map((item) => updatedById.get(item.id) || item),
+        ];
       });
     }
     const uid = firebaseAuth?.currentUser?.uid;
     if (uid) {
-      missingTasks.forEach((task) => void saveLearnerTask(uid, task).catch((error) =>
+      changedTasks.forEach((task) => void saveLearnerTask(uid, task).catch((error) =>
         console.warn('Assignment deadline remains on this device; cloud sync failed:', error)));
-      missingNotifications.forEach((notification) => void saveLearnerNotification(uid, notification).catch((error) =>
+      changedNotifications.forEach((notification) => void saveLearnerNotification(uid, notification).catch((error) =>
         console.warn('Assignment reminder remains on this device; cloud sync failed:', error)));
     }
   }, [workspaceLoadedFor, learner.id, learner.stage, learner.enrolledCourseIds.join('|'), assignments, courses, tasks, notifications]);
