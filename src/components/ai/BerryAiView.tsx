@@ -449,6 +449,16 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
 
   // Render AI markdown as readable chat typography instead of exposing raw
   // markdown markers in the conversation bubble.
+  const renderInlineAiText = (value: string) => value
+    .split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g)
+    .filter(Boolean)
+    .map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+      if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
+      if (part.startsWith('`') && part.endsWith('`')) return <code key={index} className="rounded bg-slate-100 px-1 py-0.5 text-[0.92em]">{part.slice(1, -1)}</code>;
+      return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+
   const renderAiText = (source: string) => source.split(/\r?\n/).map((line, index) => {
     const value = line.trim();
     if (!value) return <div key={index} className="h-1.5" />;
@@ -459,9 +469,9 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
       return <div key={index} className="flex items-start gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{value.replace(/^[-*]\s*/, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</span></div>;
     }
     if (/^\d+[.)]\s/.test(value)) {
-      return <p key={index} className="pl-1">{value.replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</p>;
+      return <p key={index} className="pl-1">{renderInlineAiText(value)}</p>;
     }
-    return <p key={index}>{value.replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</p>;
+    return <p key={index}>{renderInlineAiText(value)}</p>;
   });
 
   // Filter conversations matching search query
