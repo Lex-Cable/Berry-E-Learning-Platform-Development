@@ -68,7 +68,7 @@ import {
   signOutBerryUser,
 } from './services/firebaseAuth';
 
-const INITIAL_COURSE_CATALOGUE: Course[] = withCompleteAssessmentBanks(withInteractivePractice([...COURSES, ...INTERNATIONAL_STARTER_COURSES]));
+const INITIAL_COURSE_CATALOGUE: Course[] = withInteractivePractice(withCompleteAssessmentBanks([...COURSES, ...INTERNATIONAL_STARTER_COURSES]));
 
 export default function App() {
   const [learner, setLearner] = useState<LearnerProfile>(INITIAL_LEARNER);
