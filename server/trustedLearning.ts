@@ -67,7 +67,6 @@ async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, 
   const index = lessons.findIndex((lesson) => lesson.id === lessonId);
   if (index <= 0) return index === 0;
   const previous = lessons[index - 1];
-  const previousAssignmentId = `assignment-${course.id}-${previous.id}`;
   const previousProgressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(previous.id);
   const progress = await previousProgressRef.get();
   // Topic progression follows trusted mastery and completion of its required
