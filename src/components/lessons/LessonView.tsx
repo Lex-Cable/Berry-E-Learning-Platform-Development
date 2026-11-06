@@ -31,6 +31,7 @@ interface LessonViewProps {
   onNavigateLesson: (nextLessonId: string) => void;
   onBackToCourse: () => void;
   masteryRecord?: LessonMasteryState;
+  savedActivityResults?: Record<string, { scorePercent: number; passed: boolean; feedback: string }>;
   onSaveMastery: (record: LessonMasteryState) => void;
   userId?: string;
   canAdvanceToNextLesson?: boolean;
@@ -42,6 +43,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   onNavigateLesson,
   onBackToCourse,
   masteryRecord,
+  savedActivityResults = {},
   onSaveMastery,
   userId,
   canAdvanceToNextLesson = false,
@@ -110,7 +112,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});
   const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
   const [activitySubmitting, setActivitySubmitting] = useState<Record<string, boolean>>({});
-  const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>({});
+  const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -131,6 +133,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setMatchingFeedback(null);
     setSelectedAnswers({});
     setSubmittedQuiz(false);
+    setActivitySubmissionResults(Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
     setQuizScore(masteryRecord?.scorePercent || 0);
   }, [lessonId]);
 
