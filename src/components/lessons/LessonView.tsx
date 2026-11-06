@@ -33,6 +33,8 @@ interface LessonViewProps {
   masteryRecord?: LessonMasteryState;
   savedActivityResults?: Record<string, { scorePercent: number; passed: boolean; feedback: string; answer?: { pairs?: Record<string, string>; order?: string[]; response?: string; choiceId?: string } }>;
   savedMasteryAnswers?: Record<string, number>;
+  savedMasteryResults?: Record<string, { correct: boolean; correctAnswerIndex?: number; feedback?: string }>;
+  savedMasterySubmitted?: boolean;
   onSaveMastery: (record: LessonMasteryState) => void;
   userId?: string;
   canAdvanceToNextLesson?: boolean;
@@ -46,6 +48,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
   masteryRecord,
   savedActivityResults = {},
   savedMasteryAnswers = {},
+  savedMasteryResults = {},
+  savedMasterySubmitted = false,
   onSaveMastery,
   userId,
   canAdvanceToNextLesson = false,
@@ -118,6 +122,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
   const savedActivityResultsKey = JSON.stringify(savedActivityResults);
   const savedMasteryAnswersKey = JSON.stringify(savedMasteryAnswers);
+  const savedMasteryResultsKey = JSON.stringify(savedMasteryResults);
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -144,7 +149,9 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setActivityTextResponses(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => typeof result.answer?.response === 'string' ? [[id, result.answer.response]] : [])));
     setActivityOrder(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.order ? [[id, result.answer.order]] : [])));
     setQuizScore(masteryRecord?.scorePercent || 0);
-  }, [lessonId, savedActivityResultsKey, masteryRecord?.scorePercent, savedMasteryAnswersKey]);
+    setQuizResults(savedMasteryResults);
+    setSubmittedQuiz(savedMasterySubmitted);
+  }, [lessonId, savedActivityResultsKey, masteryRecord?.scorePercent, savedMasteryAnswersKey, savedMasteryResultsKey, savedMasterySubmitted]);
 
   useEffect(() => {
     if (!Object.keys(savedMasteryAnswers).length) return;
