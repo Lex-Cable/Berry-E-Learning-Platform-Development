@@ -283,6 +283,13 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
       cycle,
       scorePercent: correct ? 100 : 0,
       passed: correct,
+      answer: activity.type === 'matching'
+        ? { pairs: answer?.pairs }
+        : activity.type === 'ordering'
+          ? { order: answer?.order }
+          : activity.type === 'fill-blank'
+            ? { response: typeof answer?.response === 'string' ? answer.response.slice(0, 2000) : '' }
+            : { choiceId: typeof answer?.choiceId === 'string' ? answer.choiceId.slice(0, 200) : '' },
       feedback: correct ? 'Correct. Your answer has been checked and saved.' : 'Not quite. Review the lesson and try again.',
       submittedAt: now,
       trusted: true,
