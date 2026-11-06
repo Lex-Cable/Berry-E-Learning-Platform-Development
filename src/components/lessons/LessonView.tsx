@@ -158,9 +158,13 @@ export const LessonView: React.FC<LessonViewProps> = ({
     try {
       const raw = localStorage.getItem(key);
       const draft = raw ? JSON.parse(raw) as Record<string, number> : {};
-      setSelectedAnswers((previous) => ({ ...draft, ...savedMasteryAnswers, ...previous }));
+      setSelectedAnswers((previous) => savedMasterySubmitted
+        ? ({ ...draft, ...previous, ...savedMasteryAnswers })
+        : ({ ...draft, ...savedMasteryAnswers, ...previous }));
     } catch {
-      setSelectedAnswers((previous) => ({ ...savedMasteryAnswers, ...previous }));
+      setSelectedAnswers((previous) => savedMasterySubmitted
+        ? ({ ...previous, ...savedMasteryAnswers })
+        : ({ ...savedMasteryAnswers, ...previous }));
     }
   }, [course.id, lessonId, userId, savedMasteryAnswersKey]);
 
