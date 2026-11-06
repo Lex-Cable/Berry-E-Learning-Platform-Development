@@ -75,10 +75,10 @@ export function markAssignmentSubmission(assignment: Assignment, content: string
   const hasExplanation = /\b(because|therefore|this means|as a result|for example|for instance|such as|so that|which shows|this demonstrates)\b/i.test(trimmed);
   const hasReflection = /\b(i learned|i understand|i found|i struggled|i improved|i would|next time|i still|my question|i need to)\b/i.test(trimmed);
 
-  const normalizedForMatching = ` ${normalized.replace(/[^\\p{L}\\p{N}]+/gu, ' ')} `;
+  const normalizedForMatching = ` ${normalized.replace(/[^\p{L}\p{N}]+/gu, ' ')} `;
   const criterionScores: RubricAward[] = assignment.rubric.map((criterion) => {
     const concepts = Array.from(new Set(criterion.keywords
-      .map((keyword) => keyword.trim().toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim())
+      .map((keyword) => keyword.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim())
       .filter((keyword) => keyword.length >= 3)));
     const matched = concepts.filter((keyword) => normalizedForMatching.includes(` ${keyword} `));
     const targetConcepts = Math.min(6, Math.max(3, Math.ceil(concepts.length * 0.2)));
@@ -112,7 +112,7 @@ export function markAssignmentSubmission(assignment: Assignment, content: string
   feedbackParts.push(status === 'graded'
     ? 'Automated first-pass marking: passed. A teacher may review this feedback.'
     : 'Returned for revision: address the criterion feedback and submit an improved response.');
-  return { status, marksAwarded, totalMarks: assignment.totalMarks, scorePercent, criterionScores: adjusted, markerFeedback: feedbackParts.join('\\n') };
+  return { status, marksAwarded, totalMarks: assignment.totalMarks, scorePercent, criterionScores: adjusted, markerFeedback: feedbackParts.join('\n') };
 }
 
 export function nextAttemptNumber(previousAttempt: number): number {
