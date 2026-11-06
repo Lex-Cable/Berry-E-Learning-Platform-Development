@@ -177,6 +177,14 @@ router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', req
     const lesson = context.course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const cycle = await ensureCycle(context.uid, context.course.id);
+    const activityRecords = await cycleRef(context.uid, context.course.id, cycle)
+      .collection('lessonProgress').doc(lesson.id).collection('activities').get();
+    const activityScores = new Map(activityRecords.docs.map((document) => [document.id, Number(document.data().scorePercent) || 0]));
+    const interactivePassed = lesson.activities.length === 0 || (
+      lesson.activities.every((activity) => activityScores.has(activity.id)) &&
+      lesson.activities.reduce((total, activity) => total + (activityScores.get(activity.id) || 0), 0) / lesson.activities.length >= 80
+    );
+    if (!interactivePassed) return res.status(409).json({ error: 'Complete the interactive activity and achieve at least 80% before starting the mastery assessment.' });
     if (!(await previousTopicRequirementsMet(context.uid, context.course, lesson.id, cycle))) {
       return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before opening this lesson." });
     }
@@ -201,6 +209,14 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
     const lesson = course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const currentCycle = await ensureCycle(uid, course.id);
+    const activityRecords = await cycleRef(uid, course.id, currentCycle)
+      .collection('lessonProgress').doc(lesson.id).collection('activities').get();
+    const activityScores = new Map(activityRecords.docs.map((document) => [document.id, Number(document.data().scorePercent) || 0]));
+    const interactivePassed = lesson.activities.length === 0 || (
+      lesson.activities.every((activity) => activityScores.has(activity.id)) &&
+      lesson.activities.reduce((total, activity) => total + (activityScores.get(activity.id) || 0), 0) / lesson.activities.length >= 80
+    );
+    if (!interactivePassed) return res.status(409).json({ error: 'Complete the interactive activity and achieve at least 80% before submitting the mastery assessment.' });
     if (!(await previousTopicRequirementsMet(uid, course, lesson.id, currentCycle))) {
       return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before attempting this lesson." });
     }
