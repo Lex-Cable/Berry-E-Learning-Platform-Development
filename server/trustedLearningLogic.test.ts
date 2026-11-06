@@ -19,7 +19,7 @@ test('academic grading follows Berry percentage classifications exactly', () => 
 });
 
 test('default weighted academic grade uses 10/30/25/35 and rejects invalid weights', () => {
-  assert.equal(calculateWeightedAcademicGrade({ chapterAssessmentPercent: 80, assignmentPercent: 90, moduleExaminationPercent: 70, finalExaminationPercent: 60 }), 74);
+  assert.equal(calculateWeightedAcademicGrade({ chapterAssessmentPercent: 80, assignmentPercent: 90, moduleExaminationPercent: 70, finalExaminationPercent: 60 }), 73.5);
   assert.equal(calculateWeightedAcademicGrade({ chapterAssessmentPercent: 80, assignmentPercent: 90, moduleExaminationPercent: 70, finalExaminationPercent: 60, weights: { chapterAssessments: 10, assignments: 30, moduleExaminations: 20, finalExamination: 35 } }), null);
 });
 
