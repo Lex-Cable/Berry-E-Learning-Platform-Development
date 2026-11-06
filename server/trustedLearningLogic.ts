@@ -51,7 +51,7 @@ export function calculateWeightedAcademicGrade(input: {
   const totalWeight = weights.chapterAssessments + weights.assignments + weights.moduleExaminations + weights.finalExamination;
   const scores = [input.chapterAssessmentPercent, input.assignmentPercent, input.moduleExaminationPercent, input.finalExaminationPercent];
   if (totalWeight !== 100 || scores.some((score) => !Number.isFinite(score) || score < 0 || score > 100)) return null;
-  return Math.round((input.chapterAssessmentPercent * weights.chapterAssessments + input.assignmentPercent * weights.assignments + input.moduleExaminationPercent * weights.moduleExaminations + input.finalExaminationPercent * weights.finalExamination) * 100) / 10000;
+  return Math.round((input.chapterAssessmentPercent * weights.chapterAssessments + input.assignmentPercent * weights.assignments + input.moduleExaminationPercent * weights.moduleExaminations + input.finalExaminationPercent * weights.finalExamination)) / 100;
 }
 export function canStartFullRetake(progress: TrustedProgressSnapshot[], totalLessons: number): boolean {
   return totalLessons > 0 && progress.filter((item) => item.isCompleted === true).length >= totalLessons;
