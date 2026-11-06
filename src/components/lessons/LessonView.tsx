@@ -113,6 +113,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
   const [activitySubmitting, setActivitySubmitting] = useState<Record<string, boolean>>({});
   const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
+  const savedActivityResultsKey = JSON.stringify(savedActivityResults);
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -135,7 +136,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setSubmittedQuiz(false);
     setActivitySubmissionResults(Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
     setQuizScore(masteryRecord?.scorePercent || 0);
-  }, [lessonId, savedActivityResults, masteryRecord?.scorePercent]);
+  }, [lessonId, savedActivityResultsKey, masteryRecord?.scorePercent]);
 
   useEffect(() => {
     let cancelled = false;
