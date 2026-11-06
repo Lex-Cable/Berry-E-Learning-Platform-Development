@@ -4,6 +4,7 @@ import {
   buildCourseAssignments,
   markAssignmentSubmission,
   nextAttemptNumber,
+  resolveAssignmentDueDate,
 } from './assignments';
 import type { Course } from '../types';
 
@@ -104,4 +105,16 @@ test('nextAttemptNumber increments and caps attempts', () => {
   assert.equal(nextAttemptNumber(0), 1);
   assert.equal(nextAttemptNumber(3), 4);
   assert.equal(nextAttemptNumber(20), 20);
+});
+
+test('resolveAssignmentDueDate preserves a saved learner deadline across refreshes', () => {
+  const original = '2026-11-13T10:00:00.000Z';
+  const regenerated = '2026-11-20T10:00:00.000Z';
+  assert.equal(resolveAssignmentDueDate(regenerated, original), original);
+});
+
+test('resolveAssignmentDueDate uses the generated deadline for a new or invalid saved date', () => {
+  const generated = '2026-11-13T10:00:00.000Z';
+  assert.equal(resolveAssignmentDueDate(generated), generated);
+  assert.equal(resolveAssignmentDueDate(generated, 'not-a-date'), generated);
 });
