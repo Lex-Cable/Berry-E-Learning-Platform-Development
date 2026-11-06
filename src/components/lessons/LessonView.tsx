@@ -135,7 +135,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setSubmittedQuiz(false);
     setActivitySubmissionResults(Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
     setQuizScore(masteryRecord?.scorePercent || 0);
-  }, [lessonId]);
+  }, [lessonId, savedActivityResults, masteryRecord?.scorePercent]);
 
   useEffect(() => {
     let cancelled = false;
