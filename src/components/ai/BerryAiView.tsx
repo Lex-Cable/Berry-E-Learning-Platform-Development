@@ -61,6 +61,12 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           : '',
       ].filter(Boolean).join('\n')
     : `Learner learning stage: ${learnerStage?.label || learner.stage}`;
+  const courseOutline = activeCourse
+    ? activeCourse.chapters.map((chapter) =>
+        `${chapter.title}: ${chapter.lessons.map((lesson) => lesson.title).join(', ')}`,
+      ).join('\n').slice(0, 6000)
+    : '';
+
 
   const [conversations, setConversations] = useState<AiConversation[]>([]);
 
@@ -346,8 +352,8 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           message: textToSend,
           stream: true,
           courseTitle: activeCourse?.title,
-          currentTopic: activeCourse?.chapters[0]?.title,
           curriculumContext,
+          courseOutline,
           history: contextMessages
             .slice(-12)
             .map((message) => ({
