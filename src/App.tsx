@@ -53,6 +53,7 @@ import {
 } from './services/learnerWorkspace';
 import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, type AssignmentMarkingResult } from './utils/assignments';
 import { withInteractivePractice } from './utils/interactiveActivities';
+import { withCompleteAssessmentBanks } from './utils/assessmentQuestionBank';
 import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
 import { buildCurriculumRepository } from './curriculum/repository';
 import { INTERNATIONAL_STARTER_COURSES } from './data/internationalStarterCourses';
@@ -67,7 +68,7 @@ import {
   signOutBerryUser,
 } from './services/firebaseAuth';
 
-const INITIAL_COURSE_CATALOGUE: Course[] = withInteractivePractice([...COURSES, ...INTERNATIONAL_STARTER_COURSES]);
+const INITIAL_COURSE_CATALOGUE: Course[] = withCompleteAssessmentBanks(withInteractivePractice([...COURSES, ...INTERNATIONAL_STARTER_COURSES]));
 
 export default function App() {
   const [learner, setLearner] = useState<LearnerProfile>(INITIAL_LEARNER);
