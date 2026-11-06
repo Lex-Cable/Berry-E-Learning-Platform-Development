@@ -27,8 +27,31 @@ export function summarizeCourseProgress(progress: TrustedProgressSnapshot[], tot
     courseCompleted: safeTotal > 0 && completedCount >= safeTotal,
   };
 }
-export function isPassingExamScore(scorePercent: number, configuredThreshold = 75): boolean {
-  return Number.isFinite(scorePercent) && scorePercent >= Math.max(75, configuredThreshold);
+export type AcademicGrade = 'A' | 'B' | 'C' | 'D' | 'F';
+export type AcademicClassification = 'Distinction' | 'Merit' | 'Credit' | 'Pass' | 'Not passed';
+export interface AcademicGradeResult { percentage: number; grade: AcademicGrade; classification: AcademicClassification; passed: boolean }
+export const DEFAULT_ASSESSMENT_WEIGHTS = { chapterAssessments: 10, assignments: 30, moduleExaminations: 25, finalExamination: 35 } as const;
+export const ASSESSMENT_PASS_MARKS = { chapterAssessment: 70, assignment: 50, moduleExamination: 60, finalExamination: 50, overall: 60 } as const;
+export function classifyAcademicGrade(scorePercent: number): AcademicGradeResult {
+  const percentage = Number.isFinite(scorePercent) ? Math.max(0, Math.min(100, scorePercent)) : 0;
+  if (percentage >= 80) return { percentage, grade: 'A', classification: 'Distinction', passed: true };
+  if (percentage >= 70) return { percentage, grade: 'B', classification: 'Merit', passed: true };
+  if (percentage >= 60) return { percentage, grade: 'C', classification: 'Credit', passed: true };
+  if (percentage >= 50) return { percentage, grade: 'D', classification: 'Pass', passed: true };
+  return { percentage, grade: 'F', classification: 'Not passed', passed: false };
+}
+export function isPassingExamScore(scorePercent: number, configuredThreshold = ASSESSMENT_PASS_MARKS.finalExamination): boolean {
+  return Number.isFinite(scorePercent) && Number.isFinite(configuredThreshold) && scorePercent >= configuredThreshold;
+}
+export function calculateWeightedAcademicGrade(input: {
+  chapterAssessmentPercent: number; assignmentPercent: number; moduleExaminationPercent: number; finalExaminationPercent: number;
+  weights?: { chapterAssessments: number; assignments: number; moduleExaminations: number; finalExamination: number };
+}): number | null {
+  const weights = input.weights ?? DEFAULT_ASSESSMENT_WEIGHTS;
+  const totalWeight = weights.chapterAssessments + weights.assignments + weights.moduleExaminations + weights.finalExamination;
+  const scores = [input.chapterAssessmentPercent, input.assignmentPercent, input.moduleExaminationPercent, input.finalExaminationPercent];
+  if (totalWeight !== 100 || scores.some((score) => !Number.isFinite(score) || score < 0 || score > 100)) return null;
+  return Math.round((input.chapterAssessmentPercent * weights.chapterAssessments + input.assignmentPercent * weights.assignments + input.moduleExaminationPercent * weights.moduleExaminations + input.finalExaminationPercent * weights.finalExamination) * 100) / 10000;
 }
 export function canStartFullRetake(progress: TrustedProgressSnapshot[], totalLessons: number): boolean {
   return totalLessons > 0 && progress.filter((item) => item.isCompleted === true).length >= totalLessons;
