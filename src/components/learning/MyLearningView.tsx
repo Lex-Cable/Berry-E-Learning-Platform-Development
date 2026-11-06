@@ -79,6 +79,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [trustedAssignments, setTrustedAssignments] = useState<Record<string, { status?: string; scorePercent?: number }>>({});
   const [trustedAssignmentsLoading, setTrustedAssignmentsLoading] = useState(false);
   const [trustedLessonProgress, setTrustedLessonProgress] = useState<Record<string, LessonMasteryState>>({});
+  const [trustedActivities, setTrustedActivities] = useState<Record<string, Record<string, { scorePercent: number; passed: boolean; feedback: string }>>>({});
 
   useEffect(() => {
     if (!initialCourseId) return;
@@ -147,6 +148,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
         if (!cancelled) {
           setTrustedAssignments(status.assignments as Record<string, { status?: string; scorePercent?: number }>);
           setTrustedLessonProgress(status.lessonProgress || {});
+          setTrustedActivities(status.lessonActivities || {});
         }
       })
       .catch((error) => {
@@ -333,6 +335,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           onNavigateLesson={(nextId) => setActiveLessonId(nextId)}
           onBackToCourse={() => setActiveLessonId(null)}
           masteryRecord={currentMasteryRecords[activeLessonId]}
+          savedActivityResults={trustedActivities[activeLessonId] || {}}
           onSaveMastery={onSaveMastery}
           canAdvanceToNextLesson={['graded', 'returned_for_revision'].includes(trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.status || '')}
           userId={learner.id}
