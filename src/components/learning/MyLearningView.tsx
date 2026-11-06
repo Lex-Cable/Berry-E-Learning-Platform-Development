@@ -342,7 +342,10 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           savedMasteryAnswers={trustedLessonAttempts[activeLessonId]?.answers || {}}
           savedMasteryResults={trustedLessonAttempts[activeLessonId]?.results || {}}
           savedMasterySubmitted={Boolean(trustedLessonAttempts[activeLessonId]?.submittedAt)}
-          onSaveMastery={onSaveMastery}
+          onSaveMastery={(record) => {
+            setTrustedLessonProgress((current) => ({ ...current, [record.lessonId]: record }));
+            onSaveMastery(record);
+          }}
           canAdvanceToNextLesson={currentMasteryRecords[activeLessonId]?.isMastered === true && currentMasteryRecords[activeLessonId]?.isCompleted === true}
           userId={learner.id}
         />
