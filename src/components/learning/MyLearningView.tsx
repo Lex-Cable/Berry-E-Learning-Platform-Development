@@ -259,7 +259,9 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setExamSubmitting(true); setExamError(null);
     try {
       const result = await submitCourseExam(activeCourse.id, examAnswers);
-      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true);\n      try { clearExamDraft(localStorage, examDraftKey); } catch { /* submitted result is authoritative */ }\n      onExamAttemptSubmitted?.(activeCourse, result.attempt);
+      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true);
+      try { clearExamDraft(localStorage, examDraftKey); } catch { /* submitted result is authoritative */ }
+      onExamAttemptSubmitted?.(activeCourse, result.attempt);
     } catch (error) {
       setExamError(error instanceof Error ? error.message : 'Exam submission failed.');
     } finally { setExamSubmitting(false); }
