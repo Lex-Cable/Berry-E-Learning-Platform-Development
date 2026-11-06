@@ -59,8 +59,11 @@ export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
       ...chapter,
       lessons: chapter.lessons.map((lesson) => {
         const source = seedsForLesson(lesson);
-        return source.length
-          ? { ...lesson, quizQuestions: Array.from({ length: 10 }, (_, index) => asMastery(source[index % source.length], lesson, index)) }
+        const uniqueSource = source.filter((seed, index, all) =>
+          all.findIndex((candidate) => candidate.question.trim().toLocaleLowerCase() === seed.question.trim().toLocaleLowerCase()) === index
+        );
+        return uniqueSource.length
+          ? { ...lesson, quizQuestions: uniqueSource.slice(0, 10).map((seed, index) => asMastery(seed, lesson, index)) }
           : lesson;
       }),
     }));
@@ -69,13 +72,15 @@ export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
       explanation: q.explanation || `This assesses ${q.topic || course.title}.`, topic: q.topic || course.title,
     }));
     for (const lesson of lessons) examSeeds.push(...seedsForLesson(lesson));
-    const valid = examSeeds.filter((s) => s.options.length >= 2 && s.correctIndex >= 0 && s.correctIndex < s.options.length);
+    const valid = examSeeds.filter((s) => s.options.length >= 2 && s.correctIndex >= 0 && s.correctIndex < s.options.length)
+      .filter((seed, index, all) => all.findIndex((candidate) =>
+        candidate.question.trim().toLocaleLowerCase() === seed.question.trim().toLocaleLowerCase()
+      ) === index);
     const questions: ExamQuestion[] = valid.length
-      ? Array.from({ length: 30 }, (_, index) => {
-          const seed = valid[index % valid.length];
+      ? valid.slice(0, 30).map((seed, index) => {
           return {
             id: `bank-${course.id}-exam-${index + 1}`,
-            question: `${index < valid.length ? '' : `Course review ${index + 1} — `}${seed.question}`,
+            question: seed.question,
             options: [...seed.options], correctIndex: seed.correctIndex,
             explanation: seed.explanation, topic: seed.topic,
           };
