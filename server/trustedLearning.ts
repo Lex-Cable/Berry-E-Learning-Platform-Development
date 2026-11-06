@@ -171,7 +171,7 @@ router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', req
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const cycle = await ensureCycle(context.uid, context.course.id);
     if (!(await previousTopicRequirementsMet(context.uid, context.course, lesson.id, cycle))) {
-      return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before opening this lesson.' });
+      return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before opening this lesson." });
     }
     const masteryCount = Math.min(10, lesson.quizQuestions.length);
     if (!masteryCount) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
@@ -195,7 +195,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const currentCycle = await ensureCycle(uid, course.id);
     if (!(await previousTopicRequirementsMet(uid, course, lesson.id, currentCycle))) {
-      return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before attempting this lesson.' });
+      return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before attempting this lesson." });
     }
     const masteryCount = Math.min(10, lesson.quizQuestions.length);
     if (!masteryCount) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
@@ -272,7 +272,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const cycle = await ensureCycle(uid, course.id);
     if (!(await previousTopicRequirementsMet(uid, course, lesson.id, cycle))) {
-      return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before attempting this activity.' });
+      return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before attempting this activity." });
     }
     const activity = lesson.activities.find((item) => item.id === req.params.activityId);
     if (!activity) return res.status(404).json({ error: 'Interactive activity not found.' });
