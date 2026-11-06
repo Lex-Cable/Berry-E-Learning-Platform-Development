@@ -587,11 +587,22 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
           .map((document) => document.data())
           .filter((attempt) => attempt.lessonId === lesson.id)
           .sort((left, right) => String(right.submittedAt || '').localeCompare(String(left.submittedAt || '')))[0];
-        return [lesson.id, latest ? {
-          answers: latest.answers && typeof latest.answers === 'object' ? latest.answers : {},
+        if (!latest) return [lesson.id, null];
+        const answers = latest.answers && typeof latest.answers === 'object'
+          ? latest.answers as Record<string, number> : {};
+        const results = Object.fromEntries(lesson.quizQuestions.map((question) => [question.id, {
+          correct: answers[question.id] === question.correctIndex,
+          correctAnswerIndex: question.correctIndex,
+          feedback: answers[question.id] === question.correctIndex
+            ? question.explanation
+            : question.misconceptions?.[answers[question.id]] || 'Review this topic and try again.',
+        }]));
+        return [lesson.id, {
+          answers,
           scorePercent: Number(latest.scorePercent) || 0,
           submittedAt: typeof latest.submittedAt === 'string' ? latest.submittedAt : '',
-        } : null];
+          results,
+        }];
       }).filter((entry) => entry[1] !== null)),
       lessonActivities: Object.fromEntries(lessonList.map((lesson, index) => [
         lesson.id,
