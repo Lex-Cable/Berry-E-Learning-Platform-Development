@@ -72,13 +72,20 @@ function cycleRef(uid: string, courseId: string, cycle: number) {
 async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, lessonId: string, cycle: number): Promise<boolean> {
   const lessons = course.chapters.flatMap((chapter) => chapter.lessons);
   const index = lessons.findIndex((lesson) => lesson.id === lessonId);
-  if (index <= 0) return index === 0;
+  if (index < 0) return false;
+  if (index === 0) return true;
   const previous = lessons[index - 1];
-  const previousProgressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(previous.id);
-  const progress = await previousProgressRef.get();
-  // Topic progression follows trusted mastery and completion of its required
-  // interactive activities. Assignment marking remains a certificate check.
-  return progress.data()?.isMastered === true && progress.data()?.isCompleted === true;
+  const cycleDocument = cycleRef(uid, course.id, cycle);
+  const [progress, assignment] = await Promise.all([
+    cycleDocument.collection('lessonProgress').doc(previous.id).get(),
+    cycleDocument.collection('assignments').doc(`assignment-${course.id}-${previous.id}`).get(),
+  ]);
+  const progressData = progress.data();
+  const assignmentData = assignment.data();
+  return progressData?.isMastered === true &&
+    progressData?.isCompleted === true &&
+    assignmentData?.status === 'graded' &&
+    Number(assignmentData?.scorePercent) >= 50;
 }
 
 async function getEnrolledCourse(req: AuthenticatedRequest, res: express.Response, courseId: string) {
@@ -221,7 +228,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
       const progressSnap = await transaction.get(progressRef);
       const old = progressSnap.data();
       const attemptsCount = Number(old?.attemptsCount || 0) + 1;
-      const masteryThreshold = Math.max(PASS_MARK, lesson.masteryThresholdPercent || PASS_MARK);
+      const masteryThreshold = Math.max(80, lesson.masteryThresholdPercent || 80);
       const activitySnapshot = await transaction.get(progressRef.collection('activities'));
       const submittedActivityIds = new Set(activitySnapshot.docs.map((document) => document.id));
       const allActivitiesSubmitted = lesson.activities.every((activity) => submittedActivityIds.has(activity.id));
@@ -232,10 +239,10 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
           }, 0) / lesson.activities.length)
         : 100;
       const lessonPassed = scorePercent >= masteryThreshold &&
-        allActivitiesSubmitted && interactiveScorePercent >= PASS_MARK;
+        allActivitiesSubmitted && interactiveScorePercent >= 80;
       const progress: LessonMasteryState & { updatedAt: string } = {
         lessonId: lesson.id,
-        isCompleted: lessonPassed,
+        isCompleted: false,
         isMastered: lessonPassed,
         scorePercent,
         interactiveScorePercent,
@@ -331,14 +338,14 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
     const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
     const progressSnapshot = await progressRef.get();
     const progress = progressSnapshot.data();
-    const masteryThreshold = Math.max(PASS_MARK, lesson.masteryThresholdPercent || PASS_MARK);
+    const masteryThreshold = Math.max(80, lesson.masteryThresholdPercent || 80);
     const masteryPassed = Number(progress?.scorePercent || 0) >= masteryThreshold;
     const allActivitiesSubmitted = lesson.activities.every((item) => scoresById.has(item.id));
-    const lessonPassed = masteryPassed && allActivitiesSubmitted && interactiveScorePercent >= PASS_MARK;
+    const lessonPassed = masteryPassed && allActivitiesSubmitted && interactiveScorePercent >= 80;
     await progressRef.set({
       interactiveScorePercent,
       interactiveActivitiesCompleted: savedActivities.size,
-      isCompleted: lessonPassed,
+      isCompleted: false,
       isMastered: lessonPassed,
       updatedAt: now,
     }, { merge: true });
@@ -563,6 +570,15 @@ router.post('/api/assignments/courses/:courseId/:assignmentId/submit', requireFi
       transaction.set(submissionRef, data);
       return data;
     });
+    const lessonId = assignment.id.slice(`assignment-${course.id}-`.length);
+    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lessonId);
+    const progressSnapshot = await progressRef.get();
+    const masteryAndActivitiesPassed = progressSnapshot.data()?.isMastered === true;
+    const assignmentPassed = attempt.status === 'graded' && Number(attempt.scorePercent) >= 50;
+    await progressRef.set({
+      isCompleted: masteryAndActivitiesPassed && assignmentPassed,
+      updatedAt: now,
+    }, { merge: true });
     return res.json({ submission: attempt, marking: result });
   } catch (error) {
     console.error('Trusted assignment submission failed:', error);
