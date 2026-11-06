@@ -30,6 +30,7 @@ import { loadLastOpenedLesson, saveLastOpenedLesson } from '../../services/learn
 import { findFallbackLesson } from '../../utils/curriculumCoverage';
 import { firebaseAuth } from '../../lib/firebase';
 import { getCourseExam, getCourseStatus, submitCourseExam, startCourseRetake } from '../../services/assessments';
+import { clearExamDraft, readExamDraft, writeExamDraft } from '../../utils/examDraft';
 
 interface MyLearningViewProps {
   learner: LearnerProfile;
@@ -173,6 +174,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [examPassed, setExamPassed] = useState<boolean>(false);
 
   const currentMasteryRecords: Record<string, LessonMasteryState> = { ...masteryRecords, ...trustedLessonProgress };
+  const examDraftKey = activeCourse ? `berry_exam_draft_${learner.id}_${activeCourse.id}` : '';
 
   // Available grade options based on learner stage
   // My Learning must show only courses this learner has actually enrolled in.
@@ -215,7 +217,6 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setTakingExam(true);
     setActiveLessonId(null);
     setExamSubmitted(false);
-    setExamAnswers({});
   };
   useEffect(() => {
     if (!takingExam || !activeCourse?.exam) return;
@@ -225,6 +226,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       if (cancelled) return;
       const existing = status.examAttempts?.[0];
       if (existing) {
+        try { clearExamDraft(localStorage, `berry_exam_draft_${learner.id}_${activeCourse.id}`); } catch { /* draft cleanup is optional */ }
         setExamScore(existing.scorePercent); setExamPassed(existing.passed); setExamSubmitted(true);
         setExamError('This enrolment cycle already has a recorded final-exam attempt. Complete every lesson and start a full course retake to attempt again.');
         return;
@@ -233,20 +235,31 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
       if (!cancelled) {
         setExamQuestions(exam.questions);
         setExamExpiresAt(exam.expiresAt);
+        setExamAnswers(readExamDraft(localStorage, `berry_exam_draft_${learner.id}_${activeCourse.id}`, exam.expiresAt));
         setExamTimeRemaining(Math.max(0, Math.ceil((Date.parse(exam.expiresAt) - Date.now()) / 1000)));
       }
     }).catch((error) => { if (!cancelled) setExamError(error instanceof Error ? error.message : 'Unable to load exam.'); })
       .finally(() => { if (!cancelled) setExamLoading(false); });
     return () => { cancelled = true; };
-  }, [takingExam, activeCourse?.id]);
+  }, [takingExam, activeCourse?.id, learner.id]);
 
+  // Preserve in-progress answers across refreshes, but only for the exact active
+  // server-issued exam session. Expired sessions and retakes cannot reuse a draft.
+  useEffect(() => {
+    if (!takingExam || examSubmitted || !examExpiresAt || !examDraftKey) return;
+    try {
+      writeExamDraft(localStorage, examDraftKey, examAnswers, examExpiresAt);
+    } catch (error) {
+      console.warn('Could not save the local exam draft:', error);
+    }
+  }, [takingExam, examSubmitted, examExpiresAt, examDraftKey, examAnswers]);
 
   const handleSubmitExam = async () => {
     if (!activeCourse?.exam || examSubmitting || examLoading || !examQuestions.length) return;
     setExamSubmitting(true); setExamError(null);
     try {
       const result = await submitCourseExam(activeCourse.id, examAnswers);
-      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true); onExamAttemptSubmitted?.(activeCourse, result.attempt);
+      setExamScore(result.scorePercent); setExamPassed(result.passed); setExamResults(result.results); setExamSubmitted(true);\n      try { clearExamDraft(localStorage, examDraftKey); } catch { /* submitted result is authoritative */ }\n      onExamAttemptSubmitted?.(activeCourse, result.attempt);
     } catch (error) {
       setExamError(error instanceof Error ? error.message : 'Exam submission failed.');
     } finally { setExamSubmitting(false); }
@@ -276,6 +289,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setRetakeLoading(true); setExamError(null);
     try {
       await startCourseRetake(activeCourse.id);
+      try { clearExamDraft(localStorage, examDraftKey); } catch { /* draft cleanup is optional */ }
       setExamSubmitted(false); setExamAnswers({}); setExamResults({}); setExamScore(0); setExamPassed(false);
       setTakingExam(false);
     } catch (error) {
