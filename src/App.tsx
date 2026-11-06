@@ -263,6 +263,9 @@ export default function App() {
         if (saved.masteryRecords && typeof saved.masteryRecords === 'object' && !Array.isArray(saved.masteryRecords)) {
           setMasteryRecords(saved.masteryRecords as Record<string, LessonMasteryState>);
         }
+        if (saved.assignmentSubmissions && typeof saved.assignmentSubmissions === 'object' && !Array.isArray(saved.assignmentSubmissions)) {
+          setAssignmentSubmissions(saved.assignmentSubmissions as typeof assignmentSubmissions);
+        }
       }
     } catch (error) {
       console.warn('Could not load saved Berry workspace data:', error);
@@ -396,6 +399,32 @@ export default function App() {
         trusted.forEach(({ status }) => status.examHistory.forEach((attempt) => merged.set(`trusted-${attempt.cycle}-${attempt.id}`, { ...attempt, id: `trusted-${attempt.cycle}-${attempt.id}`, trusted: true })));
         return Array.from(merged.values());
       });
+      setAssignmentSubmissions((current) => {
+        const merged = { ...current };
+        trusted.forEach(({ status }) => {
+          Object.entries(status.assignments || {}).forEach(([assignmentId, saved]) => {
+            const record = saved as {
+              content?: string; attemptNumber?: number; status?: AssignmentSubmissionStatus;
+              scorePercent?: number; marksAwarded?: number; totalMarks?: number;
+              markerFeedback?: string; submittedAt?: string;
+              criterionScores?: { criterionId: string; awarded: number; outOf: number }[];
+            };
+            if (!record.content || !record.status) return;
+            merged[assignmentId] = {
+              content: record.content,
+              attemptNumber: Number(record.attemptNumber) || 1,
+              status: record.status,
+              scorePercent: Number(record.scorePercent) || 0,
+              marksAwarded: Number(record.marksAwarded) || 0,
+              totalMarks: Number(record.totalMarks) || 0,
+              markerFeedback: record.markerFeedback || '',
+              submittedAt: record.submittedAt || '',
+              criterionScores: Array.isArray(record.criterionScores) ? record.criterionScores : [],
+            };
+          });
+        });
+        return merged;
+      });
     });
     void loadTrustedCertificates().then((items) => {
       if (!cancelled) setCertificates((current) => [...items, ...current.filter((item) => !items.some((saved) => saved.credentialId === item.credentialId))]);
@@ -442,6 +471,7 @@ export default function App() {
         transcriptSessions,
         certificates,
         masteryRecords,
+        assignmentSubmissions,
       }));
     } catch (error) {
       console.warn('Could not save Berry workspace data:', error);
@@ -455,6 +485,7 @@ export default function App() {
     transcriptSessions,
     certificates,
     masteryRecords,
+    assignmentSubmissions,
   ]);
 
 
