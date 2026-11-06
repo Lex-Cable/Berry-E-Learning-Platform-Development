@@ -245,7 +245,10 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
       const old = progressSnap.data();
       const attemptsCount = Number(old?.attemptsCount || 0) + 1;
       const masteryThreshold = Math.max(80, lesson.masteryThresholdPercent || 80);
-      const activitySnapshot = await transaction.get(progressRef.collection('activities'));
+      const [activitySnapshot, assignmentSnapshot] = await Promise.all([
+        transaction.get(progressRef.collection('activities')),
+        transaction.get(cycleRef(uid, course.id, cycle).collection('assignments').doc(`assignment-${course.id}-${lesson.id}`)),
+      ]);
       const submittedActivityIds = new Set(activitySnapshot.docs.map((document) => document.id));
       const allActivitiesSubmitted = lesson.activities.every((activity) => submittedActivityIds.has(activity.id));
       const interactiveScorePercent = lesson.activities.length
@@ -258,7 +261,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
         allActivitiesSubmitted && interactiveScorePercent >= 80;
       const progress: LessonMasteryState & { updatedAt: string } = {
         lessonId: lesson.id,
-        isCompleted: false,
+        isCompleted: lessonPassed && assignmentSnapshot.data()?.status === 'graded' && Number(assignmentSnapshot.data()?.scorePercent) >= 50,
         isMastered: lessonPassed,
         scorePercent,
         interactiveScorePercent,
