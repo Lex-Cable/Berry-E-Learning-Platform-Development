@@ -341,7 +341,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           savedActivityResults={trustedActivities[activeLessonId] || {}}
           savedMasteryAnswers={trustedLessonAttempts[activeLessonId]?.answers || {}}
           onSaveMastery={onSaveMastery}
-          canAdvanceToNextLesson={['graded', 'returned_for_revision'].includes(trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.status || '')}
+          canAdvanceToNextLesson={currentMasteryRecords[activeLessonId]?.isMastered === true && currentMasteryRecords[activeLessonId]?.isCompleted === true}
           userId={learner.id}
         />
       </div>
@@ -693,12 +693,9 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                     const orderedLessons = activeCourse.chapters.flatMap((item) => item.lessons);
                     const lessonIndex = orderedLessons.findIndex((item) => item.id === lesson.id);
                     const previousLesson = lessonIndex > 0 ? orderedLessons[lessonIndex - 1] : undefined;
-                    const previousAssignment = previousLesson
-                      ? trustedAssignments[`assignment-${activeCourse.id}-${previousLesson.id}`]
-                      : undefined;
                     const previousTopicComplete = !previousLesson || (
                       currentMasteryRecords[previousLesson.id]?.isMastered === true &&
-                      (previousAssignment?.status === 'graded' || previousAssignment?.status === 'returned_for_revision')
+                      currentMasteryRecords[previousLesson.id]?.isCompleted === true
                     );
                     const isUnlocked = isPrerequisiteUnlocked && previousTopicComplete && !trustedAssignmentsLoading;
                     const mastery = currentMasteryRecords[lesson.id];
@@ -758,7 +755,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">
-                              {trustedAssignmentsLoading ? 'Checking requirements' : !previousTopicComplete ? 'Complete previous topic assignment' : 'Prerequisite Locked'}
+                              {trustedAssignmentsLoading ? 'Checking requirements' : !previousTopicComplete ? 'Complete previous topic activities' : 'Prerequisite Locked'}
                             </span>
                           )}
                           {isUnlocked && <ChevronRight size={16} className="text-slate-400" />}
