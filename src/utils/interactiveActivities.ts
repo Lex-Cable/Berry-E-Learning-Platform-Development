@@ -1,7 +1,7 @@
 import type { Course } from '../types';
 
 function normalizePrompt(value: string): string {
-  return value.toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 }
 
 /**
