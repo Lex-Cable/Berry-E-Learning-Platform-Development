@@ -143,20 +143,34 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setMatchingFeedback(null);
     setSelectedAnswers({});
     setSubmittedQuiz(false);
-    setActivitySubmissionResults(Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
-    setMatchedPairs(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.pairs ? Object.entries(result.answer.pairs).map(([pairId, value]) => [pairId, value]) : [])));
-    setActivityAnswers(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.choiceId ? [[id, result.answer.choiceId]] : [])));
-    setActivityTextResponses(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => typeof result.answer?.response === 'string' ? [[id, result.answer.response]] : [])));
-    setActivityOrder(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.order ? [[id, result.answer.order]] : [])));
+    setActivitySubmissionResults((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])) }));
+    setMatchedPairs((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([, result]) => result.answer?.pairs ? Object.entries(result.answer.pairs) : [])) }));
+    setActivityAnswers((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.choiceId ? [[id, result.answer.choiceId]] : [])) }));
+    setActivityTextResponses((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => typeof result.answer?.response === 'string' ? [[id, result.answer.response]] : [])) }));
+    setActivityOrder((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.order ? [[id, result.answer.order]] : [])) }));
     setQuizScore(masteryRecord?.scorePercent || 0);
     setQuizResults(savedMasteryResults);
     setSubmittedQuiz(savedMasterySubmitted);
   }, [lessonId, savedActivityResultsKey, masteryRecord?.scorePercent, savedMasteryAnswersKey, savedMasteryResultsKey, savedMasterySubmitted]);
 
   useEffect(() => {
-    if (!Object.keys(savedMasteryAnswers).length) return;
-    setSelectedAnswers(savedMasteryAnswers);
-  }, [savedMasteryAnswersKey]);
+    const key = `berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`;
+    try {
+      const raw = localStorage.getItem(key);
+      const draft = raw ? JSON.parse(raw) as Record<string, number> : {};
+      setSelectedAnswers((previous) => ({ ...draft, ...savedMasteryAnswers, ...previous }));
+    } catch {
+      setSelectedAnswers((previous) => ({ ...savedMasteryAnswers, ...previous }));
+    }
+  }, [course.id, lessonId, userId, savedMasteryAnswersKey]);
+
+  useEffect(() => {
+    if (submittedQuiz) return;
+    const key = `berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`;
+    try { localStorage.setItem(key, JSON.stringify(selectedAnswers)); } catch {
+      // The secure submission remains the source of truth if local drafts are unavailable.
+    }
+  }, [course.id, lessonId, userId, selectedAnswers, submittedQuiz]);
 
   useEffect(() => {
     let cancelled = false;
@@ -322,7 +336,9 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setQuizSubmitting(true); setQuizError(null);
     try {
       const result = await submitLessonAssessment(course.id, lessonId, selectedAnswers);
-      setQuizScore(result.scorePercent); setQuizResults(result.results); setSubmittedQuiz(true); onSaveMastery(result.progress);
+      setQuizScore(result.scorePercent); setQuizResults(result.results); setSubmittedQuiz(true);
+      try { localStorage.removeItem(`berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`); } catch { /* optional draft cleanup */ }
+      onSaveMastery(result.progress);
     } catch (error) {
       setQuizError(error instanceof Error ? error.message : 'Assessment submission failed.');
     } finally { setQuizSubmitting(false); }
