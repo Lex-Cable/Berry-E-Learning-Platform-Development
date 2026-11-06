@@ -26,7 +26,7 @@ function seedsForLesson(lesson: Lesson): Seed[] {
 }
 
 function normalizeQuestion(value: string): string {
-  return value.toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 }
 
 function asMastery(seed: Seed, lesson: Lesson, index: number): QuizQuestion {
