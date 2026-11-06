@@ -79,7 +79,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [trustedAssignments, setTrustedAssignments] = useState<Record<string, { status?: string; scorePercent?: number }>>({});
   const [trustedAssignmentsLoading, setTrustedAssignmentsLoading] = useState(false);
   const [trustedLessonProgress, setTrustedLessonProgress] = useState<Record<string, LessonMasteryState>>({});
-  const [trustedActivities, setTrustedActivities] = useState<Record<string, Record<string, { scorePercent: number; passed: boolean; feedback: string }>>>({});
+  const [trustedActivities, setTrustedActivities] = useState<Record<string, Record<string, { scorePercent: number; passed: boolean; feedback: string; answer?: { pairs?: Record<string, string>; order?: string[]; response?: string; choiceId?: string } }>>>({});
+  const [trustedLessonAttempts, setTrustedLessonAttempts] = useState<Record<string, { answers: Record<string, number>; scorePercent: number; submittedAt: string }>>({});
 
   useEffect(() => {
     if (!initialCourseId) return;
@@ -150,6 +151,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           setTrustedAssignments(status.assignments as Record<string, { status?: string; scorePercent?: number }>);
           setTrustedLessonProgress(status.lessonProgress || {});
           setTrustedActivities(status.lessonActivities || {});
+          setTrustedLessonAttempts(status.lessonAttempts || {});
         }
       })
       .catch((error) => {
@@ -337,6 +339,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           onBackToCourse={() => setActiveLessonId(null)}
           masteryRecord={currentMasteryRecords[activeLessonId]}
           savedActivityResults={trustedActivities[activeLessonId] || {}}
+          savedMasteryAnswers={trustedLessonAttempts[activeLessonId]?.answers || {}}
           onSaveMastery={onSaveMastery}
           canAdvanceToNextLesson={['graded', 'returned_for_revision'].includes(trustedAssignments[`assignment-${activeCourse.id}-${activeLessonId}`]?.status || '')}
           userId={learner.id}
