@@ -68,20 +68,20 @@ export interface AssignmentMarkingResult {
 /** Automated formative first-pass marker; not an official qualification grade. */
 export function markAssignmentSubmission(assignment: Assignment, content: string): AssignmentMarkingResult {
   const trimmed = content.trim();
-  const words = trimmed.match(/[\\p{L}\\p{N}']+/gu) || [];
+  const words = trimmed.match(/[\p{L}\p{N}']+/gu) || [];
   const wordCount = words.length;
   const normalized = trimmed.toLocaleLowerCase();
   const sentences = trimmed.split(/[.!?]+/).map((sentence) => sentence.trim()).filter(Boolean);
-  const hasExplanation = /\\b(because|therefore|this means|as a result|for example|for instance|such as|so that|which shows|this demonstrates)\\b/i.test(trimmed);
-  const hasReflection = /\\b(i learned|i understand|i found|i struggled|i improved|i would|next time|i still|my question|i need to)\\b/i.test(trimmed);
+  const hasExplanation = /\b(because|therefore|this means|as a result|for example|for instance|such as|so that|which shows|this demonstrates)\b/i.test(trimmed);
+  const hasReflection = /\b(i learned|i understand|i found|i struggled|i improved|i would|next time|i still|my question|i need to)\b/i.test(trimmed);
 
   const criterionScores: RubricAward[] = assignment.rubric.map((criterion) => {
     const concepts = Array.from(new Set(criterion.keywords
       .map((keyword) => keyword.trim().toLocaleLowerCase())
       .filter((keyword) => keyword.length >= 3)));
     const matched = concepts.filter((keyword) => {
-      const escaped = keyword.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-      return new RegExp(`(?:^|[^\\\\p{L}\\\\p{N}])${escaped}(?:$|[^\\\\p{L}\\\\p{N}])`, 'u').test(normalized);
+      const escaped = keyword.replace(/[.*+?^${}()|[\\]\\]/g, '\\keyword.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')');
+      return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, 'u').test(normalized);
     });
     const targetConcepts = Math.min(6, Math.max(3, Math.ceil(concepts.length * 0.2)));
     const conceptCoverage = concepts.length ? Math.min(1, matched.length / targetConcepts) : 0;
@@ -112,7 +112,7 @@ export function markAssignmentSubmission(assignment: Assignment, content: string
   if (wordCount < 150) feedbackParts.push(`Your response contains ${wordCount} words. The assignment asks for at least 150 words; add detail and examples.`);
   if (sentences.length < 2) feedbackParts.push('Use complete sentences to explain your ideas rather than listing isolated terms.');
   feedbackParts.push(status === 'graded'
-    ? 'Automated formative marking: the current rubric threshold is met. A teacher may review this feedback.'
+    ? 'Automated first-pass marking: passed. A teacher may review this feedback.'
     : 'Returned for revision: address the criterion feedback and submit an improved response.');
   return { status, marksAwarded, totalMarks: assignment.totalMarks, scorePercent, criterionScores: adjusted, markerFeedback: feedbackParts.join('\\n') };
 }
