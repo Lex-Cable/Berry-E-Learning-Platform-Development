@@ -1,4 +1,4 @@
-﻿import { hasActiveTrustedEnrollment } from './trustedEnrollment';
+import { hasActiveTrustedEnrollment } from './trustedEnrollment';
 import { issueTrustedCertificateTransaction } from './trustedCertificateIssuance';
 
 import { randomInt as secureRandomInt, randomUUID } from 'node:crypto';
@@ -14,7 +14,7 @@ import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, s
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
 
 const router = express.Router();
-const PASS_MARK = 75;
+const PASS_MARK = 50;
 type AnswerQuestion = { id: string; options: string[] };
 type PrivateCourse = Course;
 
