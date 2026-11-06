@@ -31,7 +31,8 @@ interface LessonViewProps {
   onNavigateLesson: (nextLessonId: string) => void;
   onBackToCourse: () => void;
   masteryRecord?: LessonMasteryState;
-  savedActivityResults?: Record<string, { scorePercent: number; passed: boolean; feedback: string }>;
+  savedActivityResults?: Record<string, { scorePercent: number; passed: boolean; feedback: string; answer?: { pairs?: Record<string, string>; order?: string[]; response?: string; choiceId?: string } }>;
+  savedMasteryAnswers?: Record<string, number>;
   onSaveMastery: (record: LessonMasteryState) => void;
   userId?: string;
   canAdvanceToNextLesson?: boolean;
@@ -44,6 +45,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   onBackToCourse,
   masteryRecord,
   savedActivityResults = {},
+  savedMasteryAnswers = {},
   onSaveMastery,
   userId,
   canAdvanceToNextLesson = false,
@@ -114,6 +116,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activitySubmitting, setActivitySubmitting] = useState<Record<string, boolean>>({});
   const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
   const savedActivityResultsKey = JSON.stringify(savedActivityResults);
+  const savedMasteryAnswersKey = JSON.stringify(savedMasteryAnswers);
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -135,8 +138,17 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setSelectedAnswers({});
     setSubmittedQuiz(false);
     setActivitySubmissionResults(Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
+    setMatchedPairs(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.pairs ? Object.entries(result.answer.pairs).map(([pairId, value]) => [pairId, value]) : [])));
+    setActivityAnswers(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.choiceId ? [[id, result.answer.choiceId]] : [])));
+    setActivityTextResponses(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => typeof result.answer?.response === 'string' ? [[id, result.answer.response]] : [])));
+    setActivityOrder(Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.order ? [[id, result.answer.order]] : [])));
     setQuizScore(masteryRecord?.scorePercent || 0);
-  }, [lessonId, savedActivityResultsKey, masteryRecord?.scorePercent]);
+  }, [lessonId, savedActivityResultsKey, masteryRecord?.scorePercent, savedMasteryAnswersKey]);
+
+  useEffect(() => {
+    if (!Object.keys(savedMasteryAnswers).length) return;
+    setSelectedAnswers(savedMasteryAnswers);
+  }, [savedMasteryAnswersKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,10 +170,12 @@ export const LessonView: React.FC<LessonViewProps> = ({
         answers?: Record<string, string>;
         textResponses?: Record<string, string>;
         order?: Record<string, string[]>;
+        matchedPairs?: Record<string, string>;
       };
       setActivityAnswers(state.answers || {});
       setActivityTextResponses(state.textResponses || {});
       setActivityOrder(state.order || {});
+      setMatchedPairs(state.matchedPairs || {});
     } catch {
       // A corrupt or unavailable local cache must not block the activity.
     }
@@ -174,11 +188,12 @@ export const LessonView: React.FC<LessonViewProps> = ({
         answers: activityAnswers,
         textResponses: activityTextResponses,
         order: activityOrder,
+        matchedPairs,
       }));
     } catch {
       // Activity remains usable when browser storage is unavailable.
     }
-  }, [lessonId, userId, activityAnswers, activityTextResponses, activityOrder]);
+  }, [lessonId, userId, activityAnswers, activityTextResponses, activityOrder, matchedPairs]);
 
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
