@@ -10,7 +10,7 @@
                     "preview":  "vite preview",
                     "clean":  "rm -rf dist server.js",
                     "lint":  "tsc --noEmit",
-                    "test":  "npx --yes tsx --test src/utils/mastery.test.ts src/utils/assessmentQuestionBank.test.ts src/utils/interactiveActivities.test.ts src/utils/assignments.test.ts src/utils/curriculumCoverage.test.ts src/utils/certificates.test.ts src/curriculum/repository.test.ts src/data/internationalStarterCourses.test.ts server/trustedLearningLogic.test.ts server/trustedEnrollment.test.ts",
+                    "test":  "npx --yes tsx --test src/utils/mastery.test.ts src/utils/assessmentQuestionBank.test.ts src/utils/interactiveActivities.test.ts src/utils/assignments.test.ts src/utils/curriculumCoverage.test.ts src/utils/certificates.test.ts src/curriculum/repository.test.ts src/data/internationalStarterCourses.test.ts src/utils/examDraft.test.ts server/trustedLearningLogic.test.ts server/trustedEnrollment.test.ts",
                     "test:rules":  "npx --yes firebase-tools emulators:exec --only firestore --project demo-berry \"npx tsx --test server/firestoreRules.test.ts\"",
                     "test:certificates":  "npx --yes firebase-tools emulators:exec --only firestore --project demo-berry \"npx tsx --test server/trustedCertificateIssuance.test.ts\""
                 },
