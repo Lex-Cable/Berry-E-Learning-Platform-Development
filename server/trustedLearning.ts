@@ -553,10 +553,11 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
     const lessonList = course.chapters.flatMap((chapter) => chapter.lessons);
-    const [cycleSnapshot, progress, attempts, assignments, allCycles, activitySnapshots] = await Promise.all([
+    const [cycleSnapshot, progress, attempts, assignments, allCycles, activitySnapshots, lessonAttemptsSnapshot] = await Promise.all([
       ref.get(), ref.collection('lessonProgress').get(), ref.collection('examAttempts').get(), ref.collection('assignments').get(),
       adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id).collection('cycles').get(),
       Promise.all(lessonList.map((lesson) => ref.collection('lessonProgress').doc(lesson.id).collection('activities').get())),
+      ref.collection('lessonAttempts').get(),
     ]);
     const historySnapshots = await Promise.all(allCycles.docs.map((cycleDocument) => cycleDocument.ref.collection('examAttempts').get()));
     const examHistory = historySnapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data()))
@@ -570,6 +571,17 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
       courseCompleted,
       courseMasteryPercent,
       lessonProgress: Object.fromEntries(progressRecords.map((record) => [record.lessonId, record])),
+      lessonAttempts: Object.fromEntries(lessonList.map((lesson) => {
+        const latest = lessonAttemptsSnapshot.docs
+          .map((document) => document.data())
+          .filter((attempt) => attempt.lessonId === lesson.id)
+          .sort((left, right) => String(right.submittedAt || '').localeCompare(String(left.submittedAt || '')))[0];
+        return [lesson.id, latest ? {
+          answers: latest.answers && typeof latest.answers === 'object' ? latest.answers : {},
+          scorePercent: Number(latest.scorePercent) || 0,
+          submittedAt: typeof latest.submittedAt === 'string' ? latest.submittedAt : '',
+        } : null];
+      }).filter((entry) => entry[1] !== null)),
       lessonActivities: Object.fromEntries(lessonList.map((lesson, index) => [
         lesson.id,
         Object.fromEntries(activitySnapshots[index].docs.map((document) => {
@@ -578,6 +590,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
             scorePercent: Number(data.scorePercent) || 0,
             passed: data.passed === true,
             feedback: typeof data.feedback === 'string' ? data.feedback : '',
+            answer: data.answer && typeof data.answer === 'object' ? data.answer : undefined,
           }];
         })),
       ])),
