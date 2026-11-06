@@ -198,17 +198,15 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   // Calculate course mastery stats
   const getCourseProgress = (course: Course) => {
     let totalLessons = 0;
-    let masteredCount = 0;
+    let completedCount = 0;
     course.chapters.forEach((chap) => {
       chap.lessons.forEach((les) => {
         totalLessons++;
-        if (currentMasteryRecords[les.id]?.isMastered) {
-          masteredCount++;
-        }
+        if (currentMasteryRecords[les.id]?.isCompleted === true) completedCount++;
       });
     });
-    const percent = totalLessons > 0 ? Math.round((masteredCount / totalLessons) * 100) : 0;
-    return { totalLessons, masteredCount, percent };
+    const percent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+    return { totalLessons, masteredCount: completedCount, percent };
   };
 
   const handleOpenSubject = (course: Course) => {
@@ -578,7 +576,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   if (activeCourse && !activeLessonId && !takingExam) {
     const progress = getCourseProgress(activeCourse);
     const completedLessonIds = Object.keys(currentMasteryRecords).filter(
-      (id) => currentMasteryRecords[id]?.isCompleted
+      (id) => currentMasteryRecords[id]?.isCompleted === true
     );
     const masteredLessonIds = Object.keys(currentMasteryRecords).filter(
       (id) => currentMasteryRecords[id]?.isMastered
@@ -698,9 +696,14 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                     const orderedLessons = activeCourse.chapters.flatMap((item) => item.lessons);
                     const lessonIndex = orderedLessons.findIndex((item) => item.id === lesson.id);
                     const previousLesson = lessonIndex > 0 ? orderedLessons[lessonIndex - 1] : undefined;
+                    const previousAssignment = previousLesson
+                      ? trustedAssignments[`assignment-${activeCourse.id}-${previousLesson.id}`]
+                      : undefined;
                     const previousTopicComplete = !previousLesson || (
                       currentMasteryRecords[previousLesson.id]?.isMastered === true &&
-                      currentMasteryRecords[previousLesson.id]?.isCompleted === true
+                      currentMasteryRecords[previousLesson.id]?.isCompleted === true &&
+                      previousAssignment?.status === 'graded' &&
+                      Number(previousAssignment.scorePercent) >= 50
                     );
                     const isUnlocked = isPrerequisiteUnlocked && previousTopicComplete && !trustedAssignmentsLoading;
                     const mastery = currentMasteryRecords[lesson.id];
@@ -750,9 +753,13 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {isMastered ? (
+                          {mastery?.isCompleted === true ? (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                              Mastered ({mastery?.scorePercent ?? 0}%)
+                              Completed · {mastery?.scorePercent ?? 0}% mastery
+                            </span>
+                          ) : isMastered ? (
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
+                              Assessment passed · Assignment pending
                             </span>
                           ) : isUnlocked ? (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800">
@@ -760,7 +767,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">
-                              {trustedAssignmentsLoading ? 'Checking requirements' : !previousTopicComplete ? 'Complete previous topic activities' : 'Prerequisite Locked'}
+                              {trustedAssignmentsLoading ? 'Checking requirements' : !previousTopicComplete ? 'Complete previous chapter assignment' : 'Prerequisite Locked'}
                             </span>
                           )}
                           {isUnlocked && <ChevronRight size={16} className="text-slate-400" />}
