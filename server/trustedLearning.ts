@@ -21,7 +21,7 @@ type PrivateCourse = Course;
 // Server-side trusted catalogue: private production courses plus the
 // Berry-authored international starter courses. Never accept course content
 // or answer keys supplied by the browser.
-const TRUSTED_COURSES: PrivateCourse[] = withCompleteAssessmentBanks(withInteractivePractice([
+const TRUSTED_COURSES: PrivateCourse[] = withInteractivePractice(withCompleteAssessmentBanks([
   ...(COURSES as PrivateCourse[]),
   ...INTERNATIONAL_STARTER_COURSES,
 ]));
