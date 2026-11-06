@@ -384,7 +384,7 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     if (!approvedExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet.' });
     const byId = new Map(approvedExamQuestions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
-    if (questions.length !== course.exam.questions.length) return res.status(500).json({ error: 'The exam question set is incomplete.' });
+    if (questions.length !== Math.min(30, course.exam.questions.length)) return res.status(500).json({ error: 'The exam question set is incomplete.' });
     const sessionData = session.data() ?? {};
     let expiresAt = typeof sessionData.expiresAt === 'string' ? sessionData.expiresAt : '';
     if (!expiresAt) {
