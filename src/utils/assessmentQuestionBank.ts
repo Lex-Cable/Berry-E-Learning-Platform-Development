@@ -25,20 +25,19 @@ function seedsForLesson(lesson: Lesson): Seed[] {
   );
 }
 
+function normalizeQuestion(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+}
+
 function asMastery(seed: Seed, lesson: Lesson, index: number): QuizQuestion {
   const objectives = lesson.objectives.length ? lesson.objectives : [lesson.title];
   const objective = objectives[index % objectives.length];
-  const prefixes = [
-    '', `Knowledge check — ${lesson.title}: `, `Apply the objective “${objective}”: `,
-    `A learner is reviewing ${lesson.title}. `, `Choose the accurate response about ${objective}: `,
-    `Think about this topic: `, `Use your notes on ${lesson.title}: `,
-    `Which answer demonstrates understanding of ${objective}? `,
-    `Practice checkpoint — ${lesson.title}: `, `Review question — ${objective}: `,
-  ];
   return {
-    id: `bank-${lesson.id}-${index + 1}`,
-    question: `${prefixes[index]}${seed.question}`,
-    options: [...seed.options], correctIndex: seed.correctIndex, explanation: seed.explanation,
+    id: `bank-${lesson.id}-${seed.id}`,
+    question: seed.question.trim(),
+    options: [...seed.options],
+    correctIndex: seed.correctIndex,
+    explanation: seed.explanation,
     misconceptions: Object.fromEntries(seed.options.map((_, optionIndex) => [
       optionIndex, `Review ${lesson.title} and reconsider this option.`,
     ]).filter(([optionIndex]) => optionIndex !== seed.correctIndex)) as Record<number, string>,
@@ -49,8 +48,8 @@ function asMastery(seed: Seed, lesson: Lesson, index: number): QuizQuestion {
 /**
  * Builds the fixed assessment sizes from authored course material and answer
  * keys. The same approved question bank is used by the browser and trusted API.
- * Repeated source concepts are contextually framed; this does not claim they
- * are ten unique independently authored questions.
+ * Mastery questions remain distinct authored prompts. The builder never pads
+ * a short bank by repeating the same question with a different prefix.
  */
 export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
   return courses.map((course) => {
@@ -58,13 +57,25 @@ export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
     const chapters = course.chapters.map((chapter) => ({
       ...chapter,
       lessons: chapter.lessons.map((lesson) => {
-        const source = seedsForLesson(lesson);
-        const uniqueSource = source.filter((seed, index, all) =>
-          all.findIndex((candidate) => candidate.question.trim().toLocaleLowerCase() === seed.question.trim().toLocaleLowerCase()) === index
-        );
-        return uniqueSource.length
-          ? { ...lesson, quizQuestions: uniqueSource.slice(0, 10).map((seed, index) => asMastery(seed, lesson, index)) }
-          : lesson;
+        const uniqueMasteryQuestions = lesson.quizQuestions
+          .filter((seed) => seed.options.length >= 2 &&
+            seed.correctIndex >= 0 && seed.correctIndex < seed.options.length &&
+            seed.options.every((option) => Boolean(option?.trim())))
+          .filter((seed, index, all) => all.findIndex((candidate) =>
+            normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)
+          ) === index)
+          .slice(0, 10);
+        return {
+          ...lesson,
+          quizQuestions: uniqueMasteryQuestions.map((seed, index) => asMastery({
+            id: seed.id,
+            question: seed.question,
+            options: seed.options,
+            correctIndex: seed.correctIndex,
+            explanation: seed.explanation || `Review the lesson objective: ${seed.learningObjective || lesson.title}.`,
+            topic: seed.learningObjective || lesson.title,
+          }, lesson, index)),
+        };
       }),
     }));
     const examSeeds: Seed[] = (course.exam?.questions || []).map((q) => ({
@@ -74,7 +85,7 @@ export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
     for (const lesson of lessons) examSeeds.push(...seedsForLesson(lesson));
     const valid = examSeeds.filter((s) => s.options.length >= 2 && s.correctIndex >= 0 && s.correctIndex < s.options.length)
       .filter((seed, index, all) => all.findIndex((candidate) =>
-        candidate.question.trim().toLocaleLowerCase() === seed.question.trim().toLocaleLowerCase()
+        normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)
       ) === index);
     const questions: ExamQuestion[] = valid.length
       ? valid.slice(0, 30).map((seed, index) => {
