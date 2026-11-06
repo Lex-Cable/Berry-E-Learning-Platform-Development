@@ -51,7 +51,7 @@ import {
   saveLearnerNotification,
   saveLearnerTask,
 } from './services/learnerWorkspace';
-import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, type AssignmentMarkingResult } from './utils/assignments';
+import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, resolveAssignmentDueDate, type AssignmentMarkingResult } from './utils/assignments';
 import { withInteractivePractice } from './utils/interactiveActivities';
 import { withCompleteAssessmentBanks } from './utils/assessmentQuestionBank';
 import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
@@ -98,7 +98,20 @@ export default function App() {
   // Real curriculum coverage report recomputed whenever the catalogue changes.
   const curriculumRepository = useMemo(() => buildCurriculumRepository(courses), [courses]);
   const coverageReport = useMemo(() => auditCurriculumCoverage(curriculumRepository.courses), [curriculumRepository]);
-  const assignments = useMemo(() => buildCourseAssignments(courses), [courses]);
+  const assignments = useMemo(() => {
+    const savedDeadlines = new Map(
+      tasks
+        .filter((task) => task.type === 'assignment')
+        .map((task) => [task.id.replace(/^assignment-deadline-/, ''), task.dueDate]),
+    );
+    return buildCourseAssignments(courses).map((assignment) => ({
+      ...assignment,
+      dueDate: resolveAssignmentDueDate(
+        assignment.dueDate,
+        savedDeadlines.get(assignment.id),
+      ),
+    }));
+  }, [courses, tasks]);
 
   // Every enrolled course assignment gets one planner task and one reminder.
   // Reconcile tasks and notifications independently so a missing reminder is restored.
@@ -116,7 +129,7 @@ export default function App() {
         subject: course?.subject || assignment.courseTitle,
         courseId: assignment.courseId,
         stage: course?.stage || learner.stage,
-        dueDate: assignment.dueDate,
+        dueDate: resolveAssignmentDueDate(assignment.dueDate, existing?.dueDate),
         urgency: existing?.urgency || 'medium',
         status: existing?.status || 'pending',
         type: 'assignment',
