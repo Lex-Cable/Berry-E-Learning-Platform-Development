@@ -54,6 +54,13 @@ function shuffle<T>(values: T[]): T[] {
   return result;
 }
 function randomInt(max: number): number { return secureRandomInt(max); }
+function rotateQuestionSet<T>(questions: T[], attemptNumber: number, maximumCount: number): T[] {
+  if (!questions.length) return [];
+  const count = Math.min(maximumCount, questions.length);
+  const offset = (Math.max(0, attemptNumber) * count) % questions.length;
+  const rotated = [...questions.slice(offset), ...questions.slice(0, offset)];
+  return rotated.slice(0, count);
+}
 function scoreAnswers(questions: Array<{ id: string; correctIndex: number }>, answers: Record<string, number>) {
   const correct = questions.filter((question) => answers[question.id] === question.correctIndex).length;
   return Math.round((correct / Math.max(questions.length, 1)) * 100);
@@ -167,8 +174,11 @@ router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', req
       return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before opening this lesson.' });
     }
     const masteryCount = Math.min(10, lesson.quizQuestions.length);
-    const masteryQuestions = selectRequiredQuestionSet(lesson.quizQuestions, masteryCount);
-    if (!masteryQuestions?.length) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
+    if (!masteryCount) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
+    const progressSnapshot = await cycleRef(context.uid, context.course.id, cycle)
+      .collection('lessonProgress').doc(lesson.id).get();
+    const attemptsCount = Number(progressSnapshot.data()?.attemptsCount || 0);
+    const masteryQuestions = rotateQuestionSet(lesson.quizQuestions, attemptsCount, masteryCount);
     return res.json({ questions: safeQuestions(masteryQuestions) });
   } catch (error) {
     console.error('Trusted lesson question retrieval failed:', error);
@@ -188,10 +198,13 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
       return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before attempting this lesson.' });
     }
     const masteryCount = Math.min(10, lesson.quizQuestions.length);
-    const questions = selectRequiredQuestionSet(lesson.quizQuestions, masteryCount);
-    if (!questions?.length) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
-    if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every question.' });
+    if (!masteryCount) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
     const cycle = currentCycle;
+    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
+    const progressBeforeAttempt = await progressRef.get();
+    const attemptsBefore = Number(progressBeforeAttempt.data()?.attemptsCount || 0);
+    const questions = rotateQuestionSet(lesson.quizQuestions, attemptsBefore, masteryCount);
+    if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every question.' });
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
     const results = Object.fromEntries(questions.map((question) => [question.id, {
@@ -202,7 +215,6 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
         : question.misconceptions?.[answers[question.id]] || 'Review this topic and try again.',
     }]));
     const courseRef = adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id);
-    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
     const attemptRef = cycleRef(uid, course.id, cycle).collection('lessonAttempts').doc(randomUUID());
     const now = new Date().toISOString();
     const result = await adminDb!.runTransaction(async (transaction) => {
