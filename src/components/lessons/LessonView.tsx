@@ -114,6 +114,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});
   const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
   const [activitySubmitting, setActivitySubmitting] = useState<Record<string, boolean>>({});
+  const [activityDraftLoaded, setActivityDraftLoaded] = useState(false);
   const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
   const savedActivityResultsKey = JSON.stringify(savedActivityResults);
   const savedMasteryAnswersKey = JSON.stringify(savedMasteryAnswers);
@@ -162,26 +163,36 @@ export const LessonView: React.FC<LessonViewProps> = ({
   // Keep hands-on responses on this device so learners can leave a lesson
   // and return without losing an unfinished activity.
   useEffect(() => {
+    setActivityDraftLoaded(false);
     const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
     try {
       const saved = localStorage.getItem(key);
-      if (!saved) return;
-      const state = JSON.parse(saved) as {
-        answers?: Record<string, string>;
-        textResponses?: Record<string, string>;
-        order?: Record<string, string[]>;
-        matchedPairs?: Record<string, string>;
-      };
-      setActivityAnswers(state.answers || {});
-      setActivityTextResponses(state.textResponses || {});
-      setActivityOrder(state.order || {});
-      setMatchedPairs(state.matchedPairs || {});
+      if (saved) {
+        const state = JSON.parse(saved) as {
+          answers?: Record<string, string>;
+          textResponses?: Record<string, string>;
+          order?: Record<string, string[]>;
+          matchedPairs?: Record<string, string>;
+        };
+        setActivityAnswers(state.answers || {});
+        setActivityTextResponses(state.textResponses || {});
+        setActivityOrder(state.order || {});
+        setMatchedPairs(state.matchedPairs || {});
+      } else {
+        setActivityAnswers({});
+        setActivityTextResponses({});
+        setActivityOrder({});
+        setMatchedPairs({});
+      }
     } catch {
       // A corrupt or unavailable local cache must not block the activity.
+    } finally {
+      setActivityDraftLoaded(true);
     }
   }, [lessonId, userId]);
 
   useEffect(() => {
+    if (!activityDraftLoaded) return;
     const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
     try {
       localStorage.setItem(key, JSON.stringify({
@@ -193,7 +204,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     } catch {
       // Activity remains usable when browser storage is unavailable.
     }
-  }, [lessonId, userId, activityAnswers, activityTextResponses, activityOrder, matchedPairs]);
+  }, [activityDraftLoaded, lessonId, userId, activityAnswers, activityTextResponses, activityOrder, matchedPairs]);
 
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
