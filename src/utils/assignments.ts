@@ -98,3 +98,14 @@ export function markAssignmentSubmission(assignment: Assignment, content: string
 export function nextAttemptNumber(previousAttempt: number): number {
   return Math.min(20, Math.max(1, previousAttempt + 1));
 }
+
+/**
+ * Keeps a learner's first persisted assignment deadline stable across catalogue
+ * rebuilds. A new assignment receives its generated initial deadline.
+ */
+export function resolveAssignmentDueDate(generatedDueDate: string, savedDueDate?: string): string {
+  if (typeof savedDueDate === 'string' && savedDueDate.trim() && Number.isFinite(Date.parse(savedDueDate))) {
+    return savedDueDate;
+  }
+  return generatedDueDate;
+}
