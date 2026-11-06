@@ -678,9 +678,9 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
                       {chapter.lessons.filter((lesson) => currentMasteryRecords[lesson.id]?.isMastered).length}/{chapter.lessons.length} lessons mastered
                     </span>
-                    {chapter.lessons.length > 0 && chapter.lessons.every((lesson) => currentMasteryRecords[lesson.id]?.isMastered) && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">
-                        <Award size={12} /> Chapter badge earned
+                    {chapter.lessons.length > 0 && chapter.lessons.every((lesson) => currentMasteryRecords[lesson.id]?.isCompleted === true) && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">
+                        <CheckCircle2 size={12} /> Chapter completed
                       </span>
                     )}
                   </div>
