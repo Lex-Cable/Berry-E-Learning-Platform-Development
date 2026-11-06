@@ -118,7 +118,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});
   const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
   const [activitySubmitting, setActivitySubmitting] = useState<Record<string, boolean>>({});
-  const [activityDraftLoaded, setActivityDraftLoaded] = useState(false);
+  const [activityDraftLoadedKey, setActivityDraftLoadedKey] = useState<string | null>(null);
+  const [masteryDraftLoadedKey, setMasteryDraftLoadedKey] = useState<string | null>(null);
   const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
   const savedActivityResultsKey = JSON.stringify(savedActivityResults);
   const savedMasteryAnswersKey = JSON.stringify(savedMasteryAnswers);
@@ -155,6 +156,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
 
   useEffect(() => {
     const key = `berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`;
+    setMasteryDraftLoadedKey(null);
     try {
       const raw = localStorage.getItem(key);
       const draft = raw ? JSON.parse(raw) as Record<string, number> : {};
@@ -165,16 +167,18 @@ export const LessonView: React.FC<LessonViewProps> = ({
       setSelectedAnswers((previous) => savedMasterySubmitted
         ? ({ ...previous, ...savedMasteryAnswers })
         : ({ ...savedMasteryAnswers, ...previous }));
+    } finally {
+      setMasteryDraftLoadedKey(key);
     }
-  }, [course.id, lessonId, userId, savedMasteryAnswersKey]);
+  }, [course.id, lessonId, userId, savedMasteryAnswersKey, savedMasterySubmitted]);
 
   useEffect(() => {
-    if (submittedQuiz) return;
     const key = `berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`;
+    if (masteryDraftLoadedKey !== key || submittedQuiz) return;
     try { localStorage.setItem(key, JSON.stringify(selectedAnswers)); } catch {
       // The secure submission remains the source of truth if local drafts are unavailable.
     }
-  }, [course.id, lessonId, userId, selectedAnswers, submittedQuiz]);
+  }, [course.id, lessonId, userId, selectedAnswers, submittedQuiz, masteryDraftLoadedKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,8 +192,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
   // Keep hands-on responses on this device so learners can leave a lesson
   // and return without losing an unfinished activity.
   useEffect(() => {
-    setActivityDraftLoaded(false);
     const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
+    setActivityDraftLoadedKey(null);
     try {
       const saved = localStorage.getItem(key);
       if (saved) {
@@ -212,13 +216,13 @@ export const LessonView: React.FC<LessonViewProps> = ({
     } catch {
       // A corrupt or unavailable local cache must not block the activity.
     } finally {
-      setActivityDraftLoaded(true);
+      setActivityDraftLoadedKey(key);
     }
   }, [lessonId, userId]);
 
   useEffect(() => {
-    if (!activityDraftLoaded) return;
     const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
+    if (activityDraftLoadedKey !== key) return;
     try {
       localStorage.setItem(key, JSON.stringify({
         answers: activityAnswers,
@@ -229,7 +233,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     } catch {
       // Activity remains usable when browser storage is unavailable.
     }
-  }, [activityDraftLoaded, lessonId, userId, activityAnswers, activityTextResponses, activityOrder, matchedPairs]);
+  }, [activityDraftLoadedKey, lessonId, userId, activityAnswers, activityTextResponses, activityOrder, matchedPairs]);
 
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
