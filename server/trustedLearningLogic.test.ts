@@ -1,13 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateWeightedCertificateScore, selectRequiredQuestionSet, canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
+import { calculateWeightedCertificateScore, selectRequiredQuestionSet, canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress, classifyAcademicGrade, calculateWeightedAcademicGrade } from './trustedLearningLogic';
 
-test('exam pass mark is at least 75 percent', () => {
-  assert.equal(isPassingExamScore(74), false);
+test('final examination uses the approved 50 percent pass mark and respects course overrides', () => {
+  assert.equal(isPassingExamScore(49), false);
+  assert.equal(isPassingExamScore(50), true);
   assert.equal(isPassingExamScore(75), true);
-  assert.equal(isPassingExamScore(76), true);
   assert.equal(isPassingExamScore(80, 85), false);
   assert.equal(isPassingExamScore(85, 85), true);
+});
+
+test('academic grading follows Berry percentage classifications exactly', () => {
+  assert.deepEqual(classifyAcademicGrade(80), { percentage: 80, grade: 'A', classification: 'Distinction', passed: true });
+  assert.equal(classifyAcademicGrade(79).grade, 'B');
+  assert.equal(classifyAcademicGrade(60).classification, 'Credit');
+  assert.equal(classifyAcademicGrade(50).classification, 'Pass');
+  assert.equal(classifyAcademicGrade(49.99).grade, 'F');
+});
+
+test('default weighted academic grade uses 10/30/25/35 and rejects invalid weights', () => {
+  assert.equal(calculateWeightedAcademicGrade({ chapterAssessmentPercent: 80, assignmentPercent: 90, moduleExaminationPercent: 70, finalExaminationPercent: 60 }), 74);
+  assert.equal(calculateWeightedAcademicGrade({ chapterAssessmentPercent: 80, assignmentPercent: 90, moduleExaminationPercent: 70, finalExaminationPercent: 60, weights: { chapterAssessments: 10, assignments: 30, moduleExaminations: 20, finalExamination: 35 } }), null);
 });
 
 test('course mastery uses mastered lessons across the whole course', () => {
