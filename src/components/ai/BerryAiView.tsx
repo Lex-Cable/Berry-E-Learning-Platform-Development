@@ -364,6 +364,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           message: textToSend,
           stream: true,
           courseTitle: activeCourse?.title,
+          currentTopic,
           curriculumContext,
           courseOutline,
           history: contextMessages
