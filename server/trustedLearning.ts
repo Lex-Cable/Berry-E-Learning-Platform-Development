@@ -69,11 +69,9 @@ async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, 
   const previous = lessons[index - 1];
   const previousAssignmentId = `assignment-${course.id}-${previous.id}`;
   const previousProgressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(previous.id);
-  const previousAssignmentRef = cycleRef(uid, course.id, cycle).collection('assignments').doc(previousAssignmentId);
-  const [progress, assignment] = await Promise.all([previousProgressRef.get(), previousAssignmentRef.get()]);
-  // A lesson unlocks the next topic only after trusted mastery and all
-  // required interactive activities have been completed. Assignment marking
-  // remains a certificate requirement, not a blocker for learning progression.
+  const progress = await previousProgressRef.get();
+  // Topic progression follows trusted mastery and completion of its required
+  // interactive activities. Assignment marking remains a certificate check.
   return progress.data()?.isMastered === true && progress.data()?.isCompleted === true;
 }
 
@@ -167,7 +165,7 @@ router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', req
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const cycle = await ensureCycle(context.uid, context.course.id);
     if (!(await previousTopicRequirementsMet(context.uid, context.course, lesson.id, cycle))) {
-      return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before opening this lesson.' });
+      return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before opening this lesson.' });
     }
     const masteryQuestions = selectRequiredQuestionSet(lesson.quizQuestions, 10);
     if (!masteryQuestions) return res.status(422).json({ error: `This topic has ${lesson.quizQuestions.length} approved mastery questions; 10 are required. Please ask the course administrator to complete the question bank.` });
@@ -187,7 +185,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const currentCycle = await ensureCycle(uid, course.id);
     if (!(await previousTopicRequirementsMet(uid, course, lesson.id, currentCycle))) {
-      return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before attempting this lesson.' });
+      return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before attempting this lesson.' });
     }
     const questions = selectRequiredQuestionSet(lesson.quizQuestions, 10);
     if (!questions) return res.status(422).json({ error: `This topic has ${lesson.quizQuestions.length} approved mastery questions; 10 are required. Please ask the course administrator to complete the question bank.` });
@@ -261,7 +259,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
     const cycle = await ensureCycle(uid, course.id);
     if (!(await previousTopicRequirementsMet(uid, course, lesson.id, cycle))) {
-      return res.status(409).json({ error: 'Complete the previous topic mastery assessment and pass its assignment before attempting this activity.' });
+      return res.status(409).json({ error: 'Complete the previous topic's mastery assessment and interactive activities before attempting this activity.' });
     }
     const activity = lesson.activities.find((item) => item.id === req.params.activityId);
     if (!activity) return res.status(404).json({ error: 'Interactive activity not found.' });
