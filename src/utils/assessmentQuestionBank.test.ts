@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Course } from '../types';
 import { withCompleteAssessmentBanks } from './assessmentQuestionBank';
+import { COURSES as CLIENT_COURSES } from '../data/curriculumData';
+import { COURSES as SERVER_COURSES } from '../../server/privateCurriculumData';
+import { INTERNATIONAL_STARTER_COURSES } from '../data/internationalStarterCourses';
+import { withInteractivePractice } from './interactiveActivities';
 
 function courseFixture(): Course {
   return {
@@ -57,4 +61,24 @@ test('lessons with no approved source questions are not filled with fabricated a
   course.chapters[0].lessons[0].activities = [];
   const result = withCompleteAssessmentBanks([course]);
   assert.equal(result[0].chapters[0].lessons[0].quizQuestions.length, 0);
+});
+
+test('all shipped Berry course catalogues expose ten mastery questions, five activities and thirty final exam questions', () => {
+  const catalogues = [
+    [...CLIENT_COURSES, ...INTERNATIONAL_STARTER_COURSES],
+    [...SERVER_COURSES, ...INTERNATIONAL_STARTER_COURSES],
+  ];
+  for (const catalogue of catalogues) {
+    const complete = withInteractivePractice(withCompleteAssessmentBanks(catalogue as Course[]));
+    for (const course of complete) {
+      assert.equal(course.exam?.questions.length, 30, `${course.id} final exam`);
+      assert.equal(course.exam?.durationMinutes, 60, `${course.id} exam duration`);
+      for (const chapter of course.chapters) {
+        for (const lesson of chapter.lessons) {
+          assert.equal(lesson.quizQuestions.length, 10, `${course.id}/${lesson.id} mastery`);
+          assert.equal(lesson.activities.length, 5, `${course.id}/${lesson.id} interactive practice`);
+        }
+      }
+    }
+  }
 });
