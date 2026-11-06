@@ -143,6 +143,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     }
     let cancelled = false;
     setTrustedAssignmentsLoading(true);
+    setTrustedActivities({});
     getCourseStatus(activeCourse.id)
       .then((status) => {
         if (!cancelled) {
