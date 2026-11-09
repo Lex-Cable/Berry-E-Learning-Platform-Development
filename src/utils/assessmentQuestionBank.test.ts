@@ -62,6 +62,32 @@ test('course-specific banks retain their own question content and answer keys', 
   assert.equal(course.chapters[0].lessons[0].quizQuestions.length, 1);
 });
 
+test('explicit chapter and module banks are preserved when legacy or final pools repeat their prompts', () => {
+  const course = courseFixture();
+  const lesson = course.chapters[0].lessons[0];
+  const authored = {
+    id: 'authored-chapter-q',
+    question: 'Which is needed for plant growth?',
+    options: ['Sunlight', 'Plastic'],
+    correctIndex: 0,
+    explanation: 'Plants need sunlight.',
+    learningObjective: 'Identify plant needs',
+  };
+  lesson.chapterAssessmentQuestions = [authored];
+  lesson.moduleExamQuestions = [{
+    ...authored,
+    id: 'authored-module-q',
+    question: 'What do plants need to grow?',
+  }];
+  const result = withCompleteAssessmentBanks([course])[0];
+  const resultLesson = result.chapters[0].lessons[0];
+  assert.equal(resultLesson.chapterAssessmentQuestions?.length, 1);
+  assert.equal(resultLesson.chapterAssessmentQuestions?.[0].question, authored.question);
+  assert.equal(resultLesson.moduleExamQuestions?.length, 1);
+  assert.equal(resultLesson.moduleExamQuestions?.[0].question, 'What do plants need to grow?');
+  assert.equal(result.exam?.questions.length, 0, 'overlapping final-exam seed must not consume explicit formal questions');
+});
+
 test('lessons with no approved source questions are not filled with fabricated answers', () => {
   const course = courseFixture();
   course.chapters[0].lessons[0].quizQuestions = [];
