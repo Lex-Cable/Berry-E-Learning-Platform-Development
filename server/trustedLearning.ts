@@ -561,7 +561,7 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
         if (existingAttempts.size >= 2) return res.status(409).json({ error: 'The final examination time expired and both attempts have been used.' });
       }
     }
-    let session = await activeSessionRef.get();
+    session = await activeSessionRef.get();
     if (!session.exists || session.data()?.submitted === true) {
       const requiredExamQuestions = selectRequiredQuestionSet(course.exam.questions, Math.min(30, course.exam.questions.length));
       if (!requiredExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet. The course content needs to be completed before assessment.' });
