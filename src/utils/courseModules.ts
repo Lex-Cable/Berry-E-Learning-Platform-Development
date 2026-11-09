@@ -14,22 +14,21 @@ export function getCourseModules(course: Course): CourseModule[] {
       .sort((a, b) => a.order - b.order);
   }
   if (course.chapters.length === 0) return [];
-  return [{
-    id: `module-${course.id}-1`,
-    courseId: course.id,
-    title: 'Course Module 1',
-    order: 1,
-    description: 'Legacy curriculum module containing the course chapters already in the catalogue.',
-    chapterIds: course.chapters.map((chapter) => chapter.id),
-    examination: {
-      id: `module-exam-${course.id}-1`,
-      title: 'Module 1 Examination',
-      passingScorePercent: 60,
-      durationMinutes: 60,
-      questionCount: 20,
-      maximumAttempts: 2,
-    },
-  }];
+  const orderedChapters = [...course.chapters].sort((left, right) => left.order - right.order);
+  const chaptersPerLegacyModule = 3;
+  return Array.from({ length: Math.ceil(orderedChapters.length / chaptersPerLegacyModule) }, (_, index) => {
+    const grouped = orderedChapters.slice(index * chaptersPerLegacyModule, (index + 1) * chaptersPerLegacyModule);
+    const first = grouped[0];
+    const last = grouped[grouped.length - 1];
+    const rangeTitle = first.id === last.id ? first.title : `${first.title} – ${last.title}`;
+    const moduleId = `module-${course.id}-${first.id}`;
+    return {
+      id: moduleId, courseId: course.id, title: `Module ${index + 1}: ${rangeTitle}`, order: index + 1,
+      description: `Backward-compatible module grouping for chapters ${grouped.map((chapter) => chapter.order).join(', ')}. Existing chapter and lesson records remain unchanged.`,
+      chapterIds: grouped.map((chapter) => chapter.id),
+      examination: { id: `module-exam-${moduleId}`, title: `Module ${index + 1} Examination`, passingScorePercent: 60, durationMinutes: 60, questionCount: 20, maximumAttempts: 2 },
+    };
+  });
 }
 
 export function getModuleChapters(course: Course, module: CourseModule): Chapter[] {
