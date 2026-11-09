@@ -709,20 +709,10 @@ export default function App() {
       // Check trusted progress before asking the issuer to create a credential.
       // Exam completion alone is not certificate eligibility, and attempting
       // issuance early produced noisy 409 responses for otherwise valid learners.
-      const status = await getCourseStatus(course.id);
-      const requiredAssignments = buildCourseAssignments([course]);
-      const trustedAssignments = status.assignments as Record<string, { status?: string; scorePercent?: number }>;
-      const assignmentsComplete = requiredAssignments.length > 0 && requiredAssignments.every((assignment) => {
-        const saved = trustedAssignments[assignment.id];
-        return saved?.status === 'graded' && Number(saved.scorePercent) >= 50;
-      });
-      const requirementsComplete =
-        status.courseCompleted &&
-        status.courseMasteryPercent >= 75 &&
-        status.examPassed &&
-        assignmentsComplete;
-      if (!requirementsComplete) return;
-
+      // The trusted issuer is the sole authority for certificate eligibility.
+      // Do not duplicate its requirements in the browser: stale local state or
+      // a stricter client-only check previously prevented valid learners from
+      // ever requesting an otherwise eligible certificate.
       const result = await issueTrustedCertificate(course.id);
       setCertificates((prev) => [result.certificate, ...prev.filter((item) => item.credentialId !== result.certificate.credentialId)]);
       const newNotif: AppNotification = {
@@ -763,6 +753,10 @@ export default function App() {
     setNotifications((prev) => [attemptNotification, ...prev]);
     const uid = firebaseAuth?.currentUser?.uid;
     if (uid) void saveLearnerNotification(uid, attemptNotification).catch(() => undefined);
+    // A passed final exam may be the last requirement. Ask the trusted issuer
+    // to evaluate the complete server-side record; it will decline safely if
+    // chapters, assignments, module exams or the overall grade are outstanding.
+    if (record.passed) void handleClaimCertificate(course, record.scorePercent);
   };
 
   // Enroll in course
