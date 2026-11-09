@@ -75,6 +75,17 @@ async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, 
   const index = lessons.findIndex((lesson) => lesson.id === lessonId);
   if (index < 0) return false;
   if (index === 0) return true;
+  const modules = getCourseModules(course);
+  const currentModuleIndex = modules.findIndex((module) => getModuleChapters(course, module).some((chapter) => chapter.lessons.some((lesson) => lesson.id === lessonId)));
+  if (currentModuleIndex > 0) {
+    const currentModule = modules[currentModuleIndex];
+    const firstModuleLesson = getModuleChapters(course, currentModule).flatMap((chapter) => chapter.lessons)[0];
+    if (firstModuleLesson?.id === lessonId) {
+      const previousModule = modules[currentModuleIndex - 1];
+      const previousModuleAttempts = await cycleRef(uid, course.id, cycle).collection('moduleExamAttempts').where('moduleId', '==', previousModule.id).get();
+      if (!previousModuleAttempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= 60)) return false;
+    }
+  }
   const previous = lessons[index - 1];
   const cycleDocument = cycleRef(uid, course.id, cycle);
   const [progress, assignment] = await Promise.all([
@@ -489,6 +500,11 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     const { course, uid } = context;
     if (!course.exam) return res.status(404).json({ error: 'No final exam is available.' });
     const cycle = await ensureCycle(uid, course.id);
+    const moduleRequirements = await Promise.all(getCourseModules(course).map(async (module) => {
+      const attempts = await cycleRef(uid, course.id, cycle).collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+      return attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= Math.max(60, module.examination?.passingScorePercent || 60));
+    }));
+    if (!moduleRequirements.every(Boolean)) return res.status(409).json({ error: 'Complete and pass every module examination before starting the final course examination.' });
     const cycleDocument = cycleRef(uid, course.id, cycle);
     const sessionCollection = cycleDocument.collection('examSessions');
     const existingAttempt = await cycleDocument.collection('examAttempts').limit(1).get();
@@ -539,6 +555,11 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     const { course, uid } = context;
     if (!course.exam) return res.status(404).json({ error: 'No final exam is available.' });
     const cycle = await ensureCycle(uid, course.id);
+    const moduleRequirements = await Promise.all(getCourseModules(course).map(async (module) => {
+      const attempts = await cycleRef(uid, course.id, cycle).collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+      return attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= Math.max(60, module.examination?.passingScorePercent || 60));
+    }));
+    if (!moduleRequirements.every(Boolean)) return res.status(409).json({ error: 'All module examinations must be passed before final examination submission.' });
     const cycleDocument = cycleRef(uid, course.id, cycle);
     const session = await cycleDocument.collection('examSessions').doc('active').get();
     const questionIds = session.data()?.questionIds;
