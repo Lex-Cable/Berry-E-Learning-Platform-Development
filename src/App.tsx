@@ -662,6 +662,22 @@ export default function App() {
     }
   };
 
+  // A full retake starts a fresh active-cycle workspace. Historical attempts remain
+  // in Firestore under their original cycle; only the device-level current-state
+  // projections are cleared so old assignment drafts/marks cannot leak forward.
+  const handleCourseRetakeStarted = (courseId: string) => {
+    const course = courses.find((item) => item.id === courseId);
+    if (!course) return;
+    const lessonIds = new Set(course.chapters.flatMap((chapter) => chapter.lessons.map((lesson) => lesson.id)));
+    const assignmentIds = new Set(buildCourseAssignments([course]).map((assignment) => assignment.id));
+    setAssignmentSubmissions((current) => Object.fromEntries(
+      Object.entries(current).filter(([id]) => !assignmentIds.has(id)),
+    ));
+    setMasteryRecords((current) => Object.fromEntries(
+      Object.entries(current).filter(([lessonId]) => !lessonIds.has(lessonId)),
+    ));
+  };
+
   // Open a specific course from Explore Courses in the learner's own learning workspace.
   const handleOpenCourse = (course: Course) => {
     setActiveCourse(course);
@@ -1208,6 +1224,7 @@ export default function App() {
               onNavigateToCertificates={() => handleNavigate('certifications')}
               onNavigateToCourses={() => handleNavigate('courses')}
               onClaimCertificate={handleClaimCertificate}
+              onCourseRetakeStarted={handleCourseRetakeStarted}
               onExamAttemptSubmitted={handleExamAttemptSubmitted}
               examAttempts={examAttempts.filter((attempt) => attempt.courseId === (learningTargetCourseId ?? ''))}
             />
