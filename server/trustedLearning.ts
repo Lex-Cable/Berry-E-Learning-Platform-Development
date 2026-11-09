@@ -10,7 +10,7 @@ import { INTERNATIONAL_STARTER_COURSES } from '../src/data/internationalStarterC
 import { buildCourseAssignments, markAssignmentSubmission } from '../src/utils/assignments';
 import { withInteractivePractice } from '../src/utils/interactiveActivities';
 import { withCompleteAssessmentBanks } from '../src/utils/assessmentQuestionBank';
-import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, selectRequiredQuestionSet, summarizeCourseProgress } from './trustedLearningLogic';
+import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, selectRequiredQuestionSet, summarizeCourseProgress, calculateWeightedAcademicGrade, classifyAcademicGrade } from './trustedLearningLogic';
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
 import { getCourseModules, getModuleChapters } from '../src/utils/courseModules';
 
@@ -753,7 +753,29 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const progressRecords = progress.docs.map((doc) => doc.data());
     const summary = summarizeCourseProgress(progressRecords, totalLessons);
     const { courseMasteryPercent, courseCompleted } = summary;
+    const assignmentsList = assignments.docs.map((doc) => doc.data());
+    const passedModuleScores = new Map<string, number>();
+    for (const record of moduleExamAttemptsSnapshot.docs.map((doc) => doc.data())) {
+      if (record.passed === true && Number(record.scorePercent) >= 60) passedModuleScores.set(String(record.moduleId), Math.max(passedModuleScores.get(String(record.moduleId)) ?? 0, Number(record.scorePercent)));
+    }
+    const chapterScores = progressRecords.map((record) => Number(record.scorePercent)).filter(Number.isFinite);
+    const assignmentScores = assignmentsList.filter((record) => record.status === 'graded' && Number.isFinite(Number(record.scorePercent))).map((record) => Number(record.scorePercent));
+    const moduleScores = Array.from(passedModuleScores.values());
+    const finalScore = cycleSnapshot.data()?.examPassed === true ? Number(cycleSnapshot.data()?.examScorePercent) : null;
+    const componentsComplete = chapterScores.length === totalLessons && assignmentScores.length >= TRUSTED_ASSIGNMENTS.filter((assignment) => assignment.courseId === course.id).length && moduleScores.length === getCourseModules(course).length && finalScore !== null;
+    const weighted = componentsComplete ? calculateWeightedAcademicGrade({ chapterAssessmentPercent: chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length, assignmentPercent: assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length, moduleExaminationPercent: moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length, finalExaminationPercent: finalScore as number }) : null;
+    const grade = weighted === null ? null : classifyAcademicGrade(weighted);
+    const componentPass = chapterScores.length === totalLessons && chapterScores.every((score) => score >= 70) && assignmentScores.length >= TRUSTED_ASSIGNMENTS.filter((assignment) => assignment.courseId === course.id).length && assignmentScores.every((score) => score >= 50) && moduleScores.length === getCourseModules(course).length && moduleScores.every((score) => score >= 60) && finalScore !== null && finalScore >= 50;
+    const academicGrade = grade ? { ...grade, passed: componentPass && grade.percentage >= 60, componentsComplete, chapterAssessmentPercent: chapterScores.length ? chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length : null, assignmentPercent: assignmentScores.length ? assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length : null, moduleExaminationPercent: moduleScores.length ? moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length : null, finalExaminationPercent: finalScore } : { percentage: 0, grade: 'F' as const, classification: 'Not passed', passed: false, componentsComplete: false, chapterAssessmentPercent: null, assignmentPercent: null, moduleExaminationPercent: null, finalExaminationPercent: finalScore };
+    const assessmentHistory = [
+      ...lessonAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'chapter_assessment', title: String(d.lessonId || 'Chapter assessment'), submittedAt: String(d.submittedAt || ''), scorePercent: Number(d.scorePercent)||0, passed: Number(d.scorePercent)>=70, attemptNumber: Number(d.attemptNumber)||undefined }; }),
+      ...assignmentsList.map((d) => ({ id: String(d.assignmentId), type: 'assignment', title: String(d.assignmentId), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.status==='graded' && Number(d.scorePercent)>=50, attemptNumber: Number(d.attemptNumber)||undefined })),
+      ...moduleExamAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'module_examination', title: String(d.moduleId||'Module examination'), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.passed===true && Number(d.scorePercent)>=60, attemptNumber: Number(d.attemptNumber)||undefined }; }),
+      ...examHistory.map((d) => ({ id: String(d.id||'final-exam'), type: 'final_examination', title: course.exam?.title || 'Final examination', submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.passed===true, attemptNumber: 1 })),
+    ].sort((a,b)=>a.submittedAt.localeCompare(b.submittedAt));
     return res.json({
+      academicGrade,
+      assessmentHistory,
       cycle,
       courseCompleted,
       courseMasteryPercent,
