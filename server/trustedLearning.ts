@@ -1079,6 +1079,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
       certificate,
       totalLessons,
       approvedAssignmentCount: requiredAssignments.length,
+      approvedChapterCount: course.chapters.length,
       approvedModuleCount,
       weights: course.assessmentWeights,
       cycle,
