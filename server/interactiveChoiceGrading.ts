@@ -6,7 +6,7 @@ export interface InteractiveChoiceOption {
 
 function normalizeChoiceLabel(value: unknown): string {
   return typeof value === 'string'
-    ? value.normalize('NFKC').toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim()
+    ? value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
     : '';
 }
 
