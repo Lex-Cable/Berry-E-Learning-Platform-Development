@@ -656,6 +656,7 @@ router.post('/api/learning/courses/:courseId/retake', requireFirebaseAuth, async
     if (!context) return;
     const { course, uid } = context;
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
+    const assignmentAttemptSnapshots = await Promise.all(assignments.docs.map((document) => document.ref.collection('attempts').get()));
     if (totalLessons === 0) return res.status(409).json({ error: 'This course has no lessons to retake.' });
     const stateRef = adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id);
     const nextCycle = await adminDb!.runTransaction(async (transaction) => {
@@ -795,7 +796,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const academicGrade = grade ? { ...grade, passed: componentPass && grade.percentage >= 60, componentsComplete, chapterAssessmentPercent: chapterScores.length ? chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length : null, assignmentPercent: assignmentScores.length ? assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length : null, moduleExaminationPercent: moduleScores.length ? moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length : null, finalExaminationPercent: finalScore } : { percentage: 0, grade: 'F' as const, classification: 'Not passed', passed: false, componentsComplete: false, chapterAssessmentPercent: null, assignmentPercent: null, moduleExaminationPercent: null, finalExaminationPercent: finalScore };
     const assessmentHistory = [
       ...lessonAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'chapter_assessment', title: String(d.lessonId || 'Chapter assessment'), submittedAt: String(d.submittedAt || ''), scorePercent: Number(d.scorePercent)||0, passed: Number(d.scorePercent)>=70, attemptNumber: Number(d.attemptNumber)||undefined }; }),
-      ...assignmentsList.map((d) => ({ id: String(d.assignmentId), type: 'assignment', title: String(d.assignmentId), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.status==='graded' && Number(d.scorePercent)>=50, attemptNumber: Number(d.attemptNumber)||undefined })),
+      ...assignmentAttemptSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'assignment', title: String(d.assignmentId || 'Assignment'), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.status==='graded' && Number(d.scorePercent)>=50, attemptNumber: Number(d.attemptNumber)||undefined }; })),
       ...moduleExamAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'module_examination', title: String(d.moduleId||'Module examination'), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.passed===true && Number(d.scorePercent)>=60, attemptNumber: Number(d.attemptNumber)||undefined }; }),
       ...examHistory.map((d) => ({ id: String(d.id||'final-exam'), type: 'final_examination', title: course.exam?.title || 'Final examination', submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.passed===true, attemptNumber: 1 })),
     ].sort((a,b)=>a.submittedAt.localeCompare(b.submittedAt));
