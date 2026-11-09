@@ -89,9 +89,9 @@ export const COURSES: Course[] = [
                 instructions: 'Look at the picture: 🦓🦓. How many zebras are smiling at you?',
                 data: {
                   choices: [
-                    { id: 'z1', label: '1 Zebra' },
-                    { id: 'z2', label: '2 Zebras ⭐' },
-                    { id: 'z3', label: '3 Zebras' },
+                    { id: 'z1', label: '1 Zebra', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
+                    { id: 'z2', label: '2 Zebras ⭐', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'z3', label: '3 Zebras', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -173,8 +173,8 @@ export const COURSES: Course[] = [
                 instructions: 'Which word starts with the sound /a/?',
                 data: {
                   choices: [
-                    { id: 'a1', label: 'Apple 🍎' },
-                    { id: 'a2', label: 'Cat 🐱' },
+                    { id: 'a1', label: 'Apple 🍎', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'a2', label: 'Cat 🐱', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -249,8 +249,8 @@ export const COURSES: Course[] = [
                 instructions: 'Which farm animal gives us nutritious fresh milk to drink?',
                 data: {
                   choices: [
-                    { id: 'c1', label: 'The Cow 🐄' },
-                    { id: 'c2', label: 'The Lion 🦁' },
+                    { id: 'c1', label: 'The Cow 🐄', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'c2', label: 'The Lion 🦁', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -369,9 +369,9 @@ export const COURSES: Course[] = [
                 instructions: 'Look at your hand. How many fingers do you have on one hand?',
                 data: {
                   choices: [
-                    { id: 'c1', label: '3 Fingers' },
-                    { id: 'c2', label: '5 Fingers' },
-                    { id: 'c3', label: '4 Fingers' },
+                    { id: 'c1', label: '3 Fingers', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
+                    { id: 'c2', label: '5 Fingers', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'c3', label: '4 Fingers', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -464,8 +464,8 @@ export const COURSES: Course[] = [
                 instructions: 'What do you say when the sun comes up at 7:00 AM?',
                 data: {
                   choices: [
-                    { id: 'g1', label: 'Good morning! ☀️' },
-                    { id: 'g2', label: 'Good night! 🌙' },
+                    { id: 'g1', label: 'Good morning! ☀️', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'g2', label: 'Good night! 🌙', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -636,8 +636,8 @@ export const COURSES: Course[] = [
                 instructions: 'Which tool is used to test if an edge is exactly at a 90-degree angle?',
                 data: {
                   choices: [
-                    { id: 't1', label: 'Try Square' },
-                    { id: 't2', label: 'Crosscut Saw' },
+                    { id: 't1', label: 'Try Square', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 't2', label: 'Crosscut Saw', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -722,9 +722,9 @@ export const COURSES: Course[] = [
                 instructions: 'Magnesium has atomic number 12. What is its electronic configuration?',
                 data: {
                   choices: [
-                    { id: 'ch1', label: '2.8.2' },
-                    { id: 'ch2', label: '2.10' },
-                    { id: 'ch3', label: '2.8.1.1' },
+                    { id: 'ch1', label: '2.8.2', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'ch2', label: '2.10', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
+                    { id: 'ch3', label: '2.8.1.1', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -812,8 +812,8 @@ export const COURSES: Course[] = [
                 instructions: 'A company has total assets of KES 500,000 and total liabilities of KES 200,000. What is owner capital?',
                 data: {
                   choices: [
-                    { id: 'bc1', label: 'KES 300,000' },
-                    { id: 'bc2', label: 'KES 700,000' },
+                    { id: 'bc1', label: 'KES 300,000', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'bc2', label: 'KES 700,000', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -889,8 +889,8 @@ export const COURSES: Course[] = [
                 instructions: 'Which energy system powers a 42km marathon runner across 2+ hours?',
                 data: {
                   choices: [
-                    { id: 'sc1', label: 'Aerobic System' },
-                    { id: 'sc2', label: 'ATP-PC System' },
+                    { id: 'sc1', label: 'Aerobic System', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'sc2', label: 'ATP-PC System', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -978,8 +978,8 @@ export const COURSES: Course[] = [
                 instructions: 'Merge sort has recurrence $T(n) = 2T(n/2) + O(n)$. What is its complexity via Master Theorem?',
                 data: {
                   choices: [
-                    { id: 'ms1', label: 'O(n log n)' },
-                    { id: 'ms2', label: 'O(n^2)' },
+                    { id: 'ms1', label: 'O(n log n)', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'ms2', label: 'O(n^2)', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
@@ -1059,8 +1059,8 @@ export const COURSES: Course[] = [
                 instructions: 'A hospital model predicts whether a tumor is malignant. A missed malignant tumor is catastrophic. Which metric must you maximize?',
                 data: {
                   choices: [
-                    { id: 'm1', label: 'Recall (Sensitivity)' },
-                    { id: 'm2', label: 'Precision' },
+                    { id: 'm1', label: 'Recall (Sensitivity)', isCorrect: true, feedback: 'Correct. Well done!' },
+                    { id: 'm2', label: 'Precision', isCorrect: false, feedback: 'Not quite. Review the lesson and try again.' },
                   ],
                 },
               },
