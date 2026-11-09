@@ -53,59 +53,40 @@ function asMastery(seed: Seed, lesson: Lesson, index: number): QuizQuestion {
  */
 export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
   return courses.map((course) => {
-    const lessons = course.chapters.flatMap((chapter) => chapter.lessons);
+    const usedPrompts = new Set<string>();
+    const finalSeeds: Seed[] = (course.exam?.questions || []).map((q) => ({
+      id: q.id, question: q.question, options: q.options, correctIndex: q.correctIndex,
+      explanation: q.explanation || `This assesses ${q.topic || course.title}.`, topic: q.topic || course.title,
+    })).filter((seed) => seed.options.length >= 2 && seed.correctIndex >= 0 && seed.correctIndex < seed.options.length)
+      .filter((seed) => { const key = normalizeQuestion(seed.question); if (usedPrompts.has(key)) return false; usedPrompts.add(key); return true; });
     const chapters = course.chapters.map((chapter) => ({
       ...chapter,
       lessons: chapter.lessons.map((lesson) => {
-        const uniqueMasteryQuestions = lesson.quizQuestions
-          .filter((seed) => seed.options.length >= 2 &&
-            seed.correctIndex >= 0 && seed.correctIndex < seed.options.length &&
-            seed.options.every((option) => Boolean(option?.trim())))
-          .filter((seed, index, all) => all.findIndex((candidate) =>
-            normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)
-          ) === index)
-          .slice(0, 10);
+        const sourceSeeds = [...lesson.quizQuestions.map((q) => ({ id: q.id, question: q.question, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation, topic: q.learningObjective || lesson.title })), ...seedsForLesson({ ...lesson, quizQuestions: [] })];
+        const uniqueSeeds = sourceSeeds.filter((seed) => seed.options.length >= 2 && seed.correctIndex >= 0 && seed.correctIndex < seed.options.length && seed.options.every((option) => Boolean(option?.trim())))
+          .filter((seed, index, all) => all.findIndex((candidate) => normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)) === index)
+          .filter((seed) => { const key = normalizeQuestion(seed.question); if (usedPrompts.has(key)) return false; usedPrompts.add(key); return true; });
+        const masteryCount = uniqueSeeds.length <= 1 ? uniqueSeeds.length : Math.min(10, Math.ceil(uniqueSeeds.length / 2));
+        const masterySeeds = uniqueSeeds.slice(0, masteryCount);
+        const moduleSeeds = uniqueSeeds.slice(masteryCount);
         return {
           ...lesson,
-          quizQuestions: uniqueMasteryQuestions.map((seed, index) => asMastery({
-            id: seed.id,
-            question: seed.question,
-            options: seed.options,
-            correctIndex: seed.correctIndex,
-            explanation: seed.explanation || `Review the lesson objective: ${seed.learningObjective || lesson.title}.`,
-            topic: seed.learningObjective || lesson.title,
-          }, lesson, index)),
+          quizQuestions: masterySeeds.map((seed, index) => asMastery(seed, lesson, index)),
+          moduleExamQuestions: moduleSeeds.map((seed, index) => asMastery(seed, lesson, index + masteryCount)),
         };
       }),
     }));
-    const examSeeds: Seed[] = (course.exam?.questions || []).map((q) => ({
-      id: q.id, question: q.question, options: q.options, correctIndex: q.correctIndex,
-      explanation: q.explanation || `This assesses ${q.topic || course.title}.`, topic: q.topic || course.title,
+    const questions: ExamQuestion[] = finalSeeds.slice(0, 30).map((seed, index) => ({
+      id: `bank-${course.id}-final-${index + 1}`, question: seed.question.trim(), options: [...seed.options],
+      correctIndex: seed.correctIndex, explanation: seed.explanation, topic: seed.topic,
     }));
-    for (const lesson of lessons) examSeeds.push(...seedsForLesson(lesson));
-    const valid = examSeeds.filter((s) => s.options.length >= 2 && s.correctIndex >= 0 && s.correctIndex < s.options.length)
-      .filter((seed, index, all) => all.findIndex((candidate) =>
-        normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)
-      ) === index);
-    const questions: ExamQuestion[] = valid.length
-      ? valid.slice(0, 30).map((seed, index) => {
-          return {
-            id: `bank-${course.id}-exam-${index + 1}`,
-            question: seed.question,
-            options: [...seed.options], correctIndex: seed.correctIndex,
-            explanation: seed.explanation, topic: seed.topic,
-          };
-        })
-      : [];
     return {
       ...course, chapters,
       exam: {
-        id: course.exam?.id || `exam-${course.id}`,
-        courseId: course.id,
+        id: course.exam?.id || `exam-${course.id}`, courseId: course.id,
         title: course.exam?.title || `${course.title} Final Examination`,
-        passingScorePercent: course.exam?.passingScorePercent || 75,
-        durationMinutes: 60,
-        questions,
+        passingScorePercent: course.exam?.passingScorePercent || 50,
+        durationMinutes: 60, questions,
       },
     };
   });
