@@ -41,6 +41,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Find current enrolled courses
   const enrolled = courses.filter((c) => learner.enrolledCourseIds.includes(c.id));
   const activeCourse = enrolled[0] || courses[0];
+  const activeCourseLessons = activeCourse?.chapters.flatMap((chapter) => chapter.lessons) || [];
+  const resumeLesson = activeCourseLessons.find((lesson) => masteryRecords[lesson.id]?.isCompleted !== true) || activeCourseLessons[0];
+  const courseCompletionPercent = (course: Course) => {
+    const lessons = course.chapters.flatMap((chapter) => chapter.lessons);
+    return lessons.length ? Math.round((lessons.filter((lesson) => masteryRecords[lesson.id]?.isCompleted === true).length / lessons.length) * 100) : 0;
+  };
 
   // Stage theme variations
   const stageBannerStylesMap: Record<
@@ -120,8 +126,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-6 flex flex-wrap items-center gap-4">
             <button
               onClick={() => {
-                if (activeCourse && activeCourse.chapters[0]?.lessons[0]) {
-                  onOpenLesson(activeCourse, activeCourse.chapters[0].lessons[0].id);
+                if (activeCourse && resumeLesson) {
+                  onOpenLesson(activeCourse, resumeLesson.id);
                 }
               }}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-sm shadow hover:bg-slate-50 transition-all active:scale-95"
@@ -177,8 +183,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <div className="space-y-4">
               {enrolled.map((course) => {
-                const firstLesson = course.chapters[0]?.lessons[0];
+                const courseLessons = course.chapters.flatMap((chapter) => chapter.lessons);
+                const firstLesson = courseLessons.find((lesson) => masteryRecords[lesson.id]?.isCompleted !== true) || courseLessons[0];
                 const lessonMastery = firstLesson ? masteryRecords[firstLesson.id] : null;
+                const completionPercent = courseCompletionPercent(course);
 
                 return (
                   <div
@@ -201,6 +209,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
 
                     <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                      <div className="w-full sm:w-28 space-y-1"><div className="flex justify-between text-[10px] text-slate-500"><span>Course progress</span><strong>{completionPercent}%</strong></div><div className="h-1.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full rounded-full bg-purple-600" style={{ width: `${completionPercent}%` }}/></div></div>
                       {lessonMastery?.isMastered ? (
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                           <CheckCircle2 size={14} />
