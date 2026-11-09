@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Course, Lesson, QuizQuestion, LessonMasteryState } from '../../types';
 import { evaluateMastery } from '../../utils/mastery';
-import { getLessonAssessment, submitLessonAssessment } from '../../services/assessments';
+import { getLessonAssessment, submitLessonAssessment, submitInteractiveActivity } from '../../services/assessments';
 import { loadLessonNotes, saveLessonNotes } from '../../services/learningProgress';
 import { firebaseAuth } from '../../lib/firebase';
 
@@ -31,8 +31,13 @@ interface LessonViewProps {
   onNavigateLesson: (nextLessonId: string) => void;
   onBackToCourse: () => void;
   masteryRecord?: LessonMasteryState;
+  savedActivityResults?: Record<string, { scorePercent: number; passed: boolean; feedback: string; answer?: { pairs?: Record<string, string>; order?: string[]; response?: string; choiceId?: string } }>;
+  savedMasteryAnswers?: Record<string, number>;
+  savedMasteryResults?: Record<string, { correct: boolean; correctAnswerIndex?: number; feedback?: string }>;
+  savedMasterySubmitted?: boolean;
   onSaveMastery: (record: LessonMasteryState) => void;
   userId?: string;
+  canAdvanceToNextLesson?: boolean;
 }
 
 export const LessonView: React.FC<LessonViewProps> = ({
@@ -41,8 +46,13 @@ export const LessonView: React.FC<LessonViewProps> = ({
   onNavigateLesson,
   onBackToCourse,
   masteryRecord,
+  savedActivityResults = {},
+  savedMasteryAnswers = {},
+  savedMasteryResults = {},
+  savedMasterySubmitted = false,
   onSaveMastery,
   userId,
+  canAdvanceToNextLesson = false,
 }) => {
   // Find current lesson and chapter
   let currentLesson: Lesson | undefined;
@@ -103,6 +113,24 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [matchedPairs, setMatchedPairs] = useState<Record<string, string>>({});
   const [matchingFeedback, setMatchingFeedback] = useState<string | null>(null);
+  const [activityAnswers, setActivityAnswers] = useState<Record<string, string>>({});
+  const [activityTextResponses, setActivityTextResponses] = useState<Record<string, string>>({});
+  const [activityOrder, setActivityOrder] = useState<Record<string, string[]>>({});
+  const [activityFeedback, setActivityFeedback] = useState<Record<string, string>>({});
+  const [activitySubmitting, setActivitySubmitting] = useState<Record<string, boolean>>({});
+  const [activityDraftLoadedKey, setActivityDraftLoadedKey] = useState<string | null>(null);
+  const [masteryDraftLoadedKey, setMasteryDraftLoadedKey] = useState<string | null>(null);
+  const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
+  const [liveActivityScores, setLiveActivityScores] = useState<Record<string, number>>({});
+  const activityScores = { ...Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, result.scorePercent])), ...liveActivityScores };
+  const currentActivities = currentLesson?.activities ?? [];
+  const activityPracticeReady = currentActivities.length === 0 || (
+    currentActivities.every((activity) => Object.prototype.hasOwnProperty.call(activityScores, activity.id)) &&
+    currentActivities.reduce((total, activity) => total + (activityScores[activity.id] || 0), 0) / currentActivities.length >= 80
+  );
+  const savedActivityResultsKey = JSON.stringify(savedActivityResults);
+  const savedMasteryAnswersKey = JSON.stringify(savedMasteryAnswers);
+  const savedMasteryResultsKey = JSON.stringify(savedMasteryResults);
 
   // Quiz state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
@@ -123,17 +151,103 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setMatchingFeedback(null);
     setSelectedAnswers({});
     setSubmittedQuiz(false);
+    setActivitySubmissionResults((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])) }));
+    setLiveActivityScores({});
+    setMatchedPairs((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([, result]) => result.answer?.pairs ? Object.entries(result.answer.pairs) : [])) }));
+    setActivityAnswers((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.choiceId ? [[id, result.answer.choiceId]] : [])) }));
+    setActivityTextResponses((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => typeof result.answer?.response === 'string' ? [[id, result.answer.response]] : [])) }));
+    setActivityOrder((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.order ? [[id, result.answer.order]] : [])) }));
     setQuizScore(masteryRecord?.scorePercent || 0);
-  }, [lessonId]);
+    setQuizResults(savedMasteryResults);
+    setSubmittedQuiz(savedMasterySubmitted);
+  }, [lessonId, savedActivityResultsKey, masteryRecord?.scorePercent, savedMasteryAnswersKey, savedMasteryResultsKey, savedMasterySubmitted]);
+
+  useEffect(() => {
+    const key = `berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`;
+    setMasteryDraftLoadedKey(null);
+    try {
+      const raw = localStorage.getItem(key);
+      const draft = raw ? JSON.parse(raw) as Record<string, number> : {};
+      setSelectedAnswers((previous) => savedMasterySubmitted
+        ? ({ ...draft, ...previous, ...savedMasteryAnswers })
+        : ({ ...draft, ...savedMasteryAnswers, ...previous }));
+    } catch {
+      setSelectedAnswers((previous) => savedMasterySubmitted
+        ? ({ ...previous, ...savedMasteryAnswers })
+        : ({ ...savedMasteryAnswers, ...previous }));
+    } finally {
+      setMasteryDraftLoadedKey(key);
+    }
+  }, [course.id, lessonId, userId, savedMasteryAnswersKey, savedMasterySubmitted]);
+
+  useEffect(() => {
+    const key = `berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`;
+    if (masteryDraftLoadedKey !== key || submittedQuiz) return;
+    try { localStorage.setItem(key, JSON.stringify(selectedAnswers)); } catch {
+      // The secure submission remains the source of truth if local drafts are unavailable.
+    }
+  }, [course.id, lessonId, userId, selectedAnswers, submittedQuiz, masteryDraftLoadedKey]);
 
   useEffect(() => {
     let cancelled = false;
-    setQuizLoading(true); setQuizError(null); setQuizQuestions([]);
+    setQuizQuestions([]);
+    if (!activityPracticeReady) {
+      setQuizLoading(false);
+      setQuizError(null);
+      return () => { cancelled = true; };
+    }
+    setQuizLoading(true); setQuizError(null);
     getLessonAssessment(course.id, lessonId).then((questions) => { if (!cancelled) setQuizQuestions(questions); })
       .catch((error) => { if (!cancelled) setQuizError(error instanceof Error ? error.message : 'Unable to load assessment.'); })
       .finally(() => { if (!cancelled) setQuizLoading(false); });
     return () => { cancelled = true; };
-  }, [course.id, lessonId]);
+  }, [course.id, lessonId, activityPracticeReady]);
+
+  // Keep hands-on responses on this device so learners can leave a lesson
+  // and return without losing an unfinished activity.
+  useEffect(() => {
+    const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
+    setActivityDraftLoadedKey(null);
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const state = JSON.parse(saved) as {
+          answers?: Record<string, string>;
+          textResponses?: Record<string, string>;
+          order?: Record<string, string[]>;
+          matchedPairs?: Record<string, string>;
+        };
+        setActivityAnswers(state.answers || {});
+        setActivityTextResponses(state.textResponses || {});
+        setActivityOrder(state.order || {});
+        setMatchedPairs(state.matchedPairs || {});
+      } else {
+        setActivityAnswers({});
+        setActivityTextResponses({});
+        setActivityOrder({});
+        setMatchedPairs({});
+      }
+    } catch {
+      // A corrupt or unavailable local cache must not block the activity.
+    } finally {
+      setActivityDraftLoadedKey(key);
+    }
+  }, [lessonId, userId]);
+
+  useEffect(() => {
+    const key = `berry_activity_${userId || 'guest'}_${lessonId}`;
+    if (activityDraftLoadedKey !== key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        answers: activityAnswers,
+        textResponses: activityTextResponses,
+        order: activityOrder,
+        matchedPairs,
+      }));
+    } catch {
+      // Activity remains usable when browser storage is unavailable.
+    }
+  }, [activityDraftLoadedKey, lessonId, userId, activityAnswers, activityTextResponses, activityOrder, matchedPairs]);
 
   // Find next lesson if available
   const allLessons: Lesson[] = course.chapters.flatMap((c) => c.lessons);
@@ -169,15 +283,78 @@ export const LessonView: React.FC<LessonViewProps> = ({
   };
 
   const handleRightClick = (rightText: string) => {
-    if (!selectedLeft) return;
+    if (!selectedLeft) {
+      setMatchingFeedback('Choose a concept on the left first, then choose its matching definition.');
+      return;
+    }
     const activity = currentLesson?.activities.find((a) => a.type === 'matching');
-    const pair = activity?.data.matchingPairs?.find((p) => p.id === selectedLeft);
-
-    if (pair) {
-      setMatchedPairs((prev) => ({ ...prev, [selectedLeft]: rightText }));
-      setMatchingFeedback('Match selected. Your understanding will be checked in the secure assessment.');
+    const pair = activity?.data.matchingPairs?.find((item) => item.id === selectedLeft);
+    if (!pair) return;
+    if (pair.right && pair.right.trim().toLocaleLowerCase() === rightText.trim().toLocaleLowerCase()) {
+      setMatchedPairs((previous) => ({ ...previous, [selectedLeft]: rightText }));
+      setMatchingFeedback('Correct match. Well done!');
+    } else {
+      setMatchingFeedback('Not quite. Review the concept and try a different definition.');
     }
     setSelectedLeft(null);
+  };
+
+  const handleActivityChoice = (activityId: string, choice: { id: string; label: string; isCorrect: boolean; feedback: string }) => {
+    setActivityAnswers((previous) => ({ ...previous, [activityId]: choice.id }));
+    setActivityFeedback((previous) => ({
+      ...previous,
+      [activityId]: choice.feedback || (choice.isCorrect ? 'Correct. Well done!' : 'Not quite. Review the lesson and try again.'),
+    }));
+  };
+
+  const handleSubmitInteractiveActivity = async (activity: Lesson['activities'][number]) => {
+    setActivitySubmitting((previous) => ({ ...previous, [activity.id]: true }));
+    setActivitySubmissionResults((previous) => ({ ...previous, [activity.id]: '' }));
+    try {
+      let answer: { pairs: Record<string, string> } | { order: string[] } | { response: string } | { choiceId: string };
+      if (activity.type === 'matching') {
+        answer = { pairs: Object.fromEntries((activity.data.matchingPairs || []).map((pair) => [pair.id, matchedPairs[pair.id] || ''])) };
+      } else if (activity.type === 'ordering') {
+        answer = { order: activityOrder[activity.id] || [] };
+      } else if (activity.type === 'fill-blank') {
+        answer = { response: activityTextResponses[activity.id] || '' };
+      } else {
+        const selectedChoice = (activity.data.choices || []).find((choice) => choice.id === activityAnswers[activity.id]);
+        answer = { choiceId: activityAnswers[activity.id] || '', choiceLabel: selectedChoice?.label || '' } as typeof answer;
+      }
+      const result = await submitInteractiveActivity(course.id, lessonId, activity.id, answer);
+      setActivitySubmissionResults((previous) => ({
+        ...previous,
+        [activity.id]: result.submission.feedback + ` Interactive score: ${result.interactiveScorePercent}%.`,
+      }));
+      if (result.lessonCompleted) onSaveMastery(result.progress);
+      // Update the local projection from the trusted server response. The
+      // assessment loader reacts only when every activity is saved and the
+      // aggregate practice score reaches 80%, avoiding premature 409 requests.
+      setLiveActivityScores((previous) => ({ ...previous, [activity.id]: result.submission.scorePercent }));
+    } catch (error) {
+      setActivitySubmissionResults((previous) => ({
+        ...previous,
+        [activity.id]: error instanceof Error ? error.message : 'Unable to submit this activity.',
+      }));
+    } finally {
+      setActivitySubmitting((previous) => ({ ...previous, [activity.id]: false }));
+    }
+  };
+
+  const renderLessonNotes = (source: string) => {
+    const lines = source.split(/\r?\n/);
+    return lines.map((line, index) => {
+      const trimmed = line.trim();
+      if (!trimmed) return <div key={index} className="h-2" />;
+      if (/^#{1,3}\s/.test(trimmed)) {
+        return <h3 key={index} className="pt-2 text-lg font-extrabold tracking-tight text-slate-900">{trimmed.replace(/^#{1,3}\s*/, '')}</h3>;
+      }
+      if (/^[-*]\s/.test(trimmed)) {
+        return <div key={index} className="flex items-start gap-2 pl-2 text-sm leading-7 text-slate-700"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{trimmed.replace(/^[-*]\s*/, '').replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</span></div>;
+      }
+      return <p key={index} className="text-sm leading-7 text-slate-700">{trimmed.replace(/\*\*/g, '').replace(/\*/g, '').replace(/`/g, '')}</p>;
+    });
   };
 
   // Assessment scores and answer keys are evaluated by the authenticated server.
@@ -186,13 +363,15 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setQuizSubmitting(true); setQuizError(null);
     try {
       const result = await submitLessonAssessment(course.id, lessonId, selectedAnswers);
-      setQuizScore(result.scorePercent); setQuizResults(result.results); setSubmittedQuiz(true); onSaveMastery(result.progress);
+      setQuizScore(result.scorePercent); setQuizResults(result.results); setSubmittedQuiz(true);
+      try { localStorage.removeItem(`berry_mastery_draft_${userId || 'guest'}_${course.id}_${lessonId}`); } catch { /* optional draft cleanup */ }
+      onSaveMastery(result.progress);
     } catch (error) {
       setQuizError(error instanceof Error ? error.message : 'Assessment submission failed.');
     } finally { setQuizSubmitting(false); }
   };
 
-  const currentEval = evaluateMastery(quizScore, 75);
+  const currentEval = evaluateMastery(quizScore, currentLesson?.masteryThresholdPercent || 75);
 
   return (
     <div className="space-y-6 pb-16 max-w-5xl mx-auto">
@@ -367,11 +546,9 @@ export const LessonView: React.FC<LessonViewProps> = ({
       {activeTab === 'notes' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm space-y-4">
-            <div className="prose prose-slate max-w-none text-slate-800 text-sm leading-relaxed space-y-4">
-              <div className="whitespace-pre-line font-normal">
-                {currentLesson?.notesMarkdown}
-              </div>
-            </div>
+            <article className="max-w-none space-y-2 rounded-2xl bg-slate-50/70 p-5 md:p-6">
+              {renderLessonNotes(currentLesson?.notesMarkdown || 'Study notes for this lesson will be published soon.')}
+            </article>
 
             <div className="pt-6 border-t border-slate-100 flex justify-between items-center">
               <button
@@ -439,6 +616,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
             <p className="text-xs text-slate-500">
               Demonstrate your comprehension with practical matching, ordering, and concept verification.
             </p>
+            {(currentLesson?.activities.length || 0) < 5 && (
+              <p className="mt-2 text-xs text-amber-700">
+                This lesson currently has {currentLesson?.activities.length || 0} approved interactive tasks. More can be added when additional course-specific practice content is approved.
+              </p>
+            )}
           </div>
 
           {currentLesson?.activities.map((act) => (
@@ -501,20 +683,89 @@ export const LessonView: React.FC<LessonViewProps> = ({
                 </div>
               )}
 
+              {act.type === 'fill-blank' && act.data.fillBlankTemplate && (
+                <div className="space-y-3">
+                  <p className="rounded-xl bg-white p-3 text-sm leading-7 text-slate-700">{act.data.fillBlankTemplate}</p>
+                  <label className="block space-y-1 text-xs font-semibold text-slate-600">
+                    <span>Your answer</span>
+                    <input
+                      type="text"
+                      value={activityTextResponses[act.id] || ''}
+                      onChange={(event) => setActivityTextResponses((previous) => ({ ...previous, [act.id]: event.target.value }))}
+                      placeholder="Type your answer here"
+                      className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-normal text-slate-800 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+                    />
+                  </label>
+                  <button type="button" onClick={() => {
+                    const response = (activityTextResponses[act.id] || '').trim().toLocaleLowerCase();
+                    const accepted = (act.data.blankSolutions || []).some((answer) => answer.trim().toLocaleLowerCase() === response);
+                    setActivityFeedback((previous) => ({ ...previous, [act.id]: accepted ? 'Correct. Your answer matches the expected response.' : 'That answer does not match yet. Review the lesson and try again.' }));
+                  }} disabled={!activityTextResponses[act.id]?.trim()} className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Check answer</button>
+                  {activityFeedback[act.id] && <p role="status" className="text-xs text-slate-700">{activityFeedback[act.id]}</p>}
+                </div>
+              )}
+
+              {act.type === 'ordering' && act.data.orderingItems && (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-600">Select the items in the correct order. Tap an item to add it to your sequence.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {act.data.orderingItems.filter((item) => !(activityOrder[act.id] || []).includes(item.id)).map((item) => (
+                      <button key={item.id} type="button" onClick={() => setActivityOrder((previous) => ({ ...previous, [act.id]: [...(previous[act.id] || []), item.id] }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:border-purple-300">{item.text}</button>
+                    ))}
+                  </div>
+                  <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
+                    {(activityOrder[act.id] || []).map((id) => <li key={id}>{act.data.orderingItems?.find((item) => item.id === id)?.text}</li>)}
+                  </ol>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => {
+                      const chosen = activityOrder[act.id] || [];
+                      const expected = [...act.data.orderingItems!].sort((a, b) => a.correctOrder - b.correctOrder).map((item) => item.id);
+                      const correct = chosen.length === expected.length && chosen.every((id, index) => id === expected[index]);
+                      setActivityFeedback((previous) => ({ ...previous, [act.id]: correct ? 'Correct order. Well done!' : 'The order is not quite right. Rearrange the items and try again.' }));
+                    }} disabled={(activityOrder[act.id] || []).length !== act.data.orderingItems.length} className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Check order</button>
+                    <button type="button" onClick={() => { setActivityOrder((previous) => ({ ...previous, [act.id]: [] })); setActivityFeedback((previous) => ({ ...previous, [act.id]: '' })); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600">Reset</button>
+                  </div>
+                  {activityFeedback[act.id] && <p role="status" className="text-xs text-slate-700">{activityFeedback[act.id]}</p>}
+                </div>
+              )}
+
               {/* Multiple Choice interactive activity */}
               {act.type === 'interactive-choice' && act.data.choices && (
                 <div className="space-y-2">
-                  {act.data.choices.map((choice) => (
-                    <button
-                      key={choice.id}
-                      onClick={() => setMatchingFeedback('Option selected. Continue to the assessment to check your understanding.')}
-                      className="w-full text-left p-3 rounded-xl border border-slate-200 bg-white hover:bg-purple-50 hover:border-purple-300 text-xs font-semibold text-slate-800 transition-colors"
-                    >
-                      {choice.label}
-                    </button>
-                  ))}
+                  {act.data.choices.map((choice) => {
+                    const selected = activityAnswers[act.id] === choice.id;
+                    return (
+                      <button
+                        key={choice.id}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => handleActivityChoice(act.id, choice)}
+                        className={`w-full text-left p-3 rounded-xl border text-xs font-semibold transition-colors ${selected ? (choice.isCorrect ? 'border-emerald-400 bg-emerald-50 text-emerald-900' : 'border-amber-400 bg-amber-50 text-amber-900') : 'border-slate-200 bg-white text-slate-800 hover:bg-purple-50 hover:border-purple-300'}`}
+                      >
+                        {choice.label}
+                      </button>
+                    );
+                  })}
+                  {activityFeedback[act.id] && (
+                    <p role="status" aria-live="polite" className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-700">
+                      {activityFeedback[act.id]}
+                    </p>
+                  )}
                 </div>
               )}
+              <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleSubmitInteractiveActivity(act)}
+                  disabled={!!activitySubmitting[act.id]}
+                  className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {activitySubmitting[act.id] ? 'Checking and saving…' : 'Submit activity for scored review'}
+                </button>
+                {activitySubmissionResults[act.id] && (
+                  <p role="status" aria-live="polite" className="text-xs text-slate-700">{activitySubmissionResults[act.id]}</p>
+                )}
+              </div>
             </div>
           ))}
 
@@ -687,7 +938,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
                   <span>Re-take Assessment</span>
                 </button>
 
-                {currentEval.isMastered && nextLesson ? (
+                {currentEval.isMastered && nextLesson && canAdvanceToNextLesson ? (
                   <button
                     onClick={() => onNavigateLesson(nextLesson.id)}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs shadow transition-all"
@@ -695,6 +946,11 @@ export const LessonView: React.FC<LessonViewProps> = ({
                     <span>Proceed to Next Lesson</span>
                     <ArrowRight size={14} />
                   </button>
+                ) : currentEval.isMastered && nextLesson ? (
+                  <div className="flex items-center gap-2 text-xs text-amber-300">
+                    <Lock size={14} />
+                    <span>Complete and pass all interactive activities to unlock the next lesson.</span>
+                  </div>
                 ) : !currentEval.isMastered ? (
                   <div className="flex items-center gap-2 text-xs text-amber-300">
                     <Lock size={14} />

@@ -1,31 +1,51 @@
+import { hasActiveTrustedEnrollment } from './trustedEnrollment';
+import { isInteractiveChoiceCorrect } from './interactiveChoiceGrading';
+import { issueTrustedCertificateTransaction } from './trustedCertificateIssuance';
+
 import { randomInt as secureRandomInt, randomUUID } from 'node:crypto';
 import express from 'express';
 import { adminDb } from './firebaseAdmin';
 import { requireFirebaseAuth, type AuthenticatedRequest } from './firebaseAuthMiddleware';
 import { COURSES } from './privateCurriculumData';
-import { markAssignmentSubmission } from '../src/utils/assignments';
-import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, summarizeCourseProgress } from './trustedLearningLogic';
+import { INTERNATIONAL_STARTER_COURSES } from '../src/data/internationalStarterCourses';
+import { buildCourseAssignments, markAssignmentSubmission } from '../src/utils/assignments';
+import { withInteractivePractice } from '../src/utils/interactiveActivities';
+import { withCompleteAssessmentBanks } from '../src/utils/assessmentQuestionBank';
+import { canStartFullRetake, certificateUnmetRequirements, isPassingExamScore, selectRequiredQuestionSet, summarizeCourseProgress, calculateWeightedAcademicGrade, classifyAcademicGrade } from './trustedLearningLogic';
 import type { Assignment, Course, LessonMasteryState, CertificateRecord } from '../src/types';
+import { getCourseModules, getModuleChapters } from '../src/utils/courseModules';
 
 const router = express.Router();
-const PASS_MARK = 75;
+const PASS_MARK = 50;
 type AnswerQuestion = { id: string; options: string[] };
 type PrivateCourse = Course;
 
+// Server-side trusted catalogue: private production courses plus the
+// Berry-authored international starter courses. Never accept course content
+// or answer keys supplied by the browser.
+const TRUSTED_COURSES: PrivateCourse[] = withInteractivePractice(withCompleteAssessmentBanks([
+  ...(COURSES as PrivateCourse[]),
+  ...INTERNATIONAL_STARTER_COURSES,
+]));
+// Same Berry-authored, course-specific rubric catalogue as the learner UI.
+const TRUSTED_ASSIGNMENTS = buildCourseAssignments(TRUSTED_COURSES);
+
 function findCourse(id: string): PrivateCourse | undefined {
-  return (COURSES as PrivateCourse[]).find((course) => course.id === id);
+  return TRUSTED_COURSES.find((course) => course.id === id);
 }
 function safeQuestions(questions: Array<{ id: string; question: string; options: string[]; topic?: string; learningObjective?: string }>) {
   return questions.map(({ id, question, options, topic, learningObjective }) => ({
     id, question, options, ...(topic ? { topic } : {}), ...(learningObjective ? { learningObjective } : {}),
   }));
 }
-function validAnswers(questions: AnswerQuestion[], value: unknown): value is Record<string, number> {
+function validAnswers(questions: AnswerQuestion[], value: unknown, allowPartial = false): value is Record<string, number> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const answers = value as Record<string, unknown>;
-  return Object.keys(answers).length === questions.length &&
-    questions.every((question) => Number.isInteger(answers[question.id]) &&
-      Number(answers[question.id]) >= 0 && Number(answers[question.id]) < question.options.length);
+  const answerIds = Object.keys(answers);
+  return (allowPartial ? answerIds.length <= questions.length : answerIds.length === questions.length) &&
+    answerIds.every((id) => questions.some((question) => question.id === id)) &&
+    questions.every((question) => answers[question.id] === undefined ||
+      (Number.isInteger(answers[question.id]) && Number(answers[question.id]) >= 0 && Number(answers[question.id]) < question.options.length));
 }
 function shuffle<T>(values: T[]): T[] {
   const result = [...values];
@@ -36,6 +56,13 @@ function shuffle<T>(values: T[]): T[] {
   return result;
 }
 function randomInt(max: number): number { return secureRandomInt(max); }
+function rotateQuestionSet<T>(questions: T[], attemptNumber: number, maximumCount: number): T[] {
+  if (!questions.length) return [];
+  const count = Math.min(maximumCount, questions.length);
+  const offset = (Math.max(0, attemptNumber) * count) % questions.length;
+  const rotated = [...questions.slice(offset), ...questions.slice(0, offset)];
+  return rotated.slice(0, count);
+}
 function scoreAnswers(questions: Array<{ id: string; correctIndex: number }>, answers: Record<string, number>) {
   const correct = questions.filter((question) => answers[question.id] === question.correctIndex).length;
   return Math.round((correct / Math.max(questions.length, 1)) * 100);
@@ -44,18 +71,117 @@ function cycleRef(uid: string, courseId: string, cycle: number) {
   return adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(courseId)
     .collection('cycles').doc(String(cycle));
 }
+async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, lessonId: string, cycle: number): Promise<boolean> {
+  const lessons = course.chapters.flatMap((chapter) => chapter.lessons);
+  const index = lessons.findIndex((lesson) => lesson.id === lessonId);
+  if (index < 0) return false;
+  if (index === 0) return true;
+  const modules = getCourseModules(course);
+  const currentModuleIndex = modules.findIndex((module) => getModuleChapters(course, module).some((chapter) => chapter.lessons.some((lesson) => lesson.id === lessonId)));
+  if (currentModuleIndex > 0) {
+    const currentModule = modules[currentModuleIndex];
+    const firstModuleLesson = getModuleChapters(course, currentModule).flatMap((chapter) => chapter.lessons)[0];
+    if (firstModuleLesson?.id === lessonId) {
+      const previousModule = modules[currentModuleIndex - 1];
+      const previousModuleAttempts = await cycleRef(uid, course.id, cycle).collection('moduleExamAttempts').where('moduleId', '==', previousModule.id).get();
+      if (!previousModuleAttempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= 60)) return false;
+    }
+  }
+  const previous = lessons[index - 1];
+  const cycleDocument = cycleRef(uid, course.id, cycle);
+  const [progress, assignment] = await Promise.all([
+    cycleDocument.collection('lessonProgress').doc(previous.id).get(),
+    cycleDocument.collection('assignments').doc(`assignment-${course.id}-${previous.id}`).get(),
+  ]);
+  const progressData = progress.data();
+  const assignmentData = assignment.data();
+  return progressData?.isMastered === true &&
+    progressData?.isCompleted === true &&
+    assignmentData?.status === 'graded' &&
+    Number(assignmentData?.scorePercent) >= 50;
+}
+
+function chapterAssessmentQuestionBank(course: PrivateCourse, chapterId: string) {
+  const chapter = course.chapters.find((item) => item.id === chapterId);
+  if (!chapter) return null;
+  return chapter.lessons.flatMap((lesson) => lesson.chapterAssessmentQuestions || [])
+    .map((question) => ({ id: question.id, question: question.question, options: question.options, correctIndex: question.correctIndex, explanation: question.explanation, topic: question.learningObjective }));
+}
+
+async function chapterAssessmentRequirementsMet(uid: string, course: PrivateCourse, chapterId: string, cycle: number): Promise<{ met: boolean; unmet: string[] }> {
+  const chapter = course.chapters.find((item) => item.id === chapterId);
+  if (!chapter) return { met: false, unmet: ['chapter not found'] };
+  const ref = cycleRef(uid, course.id, cycle);
+  const unmet: string[] = [];
+  for (const lesson of chapter.lessons) {
+    const lessonRef = ref.collection('lessonProgress').doc(lesson.id);
+    const [progress, activities] = await Promise.all([lessonRef.get(), lessonRef.collection('activities').get()]);
+    const interactivePassed = lesson.activities.length === 0 || Number(progress.data()?.interactiveScorePercent || 0) >= 80;
+    const activitiesComplete = lesson.activities.length === 0 || (activities.size >= lesson.activities.length && Number(progress.data()?.interactiveActivitiesCompleted || 0) >= lesson.activities.length);
+    if (progress.data()?.isMastered !== true || Number(progress.data()?.scorePercent || 0) < 80 || !interactivePassed) unmet.push(`Pass the lesson mastery and interactive practice for ${lesson.title} at 80% or higher.`);
+    if (!activitiesComplete) unmet.push(`Complete all interactive activities for ${lesson.title}.`);
+  }
+  return { met: unmet.length === 0, unmet };
+}
+
+function moduleExamQuestions(course: PrivateCourse, moduleId: string) {
+  const module = getCourseModules(course).find((item) => item.id === moduleId);
+  if (!module) return null;
+  const chapters = getModuleChapters(course, module);
+  const seen = new Set<string>();
+  return chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => lesson.moduleExamQuestions || []))
+    .filter((question) => { if (seen.has(question.id)) return false; seen.add(question.id); return true; })
+    .map((question) => ({ id: question.id, question: question.question, options: question.options, correctIndex: question.correctIndex, explanation: question.explanation, topic: question.learningObjective }));
+}
+
+async function moduleRequirementsMet(uid: string, course: PrivateCourse, moduleId: string, cycle: number): Promise<{ met: boolean; unmet: string[] }> {
+  const modules = getCourseModules(course);
+  const index = modules.findIndex((item) => item.id === moduleId);
+  if (index < 0) return { met: false, unmet: ['module not found'] };
+  const module = modules[index];
+  const chapters = getModuleChapters(course, module);
+  const ref = cycleRef(uid, course.id, cycle);
+  const previousModule = index > 0 ? modules[index - 1] : undefined;
+  if (previousModule) {
+    const previousExam = await ref.collection('moduleExamAttempts').where('moduleId', '==', previousModule.id).get();
+    if (!previousExam.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= 60)) {
+      return { met: false, unmet: [`Pass ${previousModule.title} before starting this module.`] };
+    }
+  }
+  const [progress, assignments] = await Promise.all([ref.collection('lessonProgress').get(), ref.collection('assignments').get()]);
+  const progressById = new Map(progress.docs.map((doc) => [doc.id, doc.data()]));
+  const assignmentById = new Map(assignments.docs.map((doc) => [doc.id, doc.data()]));
+  const unmet: string[] = [];
+  const chapterAttempts = await ref.collection('chapterAssessmentAttempts').get();
+  for (const chapter of chapters) {
+    const chapterPassed = chapterAttempts.docs.some((doc) => doc.data().chapterId === chapter.id && doc.data().passed === true && Number(doc.data().scorePercent) >= 70);
+    if (!chapterPassed) unmet.push(`Pass the chapter assessment for ${chapter.title} at 70% or higher.`);
+  }
+  for (const chapter of chapters) for (const lesson of chapter.lessons) {
+    if (progressById.get(lesson.id)?.isMastered !== true) unmet.push(`Complete the mastery assessment for ${lesson.title}.`);
+    const assignment = assignmentById.get(`assignment-${course.id}-${lesson.id}`);
+    if (!assignment || assignment.status !== 'graded' || Number(assignment.scorePercent) < 50) unmet.push(`Pass the assignment for ${lesson.title}.`);
+  }
+  return { met: unmet.length === 0, unmet };
+}
+
 async function getEnrolledCourse(req: AuthenticatedRequest, res: express.Response, courseId: string) {
   if (!adminDb || !req.user?.uid) {
     res.status(503).json({ error: 'Secure learner services are unavailable.' });
     return null;
   }
-  const profile = await adminDb.collection('users').doc(req.user.uid).get();
+
+  const uid = req.user.uid;
+const profile = await adminDb.collection('users').doc(req.user.uid).get();
   if (!profile.exists) {
     res.status(403).json({ error: 'A learner profile is required.' });
     return null;
   }
-  const enrolled = profile.data()?.enrolledCourseIds;
-  if (!Array.isArray(enrolled) || !enrolled.includes(courseId)) {
+  const enrollment = await adminDb
+    .collection('users').doc(uid)
+    .collection('enrollments').doc(courseId).get();
+
+  if (!hasActiveTrustedEnrollment({ exists: enrollment.exists, status: enrollment.data()?.status })) {
     res.status(403).json({ error: 'You must be enrolled in this course.' });
     return null;
   }
@@ -83,14 +209,69 @@ async function ensureCycle(uid: string, courseId: string): Promise<number> {
   });
 }
 
+router.post('/api/learning/courses/:courseId/enroll', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!adminDb || !req.user?.uid) {
+      return res.status(503).json({ error: 'Secure learner services are unavailable.' });
+    }
+
+    const uid = req.user.uid;
+    const courseId = String(req.params.courseId);
+    const course = findCourse(courseId);
+
+    if (!course) {
+      return res.status(404).json({ error: 'Course not found.' });
+    }
+
+    const enrollmentRef = adminDb
+      .collection('users').doc(uid)
+      .collection('enrollments').doc(courseId);
+
+    const existing = await enrollmentRef.get();
+
+    if (!existing.exists || existing.data()?.status !== 'active') {
+      await enrollmentRef.set({
+        uid,
+        courseId,
+        status: 'active',
+        source: 'self_enrollment',
+        enrolledAt: new Date(),
+        updatedAt: new Date(),
+      }, { merge: true });
+    }
+
+    return res.json({ enrolled: true, courseId });
+  } catch (error) {
+    console.error('Course enrollment failed:', error);
+    return res.status(500).json({ error: 'Could not complete course enrollment.' });
+  }
+});
+
 router.get('/api/assessments/courses/:courseId/lessons/:lessonId/questions', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const context = await getEnrolledCourse(req, res, req.params.courseId);
     if (!context) return;
     const lesson = context.course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
-    await ensureCycle(context.uid, context.course.id);
-    return res.json({ questions: safeQuestions(lesson.quizQuestions) });
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    const activityRecords = await cycleRef(context.uid, context.course.id, cycle)
+      .collection('lessonProgress').doc(lesson.id).collection('activities').get();
+    const activityScores = new Map(activityRecords.docs.map((document) => [document.id, Number(document.data().scorePercent) || 0]));
+    const interactivePassed = lesson.activities.length === 0 || (
+      lesson.activities.every((activity) => activityScores.has(activity.id)) &&
+      lesson.activities.reduce((total, activity) => total + (activityScores.get(activity.id) || 0), 0) / lesson.activities.length >= 80
+    );
+    if (!interactivePassed) return res.status(409).json({ error: 'Complete the interactive activity and achieve at least 80% before starting the mastery assessment.' });
+    if (!(await previousTopicRequirementsMet(context.uid, context.course, lesson.id, cycle))) {
+      return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before opening this lesson." });
+    }
+    const masteryCount = Math.min(10, lesson.quizQuestions.length);
+    if (!masteryCount) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
+    const progressSnapshot = await cycleRef(context.uid, context.course.id, cycle)
+      .collection('lessonProgress').doc(lesson.id).get();
+    const attemptsCount = Number(progressSnapshot.data()?.attemptsCount || 0);
+    const masteryQuestions = rotateQuestionSet(lesson.quizQuestions, attemptsCount, masteryCount);
+    return res.json({ questions: safeQuestions(masteryQuestions) });
   } catch (error) {
     console.error('Trusted lesson question retrieval failed:', error);
     return res.status(500).json({ error: 'Unable to load assessment questions.' });
@@ -104,9 +285,26 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
     const { course, uid } = context;
     const lesson = course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
-    const questions = lesson.quizQuestions;
+    const currentCycle = await ensureCycle(uid, course.id);
+    const activityRecords = await cycleRef(uid, course.id, currentCycle)
+      .collection('lessonProgress').doc(lesson.id).collection('activities').get();
+    const activityScores = new Map(activityRecords.docs.map((document) => [document.id, Number(document.data().scorePercent) || 0]));
+    const interactivePassed = lesson.activities.length === 0 || (
+      lesson.activities.every((activity) => activityScores.has(activity.id)) &&
+      lesson.activities.reduce((total, activity) => total + (activityScores.get(activity.id) || 0), 0) / lesson.activities.length >= 80
+    );
+    if (!interactivePassed) return res.status(409).json({ error: 'Complete the interactive activity and achieve at least 80% before submitting the mastery assessment.' });
+    if (!(await previousTopicRequirementsMet(uid, course, lesson.id, currentCycle))) {
+      return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before attempting this lesson." });
+    }
+    const masteryCount = Math.min(10, lesson.quizQuestions.length);
+    if (!masteryCount) return res.status(422).json({ error: 'This topic has no unique approved mastery questions yet. The course content needs to be completed before assessment.' });
+    const cycle = currentCycle;
+    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
+    const progressBeforeAttempt = await progressRef.get();
+    const attemptsBefore = Number(progressBeforeAttempt.data()?.attemptsCount || 0);
+    const questions = rotateQuestionSet(lesson.quizQuestions, attemptsBefore, masteryCount);
     if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every question.' });
-    const cycle = await ensureCycle(uid, course.id);
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
     const results = Object.fromEntries(questions.map((question) => [question.id, {
@@ -117,18 +315,34 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
         : question.misconceptions?.[answers[question.id]] || 'Review this topic and try again.',
     }]));
     const courseRef = adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id);
-    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
     const attemptRef = cycleRef(uid, course.id, cycle).collection('lessonAttempts').doc(randomUUID());
     const now = new Date().toISOString();
     const result = await adminDb!.runTransaction(async (transaction) => {
       const progressSnap = await transaction.get(progressRef);
       const old = progressSnap.data();
       const attemptsCount = Number(old?.attemptsCount || 0) + 1;
-      const progress: LessonMasteryState & { updatedAt: string } = {
+      const masteryThreshold = Math.max(80, lesson.masteryThresholdPercent || 80);
+      const [activitySnapshot, assignmentSnapshot] = await Promise.all([
+        transaction.get(progressRef.collection('activities')),
+        transaction.get(cycleRef(uid, course.id, cycle).collection('assignments').doc(`assignment-${course.id}-${lesson.id}`)),
+      ]);
+      const submittedActivityIds = new Set(activitySnapshot.docs.map((document) => document.id));
+      const allActivitiesSubmitted = lesson.activities.every((activity) => submittedActivityIds.has(activity.id));
+      const interactiveScorePercent = lesson.activities.length
+        ? Math.round(lesson.activities.reduce((total, activity) => {
+            const saved = activitySnapshot.docs.find((document) => document.id === activity.id)?.data();
+            return total + (Number(saved?.scorePercent) || 0);
+          }, 0) / lesson.activities.length)
+        : 100;
+      const lessonPassed = scorePercent >= masteryThreshold &&
+        allActivitiesSubmitted && interactiveScorePercent >= 80;
+      const progress: LessonMasteryState & { updatedAt: string; interactiveScorePercent: number; interactiveActivitiesCompleted: number } = {
         lessonId: lesson.id,
-        isCompleted: true,
-        isMastered: scorePercent >= PASS_MARK,
+        isCompleted: lessonPassed && assignmentSnapshot.data()?.status === 'graded' && Number(assignmentSnapshot.data()?.scorePercent) >= 50,
+        isMastered: lessonPassed,
         scorePercent,
+        interactiveScorePercent,
+        interactiveActivitiesCompleted: submittedActivityIds.size,
         attemptsCount,
         lastAttemptDate: now,
         identifiedMisconceptions: questions.filter((question) => answers[question.id] !== question.correctIndex)
@@ -152,6 +366,283 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/submit', requi
   }
 });
 
+router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:activityId/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const { course, uid } = context;
+    const lesson = course.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === req.params.lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Lesson not found.' });
+    const cycle = await ensureCycle(uid, course.id);
+    if (!(await previousTopicRequirementsMet(uid, course, lesson.id, cycle))) {
+      return res.status(409).json({ error: "Complete the previous topic's mastery assessment and interactive activities before attempting this activity." });
+    }
+    const activity = lesson.activities.find((item) => item.id === req.params.activityId);
+    if (!activity) return res.status(404).json({ error: 'Interactive activity not found.' });
+
+    const answer = req.body?.answer;
+    let correct = false;
+    if (activity.type === 'matching') {
+      const pairs = answer?.pairs;
+      const expected = activity.data.matchingPairs || [];
+      correct = !!pairs && typeof pairs === 'object' && !Array.isArray(pairs) &&
+        expected.length > 0 && expected.every((pair) => typeof pairs[pair.id] === 'string' &&
+          pair.right?.trim().toLowerCase() === pairs[pair.id].trim().toLowerCase());
+    } else if (activity.type === 'ordering') {
+      const order = answer?.order;
+      const expected = [...(activity.data.orderingItems || [])]
+        .sort((left, right) => left.correctOrder - right.correctOrder).map((item) => item.id);
+      correct = Array.isArray(order) && order.length === expected.length &&
+        order.every((id: unknown, index: number) => id === expected[index]);
+    } else if (activity.type === 'fill-blank') {
+      const response = typeof answer?.response === 'string' ? answer.response.trim().toLowerCase() : '';
+      correct = response.length > 0 && (activity.data.blankSolutions || [])
+        .some((solution) => solution.trim().toLowerCase() === response);
+    } else if (activity.type === 'interactive-choice') {
+      correct = isInteractiveChoiceCorrect(activity.data.choices || [], answer);
+    }
+
+    const now = new Date().toISOString();
+    const submission = {
+      activityId: activity.id,
+      lessonId: lesson.id,
+      courseId: course.id,
+      cycle,
+      scorePercent: correct ? 100 : 0,
+      passed: correct,
+      answer: activity.type === 'matching'
+        ? { pairs: answer?.pairs }
+        : activity.type === 'ordering'
+          ? { order: answer?.order }
+          : activity.type === 'fill-blank'
+            ? { response: typeof answer?.response === 'string' ? answer.response.slice(0, 2000) : '' }
+            : { choiceId: typeof answer?.choiceId === 'string' ? answer.choiceId.slice(0, 200) : '' },
+      feedback: correct ? 'Correct. Your answer has been checked and saved.' : 'Not quite. Review the lesson and try again.',
+      submittedAt: now,
+      trusted: true,
+    };
+    const lessonActivitiesRef = cycleRef(uid, course.id, cycle)
+      .collection('lessonProgress').doc(lesson.id).collection('activities');
+    await lessonActivitiesRef.doc(activity.id).set(submission, { merge: true });
+
+    const savedActivities = await lessonActivitiesRef.get();
+    const scoresById = new Map(savedActivities.docs.map((document) => [document.id, Number(document.data().scorePercent) || 0]));
+    const interactiveScorePercent = lesson.activities.length
+      ? Math.round(lesson.activities.reduce((total, item) => total + (scoresById.get(item.id) || 0), 0) / lesson.activities.length)
+      : 100;
+    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
+    const assignmentRef = cycleRef(uid, course.id, cycle).collection('assignments').doc(`assignment-${course.id}-${lesson.id}`);
+    const [progressSnapshot, assignmentSnapshot] = await Promise.all([progressRef.get(), assignmentRef.get()]);
+    const progress = progressSnapshot.data();
+    const masteryThreshold = Math.max(80, lesson.masteryThresholdPercent || 80);
+    const masteryPassed = Number(progress?.scorePercent || 0) >= masteryThreshold;
+    const allActivitiesSubmitted = lesson.activities.every((item) => scoresById.has(item.id));
+    const lessonPassed = masteryPassed && allActivitiesSubmitted && interactiveScorePercent >= 80;
+    const assignmentData = assignmentSnapshot.data();
+    const lessonCompleted = lessonPassed && assignmentData?.status === 'graded' && Number(assignmentData.scorePercent) >= 50;
+    await progressRef.set({
+      interactiveScorePercent,
+      interactiveActivitiesCompleted: savedActivities.size,
+      isCompleted: lessonCompleted,
+      isMastered: lessonPassed,
+      updatedAt: now,
+    }, { merge: true });
+    const finalProgress = (await progressRef.get()).data();
+
+    return res.json({ submission, interactiveScorePercent, interactiveActivitiesCompleted: savedActivities.size, lessonCompleted, progress: finalProgress });
+  } catch (error) {
+    console.error('Trusted interactive activity submission failed:', error);
+    return res.status(500).json({ error: 'Unable to check and save this activity.' });
+  }
+});
+
+router.get('/api/assessments/courses/:courseId/chapters/:chapterId/assessment/questions', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const chapter = context.course.chapters.find((item) => item.id === req.params.chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found.' });
+    const bank = chapterAssessmentQuestionBank(context.course, chapter.id) || [];
+    const count = Math.min(20, bank.length);
+    if (!count) return res.status(422).json({ error: 'No distinct approved chapter-assessment questions are available for this chapter.' });
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    const requirements = await chapterAssessmentRequirementsMet(context.uid, context.course, chapter.id, cycle);
+    if (!requirements.met) return res.status(409).json({ error: 'Chapter assessment is locked.', unmet: requirements.unmet });
+    let attempts = await cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentAttempts').where('chapterId', '==', chapter.id).get();
+    if (attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= 70)) return res.status(409).json({ error: 'This chapter assessment has already been passed.' });
+    if (attempts.size >= 3) return res.status(409).json({ error: 'The three-attempt chapter assessment limit has been reached.' });
+    const sessionRef = cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentSessions').doc(chapter.id);
+    const byId = new Map(bank.map((question) => [question.id, question]));
+    const existing = await sessionRef.get();
+    if (existing.exists && existing.data()?.submitted !== true) {
+      const data = existing.data() || {};
+      const expiry = Date.parse(String(data.expiresAt || ''));
+      const ids = Array.isArray(data.questionIds) ? data.questionIds as string[] : [];
+      const activeQuestions = ids.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+      if (Number.isFinite(expiry) && expiry > Date.now() && activeQuestions.length === ids.length && ids.length) return res.json({ chapterId: chapter.id, questions: safeQuestions(activeQuestions), cycle, expiresAt: String(data.expiresAt), attemptNumber: Number(data.attemptNumber || attempts.size + 1), passingScorePercent: 70 });
+      const expiredNumber = Number(data.attemptNumber || attempts.size + 1);
+      const expiredRef = cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentAttempts').doc(`attempt-${chapter.id}-${expiredNumber}`);
+      await adminDb!.runTransaction(async (transaction) => {
+        const [current, saved] = await Promise.all([transaction.get(sessionRef), transaction.get(expiredRef)]);
+        if (saved.exists || !current.exists || current.data()?.submitted === true || current.data()?.sessionToken !== data.sessionToken) return;
+        const submittedAt = new Date().toISOString();
+        transaction.create(expiredRef, { id: expiredRef.id, chapterId: chapter.id, courseId: context.course.id, cycle, attemptNumber: expiredNumber, answers: {}, scorePercent: 0, passingScorePercent: 70, passed: false, expired: true, submittedAt, trusted: true });
+        transaction.set(sessionRef, { submitted: true, expired: true, submittedAt }, { merge: true });
+      });
+      attempts = await cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentAttempts').where('chapterId', '==', chapter.id).get();
+      if (attempts.size >= 3) return res.status(409).json({ error: 'The chapter assessment time expired and all attempts have been used.' });
+    }
+    const selected = rotateQuestionSet(bank, attempts.size, count);
+    const questionIds = shuffle(selected.map((question) => question.id));
+    const expiresAt = new Date(Date.now() + 45 * 60_000).toISOString();
+    await sessionRef.set({ chapterId: chapter.id, questionIds, attemptNumber: attempts.size + 1, sessionToken: randomUUID(), expiresAt, submitted: false, createdAt: new Date().toISOString() });
+    return res.json({ chapterId: chapter.id, questions: safeQuestions(questionIds.map((id) => byId.get(id)!).filter(Boolean)), cycle, expiresAt, attemptNumber: attempts.size + 1, passingScorePercent: 70 });
+  } catch (error) {
+    console.error('Chapter assessment session failed:', error);
+    return res.status(500).json({ error: 'Unable to prepare the chapter assessment.' });
+  }
+});
+
+router.post('/api/assessments/courses/:courseId/chapters/:chapterId/assessment/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const chapter = context.course.chapters.find((item) => item.id === req.params.chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found.' });
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    const requirements = await chapterAssessmentRequirementsMet(context.uid, context.course, chapter.id, cycle);
+    if (!requirements.met) return res.status(409).json({ error: 'Chapter assessment requirements are not satisfied.', unmet: requirements.unmet });
+    const ref = cycleRef(context.uid, context.course.id, cycle);
+    const sessionRef = ref.collection('chapterAssessmentSessions').doc(chapter.id);
+    const session = await sessionRef.get();
+    const data = session.data() || {};
+    if (!session.exists || !Array.isArray(data.questionIds)) return res.status(409).json({ error: 'Start the chapter assessment before submitting.' });
+    if (data.submitted === true) return res.status(409).json({ error: 'This chapter assessment session has already been submitted.' });
+    if (!Number.isFinite(Date.parse(String(data.expiresAt || ''))) || Date.now() > Date.parse(String(data.expiresAt)) + 30_000) return res.status(409).json({ error: 'The chapter assessment time has expired.' });
+    const bank = chapterAssessmentQuestionBank(context.course, chapter.id) || [];
+    const byId = new Map(bank.map((question) => [question.id, question]));
+    const questions = (data.questionIds as string[]).map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+    if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every chapter assessment question.' });
+    const answers = req.body.answers as Record<string, number>;
+    const scorePercent = scoreAnswers(questions, answers);
+    const passed = scorePercent >= 70;
+    const attemptNumber = Number(data.attemptNumber || 1);
+    const attemptRef = ref.collection('chapterAssessmentAttempts').doc(`attempt-${chapter.id}-${attemptNumber}`);
+    const submittedAt = new Date().toISOString();
+    const attempt = { id: attemptRef.id, chapterId: chapter.id, courseId: context.course.id, cycle, attemptNumber, answers, scorePercent, passingScorePercent: 70, passed, submittedAt, sessionToken: data.sessionToken, trusted: true, results: Object.fromEntries(questions.map((question) => [question.id, { correct: answers[question.id] === question.correctIndex, correctAnswerIndex: question.correctIndex, explanation: question.explanation }])) };
+    const saved = await adminDb!.runTransaction(async (transaction) => {
+      const [current, existing] = await Promise.all([transaction.get(sessionRef), transaction.get(attemptRef)]);
+      if (existing.exists) return existing.data();
+      if (!current.exists || current.data()?.submitted === true || current.data()?.sessionToken !== data.sessionToken) throw new Error('CHAPTER_ASSESSMENT_SESSION_SUBMITTED');
+      transaction.create(attemptRef, attempt);
+      transaction.set(sessionRef, { submitted: true, submittedAt }, { merge: true });
+      return attempt;
+    });
+    return res.json({ attempt: saved, passed: saved?.passed === true, scorePercent: Number(saved?.scorePercent) || 0, passingScorePercent: 70 });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'CHAPTER_ASSESSMENT_SESSION_SUBMITTED') return res.status(409).json({ error: 'This chapter assessment session has already been submitted.' });
+    console.error('Chapter assessment submission failed:', error);
+    return res.status(500).json({ error: 'Unable to mark the chapter assessment.' });
+  }
+});
+
+router.get('/api/assessments/courses/:courseId/modules/:moduleId/exam/questions', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const module = getCourseModules(context.course).find((item) => item.id === req.params.moduleId);
+    if (!module?.examination) return res.status(404).json({ error: 'Module examination is not configured.' });
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    const requirements = await moduleRequirementsMet(context.uid, context.course, module.id, cycle);
+    if (!requirements.met) return res.status(409).json({ error: 'Module examination is locked.', unmet: requirements.unmet });
+    const bank = moduleExamQuestions(context.course, module.id) || [];
+    const count = Math.min(module.examination.questionCount, bank.length);
+    if (count < 1) return res.status(422).json({ error: 'No approved module examination questions are available.' });
+    const ref = cycleRef(context.uid, context.course.id, cycle);
+    let attempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+    const modulePassingMark = Math.max(60, module.examination?.passingScorePercent ?? 60);
+    if (attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= modulePassingMark)) return res.status(409).json({ error: 'This module examination has already been passed.' });
+    if (attempts.size >= module.examination.maximumAttempts) return res.status(409).json({ error: 'The maximum number of module examination attempts has been reached.' });
+    const sessionRef = ref.collection('moduleExamSessions').doc(module.id);
+    const byId = new Map(bank.map((question) => [question.id, question]));
+    const existingSession = await sessionRef.get();
+    if (existingSession.exists && existingSession.data()?.submitted !== true) {
+      const active = existingSession.data() || {};
+      const activeExpiry = Date.parse(String(active.expiresAt || ''));
+      const activeIds = Array.isArray(active.questionIds) ? active.questionIds as string[] : [];
+      const activeQuestions = activeIds.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+      if (Number.isFinite(activeExpiry) && activeExpiry > Date.now() && activeQuestions.length === activeIds.length && activeQuestions.length > 0) {
+        return res.json({ moduleId: module.id, questions: safeQuestions(activeQuestions), cycle, expiresAt: String(active.expiresAt), attemptNumber: Number(active.attemptNumber || attempts.size + 1), passingScorePercent: modulePassingMark });
+      }
+      const expiredAttemptNumber = Number(active.attemptNumber || attempts.size + 1);
+      const expiredAttemptRef = ref.collection('moduleExamAttempts').doc(`attempt-${module.id}-${expiredAttemptNumber}`);
+      await adminDb!.runTransaction(async (transaction) => {
+        const [currentSession, savedAttempt] = await Promise.all([transaction.get(sessionRef), transaction.get(expiredAttemptRef)]);
+        if (savedAttempt.exists || !currentSession.exists || currentSession.data()?.submitted === true || currentSession.data()?.sessionToken !== active.sessionToken) return;
+        const submittedAt = new Date().toISOString();
+        transaction.create(expiredAttemptRef, { id: expiredAttemptRef.id, moduleId: module.id, courseId: context.course.id, cycle, attemptNumber: expiredAttemptNumber, answers: {}, scorePercent: 0, passingScorePercent: modulePassingMark, passed: false, expired: true, submittedAt, trusted: true });
+        transaction.set(sessionRef, { submitted: true, expired: true, submittedAt }, { merge: true });
+      });
+      attempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+      if (attempts.size >= module.examination.maximumAttempts) return res.status(409).json({ error: 'The module examination time expired and the maximum attempt count has been reached.' });
+    }
+    const selected = rotateQuestionSet(bank, attempts.size, count);
+    const questionIds = shuffle(selected.map((question) => question.id));
+    const expiresAt = new Date(Date.now() + module.examination.durationMinutes * 60_000).toISOString();
+    await sessionRef.set({ moduleId: module.id, questionIds, expiresAt, attemptNumber: attempts.size + 1, sessionToken: randomUUID(), submitted: false, createdAt: new Date().toISOString() });
+    return res.json({ moduleId: module.id, questions: safeQuestions(questionIds.map((id) => byId.get(id)!).filter(Boolean)), cycle, expiresAt, attemptNumber: attempts.size + 1, passingScorePercent: modulePassingMark });
+  } catch (error) {
+    console.error('Module examination session failed:', error);
+    return res.status(500).json({ error: 'Unable to prepare module examination.' });
+  }
+});
+
+router.post('/api/assessments/courses/:courseId/modules/:moduleId/exam/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const module = getCourseModules(context.course).find((item) => item.id === req.params.moduleId);
+    if (!module?.examination) return res.status(404).json({ error: 'Module examination is not configured.' });
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    const requirements = await moduleRequirementsMet(context.uid, context.course, module.id, cycle);
+    if (!requirements.met) return res.status(409).json({ error: 'Module examination requirements are not satisfied.', unmet: requirements.unmet });
+    const ref = cycleRef(context.uid, context.course.id, cycle);
+    const sessionRef = ref.collection('moduleExamSessions').doc(module.id);
+    const session = await sessionRef.get();
+    const sessionData = session.data();
+    if (!session.exists || !Array.isArray(sessionData?.questionIds)) return res.status(409).json({ error: 'Start the module examination before submitting.' });
+    if (!Number.isFinite(Date.parse(String(sessionData.expiresAt || ''))) || Date.now() > Date.parse(String(sessionData.expiresAt)) + 30_000) return res.status(409).json({ error: 'The module examination time has expired.' });
+    const bank = moduleExamQuestions(context.course, module.id) || [];
+    const byId = new Map(bank.map((question) => [question.id, question]));
+    const questions = (sessionData.questionIds as string[]).map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+    if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every module examination question.' });
+    const answers = req.body.answers as Record<string, number>;
+    const scorePercent = scoreAnswers(questions, answers);
+    const passingScorePercent = Math.max(60, module.examination.passingScorePercent);
+    const passed = scorePercent >= passingScorePercent;
+    const previousAttempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+    if (previousAttempts.size >= module.examination.maximumAttempts) return res.status(409).json({ error: 'The maximum number of module examination attempts has been reached.' });
+    const attemptNumber = Number(sessionData.attemptNumber || previousAttempts.size + 1);
+    const attemptRef = ref.collection('moduleExamAttempts').doc(`attempt-${module.id}-${attemptNumber}`);
+    const submittedAt = new Date().toISOString();
+    const attempt = { id: attemptRef.id, moduleId: module.id, courseId: context.course.id, cycle, attemptNumber, sessionToken: sessionData.sessionToken, answers, scorePercent, passingScorePercent, passed, submittedAt, trusted: true, results: Object.fromEntries(questions.map((question) => [question.id, { correct: answers[question.id] === question.correctIndex, correctAnswerIndex: question.correctIndex, explanation: question.explanation }])) };
+    const savedAttempt = await adminDb!.runTransaction(async (transaction) => {
+      const [currentSession, existingAttempt] = await Promise.all([transaction.get(sessionRef), transaction.get(attemptRef)]);
+      if (existingAttempt.exists) return existingAttempt.data();
+      if (!currentSession.exists || currentSession.data()?.submitted === true || currentSession.data()?.sessionToken !== sessionData.sessionToken) throw new Error('MODULE_EXAM_SESSION_ALREADY_SUBMITTED');
+      const data = attempt;
+      transaction.create(attemptRef, data);
+      transaction.set(sessionRef, { submittedAt, submitted: true }, { merge: true });
+      return data;
+    });
+    return res.json({ attempt: savedAttempt, passed: savedAttempt?.passed === true, scorePercent: Number(savedAttempt?.scorePercent) || 0, passingScorePercent: Number(savedAttempt?.passingScorePercent) || passingScorePercent });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'MODULE_EXAM_SESSION_ALREADY_SUBMITTED') return res.status(409).json({ error: 'This module examination session has already been submitted.' });
+    console.error('Module examination submission failed:', error);
+    return res.status(500).json({ error: 'Unable to mark module examination.' });
+  }
+});
+
 router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const context = await getEnrolledCourse(req, res, req.params.courseId);
@@ -159,27 +650,70 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     const { course, uid } = context;
     if (!course.exam) return res.status(404).json({ error: 'No final exam is available.' });
     const cycle = await ensureCycle(uid, course.id);
+    const moduleRequirements = await Promise.all(getCourseModules(course).map(async (module) => {
+      const attempts = await cycleRef(uid, course.id, cycle).collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+      return attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= Math.max(60, module.examination?.passingScorePercent || 60));
+    }));
+    if (!moduleRequirements.every(Boolean)) return res.status(409).json({ error: 'Complete and pass every module examination before starting the final course examination.' });
     const cycleDocument = cycleRef(uid, course.id, cycle);
     const sessionCollection = cycleDocument.collection('examSessions');
-    const existingAttempt = await cycleDocument.collection('examAttempts').limit(1).get();
-    if (!existingAttempt.empty) return res.status(409).json({ error: 'This enrolment cycle already has a final-exam attempt. Complete a full course retake to unlock another attempt.' });
-    let session = await sessionCollection.doc('active').get();
-    if (!session.exists) {
-      const questionIds = shuffle(course.exam.questions.map((question) => question.id));
-      const now = new Date().toISOString();
+    let existingAttempts = await cycleDocument.collection('examAttempts').get();
+    if (existingAttempts.docs.some((doc) => doc.data().passed === true) || existingAttempts.size >= 2) return res.status(409).json({ error: 'The final examination has already been passed or the two-attempt limit has been reached.' });
+    const activeSessionRef = sessionCollection.doc('active');
+    let session = await activeSessionRef.get();
+    if (session.exists && session.data()?.submitted !== true) {
+      const activeData = session.data() || {};
+      const activeExpiry = Date.parse(String(activeData.expiresAt || ''));
+      if (!Number.isFinite(activeExpiry) || activeExpiry <= Date.now()) {
+        const expiredAttemptNumber = Number(activeData.attemptNumber || existingAttempts.size + 1);
+        const expiredAttemptRef = cycleDocument.collection('examAttempts').doc(`attempt-${expiredAttemptNumber}`);
+        await adminDb!.runTransaction(async (transaction) => {
+          const [currentSession, savedAttempt, currentCycle] = await Promise.all([transaction.get(activeSessionRef), transaction.get(expiredAttemptRef), transaction.get(cycleDocument)]);
+          if (savedAttempt.exists || !currentSession.exists || currentSession.data()?.submitted === true || currentSession.data()?.sessionToken !== activeData.sessionToken) return;
+          const submittedAt = new Date().toISOString();
+          transaction.create(expiredAttemptRef, { id: expiredAttemptRef.id, courseId: course.id, examId: course.exam!.id, cycle, attemptNumber: expiredAttemptNumber, scorePercent: 0, passed: false, passingScorePercent: PASS_MARK, answers: {}, submittedAt, trusted: true, expired: true });
+          transaction.set(activeSessionRef, { submitted: true, expired: true, submittedAt }, { merge: true });
+          transaction.set(cycleDocument, { examAttempted: true, examPassed: currentCycle.data()?.examPassed === true, examScorePercent: Number(currentCycle.data()?.examScorePercent || 0), updatedAt: submittedAt }, { merge: true });
+        });
+        existingAttempts = await cycleDocument.collection('examAttempts').get();
+        if (existingAttempts.size >= 2) return res.status(409).json({ error: 'The final examination time expired and both attempts have been used.' });
+      }
+    }
+    session = await activeSessionRef.get();
+    if (!session.exists || session.data()?.submitted === true) {
+      const requiredExamQuestions = selectRequiredQuestionSet(course.exam.questions, Math.min(30, course.exam.questions.length));
+      if (!requiredExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet. The course content needs to be completed before assessment.' });
+      const attemptNumber = existingAttempts.size + 1;
+      const rotated = rotateQuestionSet(requiredExamQuestions, existingAttempts.size, requiredExamQuestions.length);
+      const questionIds = shuffle(rotated.map((question) => question.id));
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
       await adminDb!.runTransaction(async (transaction) => {
         const current = await transaction.get(sessionCollection.doc('active'));
-        const attempt = await transaction.get(cycleDocument.collection('examAttempts').limit(1));
-        if (!current.exists && attempt.empty) transaction.create(sessionCollection.doc('active'), { cycle, questionIds, createdAt: now });
+        const attempt = await transaction.get(cycleDocument.collection('examAttempts'));
+        if ((!current.exists || current.data()?.submitted === true) && attempt.size < 2 && !attempt.docs.some((doc) => doc.data().passed === true)) transaction.set(activeSessionRef, {
+          cycle, questionIds, attemptNumber, sessionToken: randomUUID(), submitted: false, createdAt: now.toISOString(), expiresAt,
+        });
       });
-      session = await sessionCollection.doc('active').get();
+      session = await activeSessionRef.get();
     }
     const questionIds = session.data()?.questionIds;
     if (!Array.isArray(questionIds)) return res.status(503).json({ error: 'Unable to prepare a secure exam session.' });
-    const byId = new Map(course.exam.questions.map((question) => [question.id, question]));
+    const approvedExamQuestions = selectRequiredQuestionSet(course.exam.questions, Math.min(30, course.exam.questions.length));
+    if (!approvedExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet.' });
+    const byId = new Map(approvedExamQuestions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
-    if (questions.length !== course.exam.questions.length) return res.status(500).json({ error: 'The exam question set is incomplete.' });
-    return res.json({ questions: safeQuestions(questions.map((question) => ({ ...question, topic: question.topic }))), cycle });
+    if (questions.length !== Math.min(30, course.exam.questions.length)) return res.status(500).json({ error: 'The exam question set is incomplete.' });
+    const sessionData = session.data() ?? {};
+    let expiresAt = typeof sessionData.expiresAt === 'string' ? sessionData.expiresAt : '';
+    if (!expiresAt) {
+      expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      await session.ref.set({ expiresAt }, { merge: true });
+    }
+    // Return the same expired session as well: the client restores its locally
+    // saved selections and immediately submits them. Never create a fresh timer
+    // merely because the learner refreshed after the deadline.
+    return res.json({ questions: safeQuestions(questions.map((question) => ({ ...question, topic: question.topic }))), cycle, expiresAt, attemptNumber: Number(sessionData.attemptNumber || 1), maximumAttempts: 2 });
   } catch (error) {
     console.error('Trusted exam session creation failed:', error);
     return res.status(500).json({ error: 'Unable to prepare the final exam.' });
@@ -193,32 +727,74 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     const { course, uid } = context;
     if (!course.exam) return res.status(404).json({ error: 'No final exam is available.' });
     const cycle = await ensureCycle(uid, course.id);
+    const moduleRequirements = await Promise.all(getCourseModules(course).map(async (module) => {
+      const attempts = await cycleRef(uid, course.id, cycle).collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+      return attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= Math.max(60, module.examination?.passingScorePercent || 60));
+    }));
+    if (!moduleRequirements.every(Boolean)) return res.status(409).json({ error: 'All module examinations must be passed before final examination submission.' });
     const cycleDocument = cycleRef(uid, course.id, cycle);
     const session = await cycleDocument.collection('examSessions').doc('active').get();
     const questionIds = session.data()?.questionIds;
     if (!session.exists || !Array.isArray(questionIds)) return res.status(409).json({ error: 'Start the final exam before submitting answers.' });
-    const questionById = new Map(course.exam.questions.map((question) => [question.id, question]));
+    const expiresAt = Date.parse(String(session.data()?.expiresAt || ''));
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt + 30_000) {
+      return res.status(409).json({ error: 'The 60-minute exam time has expired. Please contact your instructor if a connection issue prevented submission.' });
+    }
+    const approvedExamQuestions = selectRequiredQuestionSet(course.exam.questions, Math.min(30, course.exam.questions.length));
+    if (!approvedExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet.' });
+    const questionById = new Map(approvedExamQuestions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => questionById.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
-    if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every exam question in your active session.' });
+    const attemptNumber = Number(session.data()?.attemptNumber || 1);
+    if (attemptNumber > 2) return res.status(409).json({ error: 'The final examination attempt limit has been reached.' });
+    const attemptRef = cycleDocument.collection('examAttempts').doc(`attempt-${attemptNumber}`);
+    // Make submission idempotent: if the server saved an attempt but the browser
+    // lost the response, a retry must return that trusted result even after expiry.
+    const previousAttempt = await attemptRef.get();
+    if (previousAttempt.exists) {
+      const savedAttempt = previousAttempt.data()!;
+      const savedAnswers = (savedAttempt.answers ?? {}) as Record<string, number>;
+      const savedResults = Object.fromEntries(questions.map((question) => [question.id, {
+        correct: savedAnswers[question.id] === question.correctIndex,
+        correctAnswerIndex: question.correctIndex,
+        explanation: question.explanation,
+      }]));
+      return res.json({
+        scorePercent: savedAttempt.scorePercent,
+        passed: savedAttempt.passed,
+        passingScorePercent: savedAttempt.passingScorePercent,
+        results: savedResults,
+        attempt: savedAttempt,
+        cycle,
+        alreadySubmitted: true,
+      });
+    }
+    if (!validAnswers(questions, req.body?.answers, true)) return res.status(400).json({ error: 'Submit valid answers for the questions you attempted.' });
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
-    const passingScorePercent = Math.max(PASS_MARK, course.exam.passingScorePercent || PASS_MARK);
+    const passingScorePercent = PASS_MARK;
     const passed = isPassingExamScore(scorePercent, passingScorePercent);
     const results = Object.fromEntries(questions.map((question) => [question.id, {
       correct: answers[question.id] === question.correctIndex,
       correctAnswerIndex: question.correctIndex,
       explanation: question.explanation,
     }]));
-    const attemptRef = cycleDocument.collection('examAttempts').doc('final');
     const now = new Date().toISOString();
     const attempt = await adminDb!.runTransaction(async (transaction) => {
       const previous = await transaction.get(attemptRef);
       if (previous.exists) return previous.data();
       const sessionSnapshot = await transaction.get(cycleDocument.collection('examSessions').doc('active'));
       if (!sessionSnapshot.exists) throw new Error('EXAM_SESSION_MISSING');
-      const data = { id: attemptRef.id, courseId: course.id, examId: course.exam!.id, cycle, scorePercent, passed, passingScorePercent, answers, submittedAt: now, trusted: true };
+      if (sessionSnapshot.data()?.submitted === true) {
+        const saved = await transaction.get(attemptRef);
+        if (saved.exists) return saved.data();
+        throw new Error('EXAM_SESSION_ALREADY_SUBMITTED');
+      }
+      const cycleData = await transaction.get(cycleDocument);
+      const data = { id: attemptRef.id, courseId: course.id, examId: course.exam!.id, cycle, attemptNumber, scorePercent, passed, passingScorePercent, answers, submittedAt: now, trusted: true };
       transaction.create(attemptRef, data);
-      transaction.set(cycleDocument, { cycle, examAttempted: true, examPassed: passed, examScorePercent: scorePercent, updatedAt: now }, { merge: true });
+      transaction.set(sessionSnapshot.ref, { submitted: true, submittedAt: now }, { merge: true });
+      const bestScore = Math.max(Number(cycleData.data()?.examScorePercent || 0), scorePercent);
+      transaction.set(cycleDocument, { cycle, examAttempted: true, examPassed: passed || cycleData.data()?.examPassed === true, examScorePercent: bestScore, updatedAt: now }, { merge: true });
       return data;
     });
     if (!attempt) return res.status(500).json({ error: 'Unable to save exam attempt.' });
@@ -231,6 +807,7 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     return res.json({ scorePercent: attempt.scorePercent, passed: attempt.passed, passingScorePercent, results: savedResults, attempt, cycle, alreadySubmitted: attempt.submittedAt !== now });
   } catch (error) {
     if (error instanceof Error && error.message === 'EXAM_SESSION_MISSING') return res.status(409).json({ error: 'The exam session expired. Please start the exam again.' });
+    if (error instanceof Error && error.message === 'EXAM_SESSION_ALREADY_SUBMITTED') return res.status(409).json({ error: 'This examination attempt has already been submitted.' });
     console.error('Trusted exam submission failed:', error);
     return res.status(500).json({ error: 'Unable to submit the final exam.' });
   }
@@ -264,13 +841,46 @@ router.post('/api/learning/courses/:courseId/retake', requireFirebaseAuth, async
   }
 });
 
+
+router.post('/api/practice/assignments/:assignmentId/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!adminDb || !req.user?.uid) return res.status(503).json({ error: 'Practice assignment storage is unavailable.' });
+    const uid = req.user.uid;
+    const assignmentId = String(req.params.assignmentId || '');
+    const courseId = typeof req.body?.courseId === 'string' ? req.body.courseId : '';
+    const assignment = TRUSTED_ASSIGNMENTS.find((item) => item.id === assignmentId && item.courseId === courseId);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found in the Berry course catalogue.' });
+    if (typeof req.body?.content !== 'string' || req.body.content.trim().length < 1 || req.body.content.length > 20000) {
+      return res.status(400).json({ error: 'Provide assignment content between 1 and 20,000 characters.' });
+    }
+    const attemptNumber = Number(req.body?.attemptNumber);
+    if (!Number.isInteger(attemptNumber) || attemptNumber < 1 || attemptNumber > 20) {
+      return res.status(400).json({ error: 'The assignment attempt number is invalid.' });
+    }
+    const submittedAt = typeof req.body?.submittedAt === 'string' ? req.body.submittedAt : new Date().toISOString();
+    if (submittedAt.length > 60) return res.status(400).json({ error: 'The submission date is invalid.' });
+    const record = {
+      assignmentId,
+      content: req.body.content.slice(0, 20000),
+      submittedAt,
+      attemptNumber,
+      status: 'submitted',
+      updatedAt: new Date().toISOString(),
+    };
+    await adminDb.collection('users').doc(uid).collection('practiceAssignmentSubmissions').doc(assignmentId).set(record);
+    return res.json({ saved: true, submission: record });
+  } catch (error) {
+    console.error('Practice assignment persistence failed:', error);
+    return res.status(500).json({ error: 'Unable to save this practice assignment.' });
+  }
+});
+
 router.post('/api/assignments/courses/:courseId/:assignmentId/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const context = await getEnrolledCourse(req, res, req.params.courseId);
     if (!context) return;
     const { course, uid } = context;
-    const authoredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
-    const assignment = authoredAssignments.find((item) => item.id === req.params.assignmentId);
+    const assignment = TRUSTED_ASSIGNMENTS.find((item) => item.courseId === course.id && item.id === req.params.assignmentId);
     if (!assignment || !Array.isArray(assignment.rubric) || assignment.rubric.length === 0) return res.status(409).json({ error: 'This course has no approved assignment rubric yet. Your draft is not graded or stored as a trusted result.' });
     if (typeof req.body?.content !== 'string' || req.body.content.trim().length < 1 || req.body.content.length > 20000) {
       return res.status(400).json({ error: 'Provide assignment content between 1 and 20,000 characters.' });
@@ -288,6 +898,15 @@ router.post('/api/assignments/courses/:courseId/:assignmentId/submit', requireFi
       transaction.set(submissionRef, data);
       return data;
     });
+    const lessonId = assignment.id.slice(`assignment-${course.id}-`.length);
+    const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lessonId);
+    const progressSnapshot = await progressRef.get();
+    const masteryAndActivitiesPassed = progressSnapshot.data()?.isMastered === true;
+    const assignmentPassed = attempt.status === 'graded' && Number(attempt.scorePercent) >= 50;
+    await progressRef.set({
+      isCompleted: masteryAndActivitiesPassed && assignmentPassed,
+      updatedAt: now,
+    }, { merge: true });
     return res.json({ submission: attempt, marking: result });
   } catch (error) {
     console.error('Trusted assignment submission failed:', error);
@@ -302,23 +921,111 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const { course, uid } = context;
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
-    const [cycleSnapshot, progress, attempts, assignments, allCycles] = await Promise.all([
+    const lessonList = course.chapters.flatMap((chapter) => chapter.lessons);
+    const [cycleSnapshot, progress, attempts, assignments, allCycles, activitySnapshots, lessonAttemptsSnapshot, moduleExamAttemptsSnapshot, chapterAssessmentAttemptsSnapshot] = await Promise.all([
       ref.get(), ref.collection('lessonProgress').get(), ref.collection('examAttempts').get(), ref.collection('assignments').get(),
       adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id).collection('cycles').get(),
+      Promise.all(lessonList.map((lesson) => ref.collection('lessonProgress').doc(lesson.id).collection('activities').get())),
+      ref.collection('lessonAttempts').get(),
+      ref.collection('moduleExamAttempts').get(),
+      ref.collection('chapterAssessmentAttempts').get(),
     ]);
     const historySnapshots = await Promise.all(allCycles.docs.map((cycleDocument) => cycleDocument.ref.collection('examAttempts').get()));
     const examHistory = historySnapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data()))
       .sort((left, right) => String(left.submittedAt || '').localeCompare(String(right.submittedAt || '')));
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
+    const assignmentAttemptSnapshots = await Promise.all(assignments.docs.map((document) => document.ref.collection('attempts').get()));
     const progressRecords = progress.docs.map((doc) => doc.data());
     const summary = summarizeCourseProgress(progressRecords, totalLessons);
     const { courseMasteryPercent, courseCompleted } = summary;
+    const assignmentsList = assignments.docs.map((doc) => ({ ...doc.data(), id: doc.id })) as Array<Record<string, unknown> & { id: string; status?: string; scorePercent?: unknown } >;
+    const requiredAssignments = TRUSTED_ASSIGNMENTS.filter((assignment) => assignment.courseId === course.id);
+    const requiredAssignmentRecords = requiredAssignments.map((required) => assignmentsList.find((record) => record.id === required.id)).filter((record) => record !== undefined);
+    const assignmentsComplete = requiredAssignments.every((required) => {
+      const record = assignmentsList.find((item) => item.id === required.id);
+      return record?.status === 'graded' && Number.isFinite(Number(record.scorePercent));
+    });
+    const passedModuleScores = new Map<string, number>();
+    for (const record of moduleExamAttemptsSnapshot.docs.map((doc) => doc.data())) {
+      if (record.passed === true && Number(record.scorePercent) >= 60) passedModuleScores.set(String(record.moduleId), Math.max(passedModuleScores.get(String(record.moduleId)) ?? 0, Number(record.scorePercent)));
+    }
+    const chapterBestScores = new Map<string, number>();
+    for (const record of chapterAssessmentAttemptsSnapshot.docs.map((doc) => doc.data())) {
+      if (record.passed === true && Number(record.scorePercent) >= 70) chapterBestScores.set(String(record.chapterId), Math.max(chapterBestScores.get(String(record.chapterId)) ?? 0, Number(record.scorePercent)));
+    }
+    const chapterScores = Array.from(chapterBestScores.values());
+    const assignmentScores = requiredAssignmentRecords.filter((record) => record.status === 'graded' && Number.isFinite(Number(record.scorePercent))).map((record) => Number(record.scorePercent));
+    const moduleScores = Array.from(passedModuleScores.values());
+    const finalScore = cycleSnapshot.data()?.examAttempted === true ? Number(cycleSnapshot.data()?.examScorePercent) : null;
+    const componentsComplete = chapterScores.length === course.chapters.length && assignmentsComplete && moduleScores.length === getCourseModules(course).length && finalScore !== null;
+    const weighted = componentsComplete ? calculateWeightedAcademicGrade({ chapterAssessmentPercent: chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length, assignmentPercent: assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length, moduleExaminationPercent: moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length, finalExaminationPercent: finalScore as number, weights: course.assessmentWeights }) : null;
+    const grade = weighted === null ? null : classifyAcademicGrade(weighted);
+    const componentPass = chapterScores.length === course.chapters.length && chapterScores.every((score) => score >= 70) && assignmentsComplete && assignmentScores.length === requiredAssignments.length && assignmentScores.every((score) => score >= 50) && moduleScores.length === getCourseModules(course).length && moduleScores.every((score) => score >= 60) && finalScore !== null && finalScore >= 50 && cycleSnapshot.data()?.examPassed === true;
+    const academicGrade = grade ? { ...grade, passed: componentPass && grade.percentage >= 60, componentsComplete, chapterAssessmentPercent: chapterScores.length ? chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length : null, assignmentPercent: assignmentScores.length ? assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length : null, moduleExaminationPercent: moduleScores.length ? moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length : null, finalExaminationPercent: finalScore } : { percentage: null, grade: null, classification: 'Awaiting results', passed: false, componentsComplete: false, chapterAssessmentPercent: null, assignmentPercent: null, moduleExaminationPercent: null, finalExaminationPercent: finalScore };
+    const fullCourseCompleted = courseCompleted && moduleScores.length === getCourseModules(course).length && cycleSnapshot.data()?.examPassed === true && academicGrade.passed;
+    const academicGradeRecord = {
+      learnerUid: uid, courseId: course.id, cycle, trusted: true, official: componentsComplete,
+      percentage: grade?.percentage ?? null, grade: grade?.grade ?? null, classification: grade?.classification ?? 'Awaiting results',
+      passed: academicGrade.passed, componentsComplete,
+      chapterAssessmentPercent: academicGrade.chapterAssessmentPercent,
+      assignmentPercent: academicGrade.assignmentPercent,
+      moduleExaminationPercent: academicGrade.moduleExaminationPercent,
+      finalExaminationPercent: academicGrade.finalExaminationPercent,
+      weights: course.assessmentWeights ?? { chapterAssessments: 10, assignments: 30, moduleExaminations: 25, finalExamination: 35 },
+      updatedAt: new Date().toISOString(),
+    };
+    await ref.collection('courseGrades').doc('official').set(academicGradeRecord, { merge: true });
+    const assessmentHistory = [
+      ...lessonAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'lesson_mastery', title: String(d.lessonId || 'Lesson mastery'), submittedAt: String(d.submittedAt || ''), scorePercent: Number(d.scorePercent)||0, passed: Number(d.scorePercent)>=80, attemptNumber: Number(d.attemptNumber)||undefined }; }),
+      ...chapterAssessmentAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'chapter_assessment', title: String(d.chapterId || 'Chapter assessment'), submittedAt: String(d.submittedAt || ''), scorePercent: Number(d.scorePercent)||0, passed: d.passed===true && Number(d.scorePercent)>=70, attemptNumber: Number(d.attemptNumber)||undefined }; }),
+      ...assignmentAttemptSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'assignment', title: String(d.assignmentId || 'Assignment'), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.status==='graded' && Number(d.scorePercent)>=50, attemptNumber: Number(d.attemptNumber)||undefined }; })),
+      ...moduleExamAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'module_examination', title: String(d.moduleId||'Module examination'), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.passed===true && Number(d.scorePercent)>=60, attemptNumber: Number(d.attemptNumber)||undefined }; }),
+      ...examHistory.map((d) => ({ id: String(d.id||'final-exam'), type: 'final_examination', title: course.exam?.title || 'Final examination', submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.passed===true, attemptNumber: Number(d.attemptNumber) || 1 })),
+    ].sort((a,b)=>a.submittedAt.localeCompare(b.submittedAt));
     return res.json({
+      academicGrade,
+      assessmentHistory,
       cycle,
-      courseCompleted,
+      courseCompleted: fullCourseCompleted,
       courseMasteryPercent,
       lessonProgress: Object.fromEntries(progressRecords.map((record) => [record.lessonId, record])),
+      lessonAttempts: Object.fromEntries(lessonList.map((lesson) => {
+        const latest = lessonAttemptsSnapshot.docs
+          .map((document) => document.data())
+          .filter((attempt) => attempt.lessonId === lesson.id)
+          .sort((left, right) => String(right.submittedAt || '').localeCompare(String(left.submittedAt || '')))[0];
+        if (!latest) return [lesson.id, null];
+        const answers = latest.answers && typeof latest.answers === 'object'
+          ? latest.answers as Record<string, number> : {};
+        const results = Object.fromEntries(lesson.quizQuestions.map((question) => [question.id, {
+          correct: answers[question.id] === question.correctIndex,
+          correctAnswerIndex: question.correctIndex,
+          feedback: answers[question.id] === question.correctIndex
+            ? question.explanation
+            : question.misconceptions?.[answers[question.id]] || 'Review this topic and try again.',
+        }]));
+        return [lesson.id, {
+          answers,
+          scorePercent: Number(latest.scorePercent) || 0,
+          submittedAt: typeof latest.submittedAt === 'string' ? latest.submittedAt : '',
+          results,
+        }];
+      }).filter((entry) => entry[1] !== null)),
+      lessonActivities: Object.fromEntries(lessonList.map((lesson, index) => [
+        lesson.id,
+        Object.fromEntries(activitySnapshots[index].docs.map((document) => {
+          const data = document.data();
+          return [document.id, {
+            scorePercent: Number(data.scorePercent) || 0,
+            passed: data.passed === true,
+            feedback: typeof data.feedback === 'string' ? data.feedback : '',
+            answer: data.answer && typeof data.answer === 'object' ? data.answer : undefined,
+          }];
+        })),
+      ])),
       examAttempts: attempts.docs.map((doc) => doc.data()),
+      moduleExamAttempts: moduleExamAttemptsSnapshot.docs.map((doc) => doc.data()).sort((a,b) => Number(a.attemptNumber || 0) - Number(b.attemptNumber || 0)),
+      chapterAssessmentAttempts: chapterAssessmentAttemptsSnapshot.docs.map((doc) => doc.data()).sort((a,b) => Number(a.attemptNumber || 0) - Number(b.attemptNumber || 0)),
       examHistory,
       assignments: Object.fromEntries(assignments.docs.map((doc) => [doc.id, doc.data()])),
       examAttempted: cycleSnapshot.data()?.examAttempted === true,
@@ -334,52 +1041,72 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
   try {
     const context = await getEnrolledCourse(req, res, req.params.courseId);
     if (!context) return;
+
     const { course, profile, uid } = context;
+    const recipientName = typeof profile.name === 'string' ? profile.name.trim() : '';
+    if (!recipientName) {
+      return res.status(409).json({ error: 'Please complete your learner profile name before requesting a certificate.' });
+    }
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
-    const [cycleSnapshot, progress, assignments, previousCertificates] = await Promise.all([
-      ref.get(), ref.collection('lessonProgress').get(), ref.collection('assignments').get(),
-      adminDb!.collection('users').doc(uid).collection('trustedCertificates').where('courseId', '==', course.id).get(),
-    ]);
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
-    const progressRecords = progress.docs.map((document) => document.data());
-    const courseMasteryPercent = summarizeCourseProgress(progressRecords, totalLessons).courseMasteryPercent;
-    const requiredAssignments = (course as Course & { assignments?: Assignment[] }).assignments || [];
-    const assignmentRecords = assignments.docs.map((document) => document.data());
-    const unmet = certificateUnmetRequirements({
-      totalLessons,
-      progress: progressRecords,
-      examPassed: cycleSnapshot.data()?.examPassed === true,
-      assignments: assignmentRecords,
-      approvedAssignmentCount: requiredAssignments.length,
-      certificateAlreadyIssued: !previousCertificates.empty,
-    });
-    if (unmet.length) return res.status(409).json({ eligible: false, unmet, cycle, courseMasteryPercent });
+    const requiredAssignments = TRUSTED_ASSIGNMENTS.filter((assignment) => assignment.courseId === course.id && Array.isArray(assignment.rubric) && assignment.rubric.length > 0);
+    const approvedModuleCount = getCourseModules(course).length;
+
     const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
-    const certificate: CertificateRecord & { uid: string; trusted: true; cycle: number } = {
-      id: credentialId, credentialId, courseId: course.id, courseTitle: course.title,
-      recipientName: typeof profile.name === 'string' ? profile.name : 'Berry Learner',
-      stage: profile.stage, gradeLevel: course.gradeLevel, curriculum: course.curriculum,
-      issuedDate: new Date().toISOString(), scorePercent: Number(cycleSnapshot.data()?.examScorePercent || 0),
-      authority: 'Berry Learning Platform', verified: true, uid, trusted: true, cycle,
-    };
     const certificateRef = adminDb!.collection('trustedCertificates').doc(credentialId);
-    await adminDb!.runTransaction(async (transaction) => {
-      const existing = await transaction.get(certificateRef);
-      const duplicate = await transaction.get(adminDb!.collection('users').doc(uid).collection('trustedCertificates').doc(course.id));
-      if (existing.exists || duplicate.exists) throw new Error('CERTIFICATE_ALREADY_EXISTS');
-      transaction.create(certificateRef, certificate);
-      transaction.create(duplicate.ref, certificate);
+    const learnerCertificateRef = adminDb!
+      .collection('users').doc(uid)
+      .collection('trustedCertificates').doc(`${course.id}_${cycle}`);
+
+    const certificate: CertificateRecord & { uid: string; trusted: true; cycle: number } = {
+      id: credentialId,
+      credentialId,
+      courseId: course.id,
+      courseTitle: course.title,
+      recipientName,
+      stage: profile.stage,
+      gradeLevel: course.gradeLevel,
+      curriculum: course.curriculum,
+      issuedDate: new Date().toISOString(),
+      scorePercent: Number((await ref.get()).data()?.examScorePercent || 0),
+      verificationUrl: `/verify/certificate/${credentialId}`,
+      authority: 'Berry Learning Platform',
+      verified: true,
+      uid,
+      trusted: true,
+      cycle,
+    };
+
+    const issuance = await issueTrustedCertificateTransaction({
+      db: adminDb!,
+      cycleRef: ref,
+      certificateRef,
+      learnerCertificateRef,
+      certificate,
+      totalLessons,
+      approvedAssignmentCount: requiredAssignments.length,
+      approvedChapterCount: course.chapters.length,
+      approvedModuleCount,
+      weights: course.assessmentWeights,
+      cycle,
     });
-    return res.status(201).json({ eligible: true, certificate });
+
+    if (!issuance.eligible) {
+      return res.status(409).json({
+        eligible: false,
+        unmet: issuance.unmet,
+        cycle: issuance.cycle,
+        courseMasteryPercent: issuance.courseMasteryPercent,
+      });
+    }
+
+    return res.status(201).json({ eligible: true, certificate: issuance.certificate });
   } catch (error) {
-    if (error instanceof Error && error.message === 'CERTIFICATE_ALREADY_EXISTS') return res.status(409).json({ eligible: false, error: 'A certificate has already been issued for this course.' });
     console.error('Trusted certificate issuance failed:', error);
     return res.status(500).json({ error: 'Unable to issue the certificate.' });
   }
 });
-
-
 router.get('/api/certificates/mine', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
   try {
     if (!adminDb || !req.user?.uid) return res.status(503).json({ error: 'Certificate records are temporarily unavailable.' });
@@ -391,13 +1118,37 @@ router.get('/api/certificates/mine', requireFirebaseAuth, async (req: Authentica
   }
 });
 
+function escapePublicCertificateText(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || '');
+}
+
+router.get('/verify/certificate/:credentialId', async (req, res) => {
+  try {
+    if (!adminDb) return res.status(503).type('html').send('<h1>Verification temporarily unavailable</h1>');
+    const snapshot = await adminDb.collection('trustedCertificates').doc(String(req.params.credentialId)).get();
+    const certificate = snapshot.data();
+    if (!snapshot.exists || certificate?.trusted !== true) return res.status(404).type('html').send('<!doctype html><html><head><meta charset="utf-8"><title>Berry certificate verification</title></head><body><main><h1>Certificate not found</h1><p>This credential could not be verified by Berry.</p></main></body></html>');
+    const valid = certificate.revoked !== true;
+    const title = valid ? 'Verified Berry learning record' : 'Revoked Berry learning record';
+    const publicRows = [
+      ['Learner', certificate.recipientName], ['Course', certificate.courseTitle], ['Credential ID', certificate.credentialId],
+      ['Issued', certificate.issuedDate], ['Final percentage', `${certificate.scorePercent}%`],
+      ['Grade', certificate.grade], ['Classification', certificate.classification],
+    ].map(([label, value]) => `<div class="row"><span>${escapePublicCertificateText(label)}</span><strong>${escapePublicCertificateText(value || '—')}</strong></div>`).join('');
+    return res.status(valid ? 200 : 410).type('html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{margin:0;background:#f5f3ff;color:#172033;font:16px system-ui,sans-serif}.card{max-width:680px;margin:8vh auto;padding:32px;background:#fff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 40px #312e8112}.brand{color:#7e22ce;font-weight:900;letter-spacing:.12em}.status{display:inline-block;margin:18px 0;padding:8px 12px;border-radius:999px;background:${valid?'#dcfce7':'#fee2e2'};color:${valid?'#166534':'#991b1b'};font-weight:800;font-size:13px}.row{display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid #f1f5f9}.row span{color:#64748b}.row strong{text-align:right}.note{margin-top:24px;color:#64748b;font-size:12px}@media(max-width:600px){.card{margin:16px;padding:22px}.row{font-size:13px}}</style></head><body><main class="card"><div class="brand">BERRY LEARNING PLATFORM</div><h1>${title}</h1><div class="status">${valid?'VALID CREDENTIAL':'REVOKED CREDENTIAL'}</div>${publicRows}<p class="note">This page verifies a Berry learning record only. It is not an external accreditation or government qualification. Only public certificate details are displayed.</p></main></body></html>`);
+  } catch (error) {
+    console.error('Public certificate page failed:', error);
+    return res.status(500).type('html').send('<h1>Unable to verify this certificate</h1>');
+  }
+});
+
 router.get('/api/certificates/verify/:credentialId', async (req, res) => {
   try {
     if (!adminDb) return res.status(503).json({ error: 'Certificate verification is temporarily unavailable.' });
     const snapshot = await adminDb.collection('trustedCertificates').doc(req.params.credentialId).get();
     if (!snapshot.exists || snapshot.data()?.trusted !== true) return res.status(404).json({ valid: false, error: 'Certificate not found or not verified.' });
     const certificate = snapshot.data()!;
-    return res.json({ valid: true, credentialId: certificate.credentialId, recipientName: certificate.recipientName, courseTitle: certificate.courseTitle, issuedDate: certificate.issuedDate, authority: certificate.authority });
+    return res.json({ valid: true, credentialId: certificate.credentialId, recipientName: certificate.recipientName, courseTitle: certificate.courseTitle, issuedDate: certificate.issuedDate, scorePercent: certificate.scorePercent, grade: certificate.grade, classification: certificate.classification, revoked: certificate.revoked === true, authority: certificate.authority });
   } catch (error) {
     console.error('Certificate verification failed:', error);
     return res.status(500).json({ error: 'Unable to verify this certificate.' });
@@ -405,3 +1156,6 @@ router.get('/api/certificates/verify/:credentialId', async (req, res) => {
 });
 
 export default router;
+
+
+

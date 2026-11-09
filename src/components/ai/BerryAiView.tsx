@@ -21,6 +21,7 @@ import {
   PanelLeftOpen,
 } from 'lucide-react';
 import { LearnerProfile, Course, AiConversation, AiChatMessage } from '../../types';
+import { resolveCanonicalStage, type CurriculumRepository } from '../../curriculum/repository';
 import { INITIAL_CONVERSATIONS } from '../../data/curriculumData';
 import { firebaseAuth } from '../../lib/firebase';
 import {
@@ -32,17 +33,52 @@ import {
 interface BerryAiViewProps {
   learner: LearnerProfile;
   courses: Course[];
+  curriculumRepository: CurriculumRepository;
   onOpenLesson: (course: Course, lessonId: string) => void;
 }
 
 export const BerryAiView: React.FC<BerryAiViewProps> = ({
   learner,
   courses,
+  curriculumRepository,
   onOpenLesson,
 }) => {
-  // Find current active course for context
+  // Let learners explicitly choose the enrolled course and lesson Berry AI should use.
+  const enrolledCourses = courses.filter((course) => learner.enrolledCourseIds.includes(course.id));
+  const [selectedCourseId, setSelectedCourseId] = useState(
+    enrolledCourses[0]?.id || courses[0]?.id || '',
+  );
+  const [selectedLessonId, setSelectedLessonId] = useState('');
   const activeCourse =
-    courses.find((c) => learner.enrolledCourseIds.includes(c.id)) || courses[0];
+    courses.find((course) => course.id === selectedCourseId) ||
+    enrolledCourses[0] ||
+    courses[0];
+  const activeLesson = activeCourse?.chapters
+    .flatMap((chapter) => chapter.lessons)
+    .find((lesson) => lesson.id === selectedLessonId);
+
+  const activeCourseEntry = activeCourse ? curriculumRepository.byId[activeCourse.id] : undefined;
+  const learnerStage = curriculumRepository.stages.find(
+    (stage) => stage.id === resolveCanonicalStage(learner.stage),
+  );
+  const curriculumContext = activeCourseEntry
+    ? [
+        `Curriculum: ${curriculumRepository.curricula.find((item) => item.id === activeCourseEntry.placement.curriculum)?.label || activeCourseEntry.placement.curriculum}`,
+        `Learning stage: ${curriculumRepository.stages.find((stage) => stage.id === activeCourseEntry.placement.canonicalStage)?.label || activeCourseEntry.placement.canonicalStage}`,
+        `Grade or level: ${activeCourseEntry.placement.gradeLevel}`,
+        `Subject: ${activeCourseEntry.placement.subject}`,
+        activeCourseEntry.placement.advanceTrack
+          ? `Advanced pathway: ${activeCourseEntry.placement.advanceTrack === 'professional' ? 'Professional' : 'University'}`
+          : '',
+      ].filter(Boolean).join('\n')
+    : `Learner learning stage: ${learnerStage?.label || learner.stage}`;
+  const courseOutline = activeCourse
+    ? activeCourse.chapters.map((chapter) =>
+        `${chapter.title}: ${chapter.lessons.map((lesson) => lesson.title).join(', ')}`,
+      ).join('\n').slice(0, 6000)
+    : '';
+  const currentTopic = activeLesson?.title || 'Course overview';
+
 
   const [conversations, setConversations] = useState<AiConversation[]>([]);
 
@@ -328,7 +364,9 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
           message: textToSend,
           stream: true,
           courseTitle: activeCourse?.title,
-          currentTopic: activeCourse?.chapters[0]?.title,
+          currentTopic,
+          curriculumContext,
+          courseOutline,
           history: contextMessages
             .slice(-12)
             .map((message) => ({
@@ -427,6 +465,33 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  // Render AI markdown as readable chat typography instead of exposing raw
+  // markdown markers in the conversation bubble.
+  const renderInlineAiText = (value: string) => value
+    .split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g)
+    .filter(Boolean)
+    .map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) return <strong key={index}>{part.slice(2, -2)}</strong>;
+      if (part.startsWith('*') && part.endsWith('*')) return <em key={index}>{part.slice(1, -1)}</em>;
+      if (part.startsWith('`') && part.endsWith('`')) return <code key={index} className="rounded bg-slate-100 px-1 py-0.5 text-[0.92em]">{part.slice(1, -1)}</code>;
+      return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+
+  const renderAiText = (source: string) => source.split(/\r?\n/).map((line, index) => {
+    const value = line.trim();
+    if (!value) return <div key={index} className="h-1.5" />;
+    if (/^#{1,3}\s/.test(value)) {
+      return <h3 key={index} className="pt-2 text-sm font-extrabold text-slate-900">{value.replace(/^#{1,3}\s*/, '')}</h3>;
+    }
+    if (/^[-*]\s/.test(value)) {
+      return <div key={index} className="flex items-start gap-2 pl-1"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" /><span>{renderInlineAiText(value.replace(/^[-*]\s*/, ''))}</span></div>;
+    }
+    if (/^\d+[.)]\s/.test(value)) {
+      return <p key={index} className="pl-1">{renderInlineAiText(value)}</p>;
+    }
+    return <p key={index}>{renderInlineAiText(value)}</p>;
+  });
 
   // Filter conversations matching search query
   const filteredConversations = conversations.filter(
@@ -589,7 +654,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
                 {activeConversation?.title || 'Berry AI Socratic Tutor'}
               </h2>
               <p className="text-[10px] text-slate-500">
-                Course: {activeCourse?.title} • {learner.stage.toUpperCase()} Mode
+                {activeCourse?.title || 'No course selected'} • {activeLesson?.title || 'Course overview'}
               </p>
             </div>
           </div>
@@ -603,6 +668,41 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
               <span>New Thread</span>
             </button>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50/70">
+          <label className="min-w-0 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            Learning course
+            <select
+              value={activeCourse?.id || ''}
+              onChange={(event) => {
+                setSelectedCourseId(event.target.value);
+                setSelectedLessonId('');
+              }}
+              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-800"
+            >
+              {courses.filter((course) => learner.enrolledCourseIds.includes(course.id)).map((course) => (
+                <option key={course.id} value={course.id}>{course.title}</option>
+              ))}
+            </select>
+          </label>
+          <label className="min-w-0 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            Lesson / topic
+            <select
+              value={activeLesson?.id || ''}
+              onChange={(event) => setSelectedLessonId(event.target.value)}
+              className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium normal-case tracking-normal text-slate-800"
+            >
+              <option value="">Course overview</option>
+              {activeCourse?.chapters.map((chapter) => (
+                <optgroup key={chapter.id} label={chapter.title}>
+                  {chapter.lessons.map((lesson) => (
+                    <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
         </div>
 
         {/* Messages Scroll View */}
@@ -660,7 +760,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
                         : 'bg-slate-50 text-slate-800 border border-slate-200/80 rounded-tl-xs'
                     }`}
                   >
-                    {msg.text}
+                    <div className={isUser ? 'space-y-2' : 'space-y-2 text-sm leading-7'}>{isUser ? msg.text : renderAiText(msg.text)}</div>
 
                     {/* Copy action on assistant response */}
                     {!isUser && (
@@ -704,7 +804,7 @@ export const BerryAiView: React.FC<BerryAiViewProps> = ({
             <div className="flex gap-3 mr-auto max-w-3xl">
               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 via-indigo-600 to-amber-400 text-white flex items-center justify-center flex-shrink-0 text-xs"><Bot size={15} /></div>
               <div className="min-w-0 flex-1 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 rounded-tl-xs text-xs sm:text-sm text-slate-800 whitespace-pre-wrap">
-                {streamingReply || <span className="inline-flex items-center gap-2 text-purple-700 font-semibold"><Sparkles size={14} className="animate-spin" />Berry AI is thinking…</span>}
+                {streamingReply ? <div className="space-y-2 text-sm leading-7">{renderAiText(streamingReply)}</div> : <span className="inline-flex items-center gap-2 text-purple-700 font-semibold"><Sparkles size={14} className="animate-spin" />Berry AI is thinking…</span>}
                 {streamingReply && <span className="inline-block w-1.5 h-4 ml-1 bg-purple-500 animate-pulse align-middle" aria-label="Generating response" />}
               </div>
             </div>

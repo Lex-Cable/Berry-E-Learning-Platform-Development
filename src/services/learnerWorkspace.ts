@@ -8,7 +8,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import type { AppNotification, TaskItem } from '../types';
-import { firestoreDb } from '../lib/firebase';
+import { firestoreDb, firebaseAuth } from '../lib/firebase';
 
 function requireDatabase() {
   if (!firestoreDb) {
@@ -106,7 +106,7 @@ export async function loadAssignmentSubmission(
   uid: string,
   assignmentId: string,
 ): Promise<{ content: string; status: string; scorePercent: number; markerFeedback: string; gradedAt: string } | null> {
-  const snapshot = await getDoc(doc(requireDatabase(), 'users', uid, 'assignmentSubmissions', assignmentId));
+  const snapshot = await getDoc(doc(requireDatabase(), 'users', uid, 'practiceAssignmentSubmissions', assignmentId));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
   return {
@@ -122,42 +122,34 @@ export async function saveAssignmentSubmission(
   uid: string,
   submission: {
     assignmentId: string;
+    courseId: string;
     content: string;
     submittedAt: string;
     attemptNumber: number;
     status: string;
   },
 ): Promise<void> {
-  await setDoc(doc(requireDatabase(), 'users', uid, 'assignmentSubmissions', submission.assignmentId), {
-    ...submission,
-    content: submission.content.slice(0, ASSIGNMENT_MAX),
-    updatedAt: serverTimestamp(),
-  });
+  const user = firebaseAuth?.currentUser;
+  if (!user || user.uid !== uid) throw new Error('Please sign in again to sync this assignment.');
+  const token = await user.getIdToken();
+  let response: Response;
+  try {
+    response = await fetch(`/api/practice/assignments/${encodeURIComponent(submission.assignmentId)}/submit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        courseId: submission.courseId,
+        content: submission.content.slice(0, ASSIGNMENT_MAX),
+        submittedAt: submission.submittedAt,
+        attemptNumber: submission.attemptNumber,
+      }),
+    });
+  } catch {
+    throw new Error('Could not connect to Berry. The assignment remains saved on this device.');
+  }
+  const payload = await response.json().catch(() => ({})) as { error?: string };
+  if (!response.ok) throw new Error(payload.error || 'The practice assignment could not be synced.');
 }
-
-export async function saveAssignmentMarking(
-  uid: string,
-  marking: {
-    assignmentId: string;
-    content: string;
-    submittedAt: string;
-    attemptNumber: number;
-    status: string;
-    scorePercent: number;
-    markerFeedback: string;
-    gradedAt: string;
-    criterionScores: { criterionId: string; awarded: number; outOf: number }[];
-  },
-): Promise<void> {
-  await setDoc(doc(requireDatabase(), 'users', uid, 'assignmentSubmissions', marking.assignmentId), {
-    ...marking,
-    content: marking.content.slice(0, ASSIGNMENT_MAX),
-    markerFeedback: marking.markerFeedback.slice(0, 5000),
-    updatedAt: serverTimestamp(),
-  });
-}
-
-// ------------------------------------------------------- exam attempts
 
 export async function loadExamAttempts(uid: string): Promise<import('../types').ExamAttemptRecord[]> {
   const snapshot = await getDocs(collection(requireDatabase(), 'users', uid, 'examAttempts'));
@@ -182,7 +174,7 @@ export async function loadExamAttempts(uid: string): Promise<import('../types').
       passingScorePercent: data.passingScorePercent,
       answers: data.answers as Record<string, number>,
       submittedAt: data.submittedAt,
-      trusted: data.trusted === true,
+      trusted: false,
     });
   }
   return attempts;

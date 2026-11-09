@@ -46,6 +46,39 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const draftKey = `berry_transcript_draft_${firebaseAuth?.currentUser?.uid || 'local'}`;
+
+  // Restore an unsaved transcript after a tab refresh or browser interruption.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as { text?: unknown; title?: unknown; seconds?: unknown };
+        if (typeof draft.text === 'string' && draft.text.trim()) {
+          setCurrentText(draft.text);
+          setSessionTitle(typeof draft.title === 'string' && draft.title.trim() ? draft.title : 'Recovered lecture transcript');
+          setRecordingSeconds(typeof draft.seconds === 'number' && Number.isFinite(draft.seconds) ? Math.max(0, draft.seconds) : 0);
+          setRecordingError('Recovered an unsaved transcript from this browser. Save it to keep it in your sessions.');
+        }
+      }
+    } catch (error) {
+      console.warn('Could not restore the local transcript draft:', error);
+    } finally {
+      setDraftRestored(true);
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftRestored) return;
+    try {
+      const text = [currentText.trim(), interimText.trim()].filter(Boolean).join(' ');
+      if (text) localStorage.setItem(draftKey, JSON.stringify({ text, title: sessionTitle, seconds: recordingSeconds }));
+      else localStorage.removeItem(draftKey);
+    } catch (error) {
+      console.warn('Could not persist the local transcript draft:', error);
+    }
+  }, [draftRestored, draftKey, currentText, interimText, sessionTitle, recordingSeconds]);
 
   // Recognition ref
   const recognitionRef = useRef<any>(null);
@@ -251,6 +284,11 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
     };
 
     onSaveSession(newSession);
+    try { localStorage.removeItem(draftKey); } catch { /* saved session remains authoritative */ }
+    setCurrentText('');
+    setInterimText('');
+    setRecordingSeconds(0);
+    setAiSummary(null);
     setRecordingError('Transcript added to your saved sessions. Cloud synchronization may take a moment.');
   };
 

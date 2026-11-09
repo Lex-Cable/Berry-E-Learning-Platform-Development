@@ -11,24 +11,25 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { LibraryCurriculumGroup, LibraryMaterialType, LibraryResource, LearnerProfile, LearnerStage } from '../../types';
+import { resolveCanonicalStage, type CanonicalStageId, type CurriculumRepository } from '../../curriculum/repository';
 
 interface LibraryViewProps {
   resources: LibraryResource[];
   learner: LearnerProfile;
+  curriculumRepository: CurriculumRepository;
   onToggleBookmark: (resourceId: string, resource?: LibraryResource) => void;
 }
 
-type StageFilter = 'all' | 'early' | 'junior' | 'senior' | 'university' | 'advanced';
+type StageFilter = 'all' | CanonicalStageId;
 type CurriculumFilter = 'all' | LibraryCurriculumGroup;
 type MaterialFilter = 'all' | LibraryMaterialType;
 
 const stageOptions: { id: StageFilter; label: string; emoji: string }[] = [
   { id: 'all', label: 'Every level', emoji: '🌍' },
-  { id: 'early', label: 'Berry Early', emoji: '🌱' },
-  { id: 'junior', label: 'Berry Junior', emoji: '🧭' },
-  { id: 'senior', label: 'Berry Senior', emoji: '🚀' },
-  { id: 'university', label: 'University', emoji: '🎓' },
-  { id: 'advanced', label: 'Advanced', emoji: '✨' },
+  { id: 'early_years', label: 'Early Years', emoji: '🌱' },
+  { id: 'primary', label: 'Primary & Junior', emoji: '🧭' },
+  { id: 'secondary', label: 'Secondary & Senior', emoji: '🚀' },
+  { id: 'advanced', label: 'Advanced Learning', emoji: '✨' },
 ];
 
 const curriculumOptions: { id: CurriculumFilter; label: string }[] = [
@@ -67,18 +68,13 @@ const typeLabels: Record<LibraryMaterialType, string> = {
   open_catalog: 'Open catalog',
 };
 
-const selectedStageFor = (stage: LearnerStage): StageFilter => {
-  if (stage === 'advance' || stage === 'professionals') return 'advanced';
-  return stage;
-};
+const selectedStageFor = (stage: LearnerStage): StageFilter =>
+  resolveCanonicalStage(stage);
 
 const matchesStage = (resource: LibraryResource, selectedStage: StageFilter) => {
   if (selectedStage === 'all') return true;
   if (resource.levels.length === 0) return true;
-  if (selectedStage === 'advanced') {
-    return resource.levels.includes('advance') || resource.levels.includes('professionals');
-  }
-  return resource.levels.includes(selectedStage);
+  return resource.levels.some((level) => resolveCanonicalStage(level) === selectedStage);
 };
 
 const ResourceCover: React.FC<{ resource: LibraryResource }> = ({ resource }) => {
@@ -119,6 +115,7 @@ const ResourceShelf: React.FC<{ provider: string; children: React.ReactNode }> =
 export const LibraryView: React.FC<LibraryViewProps> = ({
   resources,
   learner,
+  curriculumRepository,
   onToggleBookmark,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -234,6 +231,52 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     });
   }, [resources, apiResources]);
 
+  const learnerCourseEntries = useMemo(
+    () => learner.enrolledCourseIds
+      .map((courseId) => curriculumRepository.byId[courseId])
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+    [learner.enrolledCourseIds, curriculumRepository],
+  );
+
+  const recommendedResources = useMemo(() => {
+    const normalize = (value: string) => value.trim().toLocaleLowerCase().replace(/\\s+/g, ' ');
+    const learnerStage = resolveCanonicalStage(learner.stage);
+    const curriculumAliases: Record<string, string[]> = {
+      kenya_cbc: ['kenya cbc', 'cbc', 'cbe', 'competency-based curriculum'],
+      cambridge: ['cambridge'],
+      uk_national: ['england national curriculum', 'uk national curriculum', 'national curriculum for england'],
+      us_common_core: ['common core', 'us common core'],
+      ib: ['international baccalaureate', 'ib diploma', 'ib programme'],
+    };
+    const learnerCurriculumTerms = curriculumAliases[learner.curriculum] ?? [learner.curriculum];
+    const matchesCurriculum = (resource: LibraryResource) => {
+      const label = normalize(resource.curriculumLabel);
+      return learnerCurriculumTerms.some((term) => label.includes(term))
+        || (learner.curriculum === 'kenya_cbc' && resource.curriculumGroup === 'kenya_cbc')
+        || (['cambridge', 'uk_national', 'us_common_core', 'ib'].includes(learner.curriculum)
+          && resource.curriculumGroup === 'international');
+    };
+    const scoreResource = (resource: LibraryResource) => {
+      let score = 0;
+      const resourceStages = resource.levels.map(resolveCanonicalStage);
+      if (resourceStages.includes(learnerStage)) score += 4;
+      const grade = normalize(learner.gradeLevel);
+      const gradeLabel = normalize(resource.gradeLabel ?? '');
+      if (grade && gradeLabel && (gradeLabel === grade || gradeLabel.includes(grade) || grade.includes(gradeLabel))) score += 5;
+      const resourceSubjects = resource.subjects.map(normalize);
+      const enrolledSubjects = learnerCourseEntries.map((entry) => normalize(entry.placement.subject));
+      if (resourceSubjects.some((subject) => enrolledSubjects.includes(subject))) score += 5;
+      if (matchesCurriculum(resource)) score += 3;
+      return score;
+    };
+    return availableResources
+      .map((resource) => ({ resource, score: scoreResource(resource) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.resource.title.localeCompare(b.resource.title))
+      .slice(0, 4)
+      .map(({ resource }) => resource);
+  }, [availableResources, learner.stage, learner.curriculum, learner.gradeLevel, learnerCourseEntries]);
+
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
     return availableResources.filter((resource) => {
@@ -310,6 +353,29 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         <p role={apiError ? 'status' : undefined} aria-live="polite" className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-900">
           {apiLoading ? 'Connecting to the Open Textbook Library catalogue… Curated Berry resources remain available.' : 'The live Open Textbook Library catalogue is unavailable right now. Showing Berry’s curated resources instead.'}
         </p>
+      )}
+
+      {recommendedResources.length > 0 && (
+        <section className="space-y-3 rounded-3xl border border-purple-100 bg-purple-50/60 p-4 md:p-5" aria-label="Recommended learning resources">
+          <div>
+            <h3 className="text-base font-black text-slate-900">Recommended for your learning</h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              Matched using your learning stage, curriculum, grade level, and subjects in your enrolled courses. Open each resource to confirm its specific level and access terms.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {recommendedResources.map((resource) => (
+              <a key={resource.id} href={resource.url} target="_blank" rel="noopener noreferrer" className="flex min-w-0 items-start gap-3 rounded-2xl border border-purple-100 bg-white p-3 transition hover:border-purple-300 hover:shadow-sm">
+                <ResourceCover resource={resource} />
+                <span className="min-w-0">
+                  <span className="block line-clamp-2 text-sm font-extrabold text-slate-900">{resource.title}</span>
+                  <span className="mt-1 block text-xs font-semibold text-purple-800">{resource.provider}</span>
+                  <span className="mt-1 block text-[11px] text-slate-500">{resource.subjects.slice(0, 2).join(' · ') || resource.curriculumLabel}</span>
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5" aria-label="Filter library resources">
