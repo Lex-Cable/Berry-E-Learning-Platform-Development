@@ -835,7 +835,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const moduleScores = Array.from(passedModuleScores.values());
     const finalScore = cycleSnapshot.data()?.examAttempted === true ? Number(cycleSnapshot.data()?.examScorePercent) : null;
     const componentsComplete = chapterScores.length === totalLessons && assignmentsComplete && moduleScores.length === getCourseModules(course).length && finalScore !== null;
-    const weighted = componentsComplete ? calculateWeightedAcademicGrade({ chapterAssessmentPercent: chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length, assignmentPercent: assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length, moduleExaminationPercent: moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length, finalExaminationPercent: finalScore as number }) : null;
+    const weighted = componentsComplete ? calculateWeightedAcademicGrade({ chapterAssessmentPercent: chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length, assignmentPercent: assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length, moduleExaminationPercent: moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length, finalExaminationPercent: finalScore as number, weights: course.assessmentWeights }) : null;
     const grade = weighted === null ? null : classifyAcademicGrade(weighted);
     const componentPass = chapterScores.length === totalLessons && chapterScores.every((score) => score >= 70) && assignmentsComplete && assignmentScores.length === requiredAssignments.length && assignmentScores.every((score) => score >= 50) && moduleScores.length === getCourseModules(course).length && moduleScores.every((score) => score >= 60) && finalScore !== null && finalScore >= 50 && cycleSnapshot.data()?.examPassed === true;
     const academicGrade = grade ? { ...grade, passed: componentPass && grade.percentage >= 60, componentsComplete, chapterAssessmentPercent: chapterScores.length ? chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length : null, assignmentPercent: assignmentScores.length ? assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length : null, moduleExaminationPercent: moduleScores.length ? moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length : null, finalExaminationPercent: finalScore } : { percentage: null, grade: null, classification: 'Awaiting results', passed: false, componentsComplete: false, chapterAssessmentPercent: null, assignmentPercent: null, moduleExaminationPercent: null, finalExaminationPercent: finalScore };
@@ -949,6 +949,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
       totalLessons,
       approvedAssignmentCount: requiredAssignments.length,
       approvedModuleCount,
+      weights: course.assessmentWeights,
       cycle,
     });
 
