@@ -41,7 +41,7 @@ test('full retake is unavailable until every course lesson is completed', () => 
 });
 
 test('certificate eligibility rejects missing requirements and accepts a fully eligible course', () => {
-  const base = { totalLessons: 2, progress: [{ isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }, { isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }], examPassed: true, assignments: [{ status: 'graded', scorePercent: 75 }], approvedAssignmentCount: 1, approvedInteractiveLessonCount: 2, interactiveScorePercent: 90, certificateAlreadyIssued: false };
+  const base = { totalLessons: 2, progress: [{ isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }, { isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }], examPassed: true, assignments: [{ status: 'graded', scorePercent: 75 }], approvedAssignmentCount: 1, moduleExaminations: [{ moduleId: 'm1', scorePercent: 70, passed: true }], approvedModuleCount: 1, approvedInteractiveLessonCount: 2, interactiveScorePercent: 90, certificateAlreadyIssued: false };
   assert.deepEqual(certificateUnmetRequirements(base), []);
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 0, assignments: [] }).some((item) => item.includes('rubric')));
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 2, assignments: [{ status: 'graded', scorePercent: 90 }] }).some((item) => item.includes('topic assignments completed')));
@@ -51,13 +51,9 @@ test('certificate eligibility rejects missing requirements and accepts a fully e
   assert.ok(certificateUnmetRequirements({ ...base, assignments: [{ status: 'graded', scorePercent: 49 }] }).some((item) => item.includes('assignment')));
 });
 
-test('weighted certificate score uses the approved 25/35/20/20 components', () => {
-  assert.equal(calculateWeightedCertificateScore({
-    assignmentScores: [80],
-    examScorePercent: 90,
-    masteryScores: [70, 90],
-    interactiveScores: [100, 80],
-  }), 86);
+test('official certificate score uses approved 10/30/25/35 academic weights', () => {
+  assert.equal(calculateWeightedCertificateScore({ chapterAssessmentScores: [80], assignmentScores: [90], moduleExaminationScores: [70], finalExamScorePercent: 60 }), 73.5);
+  assert.equal(calculateWeightedCertificateScore({ chapterAssessmentScores: [], assignmentScores: [90], moduleExaminationScores: [70], finalExamScorePercent: 60 }), null);
 });
 
 test('required assessment question sets have the exact requested length and never fabricate missing items', () => {
