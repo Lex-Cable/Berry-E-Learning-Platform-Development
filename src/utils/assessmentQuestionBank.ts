@@ -49,29 +49,48 @@ function asMastery(seed: Seed, lesson: Lesson, index: number): QuizQuestion {
  */
 export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
   return courses.map((course) => {
+    // Explicitly authored formal-assessment items have priority over legacy
+    // pools and final-exam seeds. Reserve them first so an overlapping legacy
+    // prompt can never silently empty a chapter or module assessment.
     const usedPrompts = new Set<string>();
+    const explicitByLesson = new Map<string, { chapter: Seed[]; module: Seed[] }>();
+    for (const chapter of course.chapters) {
+      for (const lesson of chapter.lessons) {
+        const takeExplicit = (questions: QuizQuestion[] | undefined): Seed[] => {
+          const local = new Set<string>();
+          return (questions || [])
+            .map(asSeed)
+            .filter(isValidSeed)
+            .filter((seed) => {
+              const key = normalizeQuestion(seed.question);
+              if (local.has(key) || usedPrompts.has(key)) return false;
+              local.add(key);
+              usedPrompts.add(key);
+              return true;
+            });
+        };
+        explicitByLesson.set(lesson.id, {
+          chapter: takeExplicit(lesson.chapterAssessmentQuestions),
+          module: takeExplicit(lesson.moduleExamQuestions),
+        });
+      }
+    }
+
     const finalSeeds: Seed[] = (course.exam?.questions || []).map((q) => ({
       id: q.id, question: q.question, options: q.options, correctIndex: q.correctIndex,
       explanation: q.explanation || `This assesses ${q.topic || course.title}.`, topic: q.topic || course.title,
     })).filter(isValidSeed)
-      .filter((seed) => { const key = normalizeQuestion(seed.question); if (usedPrompts.has(key)) return false; usedPrompts.add(key); return true; });
+      .filter((seed) => {
+        const key = normalizeQuestion(seed.question);
+        if (usedPrompts.has(key)) return false;
+        usedPrompts.add(key);
+        return true;
+      });
 
     const chapters = course.chapters.map((chapter) => ({
       ...chapter,
       lessons: chapter.lessons.map((lesson) => {
         const uniqueSeeds = lesson.quizQuestions.map(asSeed).filter(isValidSeed)
-          .filter((seed, index, all) => all.findIndex((candidate) => normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)) === index)
-          .filter((seed) => { const key = normalizeQuestion(seed.question); if (usedPrompts.has(key)) return false; usedPrompts.add(key); return true; });
-
-        const masteryCount = uniqueSeeds.length <= 2 ? Math.min(1, uniqueSeeds.length) : Math.min(10, Math.max(1, Math.floor(uniqueSeeds.length / 3)));
-        const masterySeeds = uniqueSeeds.slice(0, masteryCount);
-        const remainingSeeds = uniqueSeeds.slice(masteryCount);
-        const chapterCount = remainingSeeds.length >= 2 ? Math.max(1, Math.floor(remainingSeeds.length / 2)) : remainingSeeds.length;
-        const legacyChapterSeeds = remainingSeeds.slice(0, chapterCount);
-        const legacyModuleSeeds = remainingSeeds.slice(chapterCount);
-
-        const takeExplicit = (questions: QuizQuestion[] | undefined): Seed[] => (questions || [])
-          .map(asSeed).filter(isValidSeed)
           .filter((seed, index, all) => all.findIndex((candidate) => normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)) === index)
           .filter((seed) => {
             const key = normalizeQuestion(seed.question);
@@ -80,16 +99,25 @@ export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
             return true;
           });
 
-        const explicitChapterSeeds = takeExplicit(lesson.chapterAssessmentQuestions);
-        const explicitModuleSeeds = takeExplicit(lesson.moduleExamQuestions);
-        const chapterSeeds = [...explicitChapterSeeds, ...legacyChapterSeeds];
-        const moduleSeeds = [...explicitModuleSeeds, ...legacyModuleSeeds];
+        const masteryCount = uniqueSeeds.length <= 2 ? Math.min(1, uniqueSeeds.length) : Math.min(10, Math.max(1, Math.floor(uniqueSeeds.length / 3)));
+        const masterySeeds = uniqueSeeds.slice(0, masteryCount);
+        const remainingSeeds = uniqueSeeds.slice(masteryCount);
+        const chapterCount = remainingSeeds.length >= 2 ? Math.max(1, Math.floor(remainingSeeds.length / 2)) : remainingSeeds.length;
+        const legacyChapterSeeds = remainingSeeds.slice(0, chapterCount);
+        const legacyModuleSeeds = remainingSeeds.slice(chapterCount);
+        const explicit = explicitByLesson.get(lesson.id) || { chapter: [], module: [] };
 
         return {
           ...lesson,
           quizQuestions: masterySeeds.map((seed, index) => asMastery(seed, lesson, index)),
-          chapterAssessmentQuestions: chapterSeeds.map((seed, index) => asMastery(seed, lesson, index + masteryCount)),
-          moduleExamQuestions: moduleSeeds.map((seed, index) => asMastery(seed, lesson, index + masteryCount + chapterCount)),
+          chapterAssessmentQuestions: [
+            ...explicit.chapter,
+            ...legacyChapterSeeds,
+          ].map((seed, index) => asMastery(seed, lesson, index + masteryCount)),
+          moduleExamQuestions: [
+            ...explicit.module,
+            ...legacyModuleSeeds,
+          ].map((seed, index) => asMastery(seed, lesson, index + masteryCount + chapterCount)),
         };
       }),
     }));
