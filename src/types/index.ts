@@ -131,6 +131,8 @@ export interface Lesson {
   notesMarkdown: string;
   activities: InteractiveActivity[];
   quizQuestions: QuizQuestion[];
+  /** Distinct authored prompts reserved for chapter-level assessments. */
+  chapterAssessmentQuestions?: QuizQuestion[];
   /** Distinct authored prompts reserved for module exams, never reused for lesson mastery. */
   moduleExamQuestions?: QuizQuestion[];
   masteryThresholdPercent: number; // default: 80
