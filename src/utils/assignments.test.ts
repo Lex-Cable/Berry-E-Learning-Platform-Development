@@ -67,17 +67,19 @@ test('buildCourseAssignments creates one assignment per lesson and ignores dupli
   const assignments = buildCourseAssignments([course, { ...course, title: 'Duplicate course record' }]);
   assert.equal(assignments.length, 1);
   assert.equal(assignments[0].courseId, course.id);
-  assert.match(assignments[0].instructions, /10\./);
+  assert.match(assignments[0].instructions, /PROBLEM-SOLVING TASK/);
   assert.match(assignments[0].title, /Counting to Ten/);
 });
 
 test('markAssignmentSubmission grades a strong submission as passed', () => {
   const assignment = buildCourseAssignments([makeCourse()])[0];
   const content =
-    'In this lesson I learned counting. ' +
-    'Counting objects up to ten is an example of number sense; for instance, counting ten crayons in real life practice. ' +
-    'My question is whether I can improve at counting backwards, I am still not sure about the challenge. ' +
-    'The lesson objectives mention counting forwards and backwards to one hundred and count objects up to ten.';
+    'My method is to count objects up to ten and use the counting sequence to calculate each answer. ' +
+    'For example, I count ten crayons one by one and record the result clearly. ' +
+    'I check and verify each answer by using an alternative count, because this helps me find an error. ' +
+    'My analysis compares counting forwards and backwards to one hundred. ' +
+    'The conclusion is that careful counting improves accuracy; therefore I can explain the evidence and improve my working next time. ' +
+    'I show the method, the answer and the reason for each step.';
   const result = markAssignmentSubmission(assignment, content);
   assert.equal(result.status, 'graded');
   assert.ok(result.scorePercent >= 50);
@@ -117,4 +119,15 @@ test('resolveAssignmentDueDate uses the generated deadline for a new or invalid 
   const generated = '2026-11-13T10:00:00.000Z';
   assert.equal(resolveAssignmentDueDate(generated), generated);
   assert.equal(resolveAssignmentDueDate(generated, 'not-a-date'), generated);
+});
+
+test('buildCourseAssignments creates subject-specific computing and business deliverables', () => {
+  const computing = makeCourse({ subject: 'Computer Science', title: 'Introductory Programming' });
+  const codingBrief = buildCourseAssignments([computing])[0];
+  assert.match(codingBrief.instructions, /source code or pseudocode/i);
+  assert.match(codingBrief.instructions, /test cases/i);
+  const business = makeCourse({ subject: 'Business Management', title: 'Business Operations' });
+  const businessBrief = buildCourseAssignments([business])[0];
+  assert.match(businessBrief.instructions, /CASE STUDY TASK/);
+  assert.match(businessBrief.instructions, /recommendation/);
 });
