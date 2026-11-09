@@ -71,7 +71,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div className="space-y-1.5 text-xs">
                     <div className="flex items-center justify-between text-slate-500"><span>Recipient:</span><strong className="text-slate-800">{cert.recipientName}</strong></div>
-                    <div className="flex items-center justify-between text-slate-500"><span>Overall Score:</span><span className="font-bold text-emerald-600">{cert.scorePercent}% Mastery</span></div>
+                    <div className="flex items-center justify-between text-slate-500"><span>Overall Score:</span><span className="font-bold text-emerald-600">{cert.scorePercent}% · {cert.grade || 'Grade pending'}</span></div>
                     <div className="flex items-center justify-between text-slate-500"><span>Issued:</span><span className="text-slate-700">{cert.issuedDate}</span></div>
                   </div>
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-purple-600 group-hover:text-purple-800">
@@ -102,7 +102,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
                   <h2 className="berry-recipient">{selectedCert.recipientName}</h2>
                   <p className="berry-description">has successfully demonstrated rigorous learning mastery and completed all foundational requirements for</p>
                   <h3 className="berry-course-title">{selectedCert.courseTitle}</h3>
-                  <p className="berry-score-line">{selectedCert.curriculum === 'kenya_cbc' ? 'Kenya CBC' : selectedCert.curriculum.replaceAll('_', ' ')} Stage: <strong>{selectedCert.gradeLevel}</strong> <span>•</span> Weighted Achievement Score: <strong>{selectedCert.scorePercent}%</strong></p>
+                  <p className="berry-score-line">{selectedCert.curriculum === 'kenya_cbc' ? 'Kenya CBC' : selectedCert.curriculum.replaceAll('_', ' ')} Stage: <strong>{selectedCert.gradeLevel}</strong> <span>•</span> Weighted Achievement Score: <strong>{selectedCert.scorePercent}%</strong> <span>•</span> Grade: <strong>{selectedCert.grade || '—'} · {selectedCert.classification || '—'}</strong></p>
                 </div>
 
                 <div className="berry-certificate-footer">
@@ -114,6 +114,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
                   <div className="berry-credential">
                     <strong>{selectedCert.credentialId}</strong>
                     <span>Issued: {selectedCert.issuedDate}</span>
+                    <a href={selectedCert.verificationUrl || `/api/certificates/verify/${selectedCert.credentialId}`} target="_blank" rel="noreferrer" className="text-[10px] text-purple-700 underline">Verify online</a>
                   </div>
                 </div>
               </div>
