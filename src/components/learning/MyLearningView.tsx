@@ -646,8 +646,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
         </div>
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between gap-3 mb-3"><h3 className="font-extrabold text-sm text-slate-900">Proposed assessment weighting</h3><span className="text-[10px] font-bold text-amber-700 bg-amber-50 rounded-full px-2.5 py-1">Default policy</span></div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[['Chapter assessments','10%'],['Assignments & projects','30%'],['Module examinations','25%'],['Final examination','35%']].map(([label, value]) => <div key={label} className="rounded-2xl bg-slate-50 p-3"><strong className="block text-xl text-purple-700">{value}</strong><span className="text-[11px] text-slate-600">{label}</span></div>)}</div>
-          <p className="text-[10px] text-slate-400 mt-3">These are the proposed default weights. Course-specific configuration and the complete module examination system are still required before these can determine official grades.</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[['Chapter assessments',`${activeCourse.assessmentWeights?.chapterAssessments ?? 10}%`],['Assignments & projects',`${activeCourse.assessmentWeights?.assignments ?? 30}%`],['Module examinations',`${activeCourse.assessmentWeights?.moduleExaminations ?? 25}%`],['Final examination',`${activeCourse.assessmentWeights?.finalExamination ?? 35}%`]].map(([label, value]) => <div key={label} className="rounded-2xl bg-slate-50 p-3"><strong className="block text-xl text-purple-700">{value}</strong><span className="text-[11px] text-slate-600">{label}</span></div>)}</div>
+          <p className="text-[10px] text-slate-400 mt-3">These are the proposed default weights unless this course defines its own. The four values must total 100% for an official weighted grade.</p>
         </section>
 
         {/* Final Exam Callout Banner */}
