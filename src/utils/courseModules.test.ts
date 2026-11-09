@@ -24,3 +24,11 @@ test('explicit modules retain chapter relationships and discard unknown chapter 
   assert.deepEqual(getCourseModules(explicit)[0].chapterIds, ['chapter-b']);
   assert.equal(getCourseModules(explicit)[0].examination?.passingScorePercent, 60);
 });
+
+test('long legacy courses are grouped into ordered multi-chapter modules without renaming chapters', () => {
+  const longCourse = { ...course, chapters: Array.from({ length: 7 }, (_, index) => ({ ...course.chapters[0], id: `chapter-${index+1}`, title: `Chapter ${index+1}`, order: index+1, lessons: [] })) } as unknown as Course;
+  const modules = getCourseModules(longCourse);
+  assert.deepEqual(modules.map((module) => module.chapterIds.length), [3, 3, 1]);
+  assert.equal(getModuleChapters(longCourse, modules[1])[0].id, 'chapter-4');
+  assert.equal(modules[0].title.includes('Chapter 1'), true);
+});
