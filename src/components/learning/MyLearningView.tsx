@@ -44,6 +44,7 @@ interface MyLearningViewProps {
   onSaveMastery: (record: LessonMasteryState) => void;
   onNavigateToCertificates?: () => void;
   onClaimCertificate?: (course: Course, scorePercent: number) => void;
+  onCourseRetakeStarted?: (courseId: string) => void;
   onExamAttemptSubmitted?: (course: Course, attempt: {
     courseId: string; examId: string; scorePercent: number; passed: boolean;
     passingScorePercent: number; answers: Record<string, number>; submittedAt: string;
@@ -65,6 +66,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   onSaveMastery,
   onNavigateToCertificates,
   onClaimCertificate,
+  onCourseRetakeStarted,
   onExamAttemptSubmitted,
   examAttempts = [],
   initialCourseId = null,
@@ -307,9 +309,18 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setRetakeLoading(true); setExamError(null);
     try {
       await startCourseRetake(activeCourse.id);
+      // Start with empty learner-facing progress and assignment state for the new
+      // cycle while preserving all prior attempts in their historical Firestore cycle.
+      onCourseRetakeStarted?.(activeCourse.id);
       try { clearExamDraft(localStorage, examDraftKey); } catch { /* draft cleanup is optional */ }
       setExamSubmitted(false); setExamAnswers({}); setExamResults({}); setExamScore(0); setExamPassed(false);
       setTakingExam(false);
+      setActiveLessonId(null);
+      const freshStatus = await getCourseStatus(activeCourse.id);
+      setTrustedAssignments(freshStatus.assignments as Record<string, { status?: string; scorePercent?: number }>);
+      setTrustedLessonProgress(freshStatus.lessonProgress || {});
+      setTrustedActivities(freshStatus.lessonActivities || {});
+      setTrustedLessonAttempts(freshStatus.lessonAttempts || {});
     } catch (error) {
       setExamError(error instanceof Error ? error.message : 'Unable to start the full course retake.');
     } finally { setRetakeLoading(false); }
