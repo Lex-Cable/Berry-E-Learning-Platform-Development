@@ -44,13 +44,17 @@ export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
         const uniqueSeeds = sourceSeeds.filter((seed) => seed.options.length >= 2 && seed.correctIndex >= 0 && seed.correctIndex < seed.options.length && seed.options.every((option) => Boolean(option?.trim())))
           .filter((seed, index, all) => all.findIndex((candidate) => normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)) === index)
           .filter((seed) => { const key = normalizeQuestion(seed.question); if (usedPrompts.has(key)) return false; usedPrompts.add(key); return true; });
-        const masteryCount = uniqueSeeds.length <= 1 ? uniqueSeeds.length : Math.min(10, Math.ceil(uniqueSeeds.length / 2));
+        const masteryCount = uniqueSeeds.length <= 2 ? Math.min(1, uniqueSeeds.length) : Math.min(10, Math.max(1, Math.floor(uniqueSeeds.length / 3)));
         const masterySeeds = uniqueSeeds.slice(0, masteryCount);
-        const moduleSeeds = uniqueSeeds.slice(masteryCount);
+        const remainingSeeds = uniqueSeeds.slice(masteryCount);
+        const chapterCount = remainingSeeds.length >= 2 ? Math.max(1, Math.floor(remainingSeeds.length / 2)) : remainingSeeds.length;
+        const chapterSeeds = remainingSeeds.slice(0, chapterCount);
+        const moduleSeeds = remainingSeeds.slice(chapterCount);
         return {
           ...lesson,
           quizQuestions: masterySeeds.map((seed, index) => asMastery(seed, lesson, index)),
-          moduleExamQuestions: moduleSeeds.map((seed, index) => asMastery(seed, lesson, index + masteryCount)),
+          chapterAssessmentQuestions: chapterSeeds.map((seed, index) => asMastery(seed, lesson, index + masteryCount)),
+          moduleExamQuestions: moduleSeeds.map((seed, index) => asMastery(seed, lesson, index + masteryCount + chapterCount)),
         };
       }),
     }));
