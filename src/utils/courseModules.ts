@@ -9,7 +9,7 @@ export function getCourseModules(course: Course): CourseModule[] {
   if (Array.isArray(course.modules) && course.modules.length > 0) {
     const chapterIds = new Set(course.chapters.map((chapter) => chapter.id));
     return [...course.modules]
-      .map((module) => ({ ...module, chapterIds: module.chapterIds.filter((id) => chapterIds.has(id)) }))
+      .map((module) => ({ ...module, chapterIds: module.chapterIds.filter((id) => chapterIds.has(id)), examination: module.examination ?? { id: `module-exam-${module.id}`, title: `${module.title} Examination`, passingScorePercent: 60, durationMinutes: 60, questionCount: 20, maximumAttempts: 2 } }))
       .filter((module) => module.chapterIds.length > 0)
       .sort((a, b) => a.order - b.order);
   }
