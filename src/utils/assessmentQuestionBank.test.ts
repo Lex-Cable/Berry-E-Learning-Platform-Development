@@ -106,3 +106,16 @@ test('all shipped Berry course catalogues contain no repeated assessment prompts
     }
   }
 });
+
+test('lesson source questions are partitioned into distinct mastery and module-exam banks', () => {
+  const course = courseFixture();
+  const lesson = course.chapters[0].lessons[0];
+  lesson.quizQuestions = Array.from({ length: 4 }, (_, index) => ({
+    id: `q${index+1}`, question: `Distinct plant question ${index+1}?`, options: ['Water', 'Metal'], correctIndex: 0,
+    explanation: 'Water supports plant growth.', misconceptions: { 1: 'Metal is not needed.' }, learningObjective: 'Plant growth',
+  }));
+  const result = withCompleteAssessmentBanks([course])[0].chapters[0].lessons[0];
+  assert.equal(result.quizQuestions.length, 2);
+  assert.equal(result.moduleExamQuestions?.length, 2);
+  assert.equal(new Set([...result.quizQuestions, ...(result.moduleExamQuestions || [])].map((question) => question.question)).size, 4);
+});
