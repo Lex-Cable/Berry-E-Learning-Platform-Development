@@ -539,9 +539,29 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     if (!moduleRequirements.every(Boolean)) return res.status(409).json({ error: 'Complete and pass every module examination before starting the final course examination.' });
     const cycleDocument = cycleRef(uid, course.id, cycle);
     const sessionCollection = cycleDocument.collection('examSessions');
-    const existingAttempts = await cycleDocument.collection('examAttempts').get();
+    let existingAttempts = await cycleDocument.collection('examAttempts').get();
     if (existingAttempts.docs.some((doc) => doc.data().passed === true) || existingAttempts.size >= 2) return res.status(409).json({ error: 'The final examination has already been passed or the two-attempt limit has been reached.' });
-    let session = await sessionCollection.doc('active').get();
+    const activeSessionRef = sessionCollection.doc('active');
+    let session = await activeSessionRef.get();
+    if (session.exists && session.data()?.submitted !== true) {
+      const activeData = session.data() || {};
+      const activeExpiry = Date.parse(String(activeData.expiresAt || ''));
+      if (!Number.isFinite(activeExpiry) || activeExpiry <= Date.now()) {
+        const expiredAttemptNumber = Number(activeData.attemptNumber || existingAttempts.size + 1);
+        const expiredAttemptRef = cycleDocument.collection('examAttempts').doc(`attempt-${expiredAttemptNumber}`);
+        await adminDb!.runTransaction(async (transaction) => {
+          const [currentSession, savedAttempt, currentCycle] = await Promise.all([transaction.get(activeSessionRef), transaction.get(expiredAttemptRef), transaction.get(cycleDocument)]);
+          if (savedAttempt.exists || !currentSession.exists || currentSession.data()?.submitted === true || currentSession.data()?.sessionToken !== activeData.sessionToken) return;
+          const submittedAt = new Date().toISOString();
+          transaction.create(expiredAttemptRef, { id: expiredAttemptRef.id, courseId: course.id, examId: course.exam!.id, cycle, attemptNumber: expiredAttemptNumber, scorePercent: 0, passed: false, passingScorePercent: PASS_MARK, answers: {}, submittedAt, trusted: true, expired: true });
+          transaction.set(activeSessionRef, { submitted: true, expired: true, submittedAt }, { merge: true });
+          transaction.set(cycleDocument, { examAttempted: true, examPassed: currentCycle.data()?.examPassed === true, examScorePercent: Number(currentCycle.data()?.examScorePercent || 0), updatedAt: submittedAt }, { merge: true });
+        });
+        existingAttempts = await cycleDocument.collection('examAttempts').get();
+        if (existingAttempts.size >= 2) return res.status(409).json({ error: 'The final examination time expired and both attempts have been used.' });
+      }
+    }
+    let session = await activeSessionRef.get();
     if (!session.exists || session.data()?.submitted === true) {
       const requiredExamQuestions = selectRequiredQuestionSet(course.exam.questions, Math.min(30, course.exam.questions.length));
       if (!requiredExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet. The course content needs to be completed before assessment.' });
@@ -553,11 +573,11 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
       await adminDb!.runTransaction(async (transaction) => {
         const current = await transaction.get(sessionCollection.doc('active'));
         const attempt = await transaction.get(cycleDocument.collection('examAttempts'));
-        if ((!current.exists || current.data()?.submitted === true) && attempt.size < 2 && !attempt.docs.some((doc) => doc.data().passed === true)) transaction.set(sessionCollection.doc('active'), {
-          cycle, questionIds, attemptNumber, submitted: false, createdAt: now.toISOString(), expiresAt,
+        if ((!current.exists || current.data()?.submitted === true) && attempt.size < 2 && !attempt.docs.some((doc) => doc.data().passed === true)) transaction.set(activeSessionRef, {
+          cycle, questionIds, attemptNumber, sessionToken: randomUUID(), submitted: false, createdAt: now.toISOString(), expiresAt,
         });
       });
-      session = await sessionCollection.doc('active').get();
+      session = await activeSessionRef.get();
     }
     const questionIds = session.data()?.questionIds;
     if (!Array.isArray(questionIds)) return res.status(503).json({ error: 'Unable to prepare a secure exam session.' });
