@@ -19,7 +19,7 @@ export type InteractiveActivityAnswer =
   | { pairs: Record<string, string> }
   | { order: string[] }
   | { response: string }
-  | { choiceId: string };
+  | { choiceId: string; choiceLabel?: string };
 export const submitInteractiveActivity = (
   courseId: string,
   lessonId: string,
