@@ -2,28 +2,6 @@ import type { Course, ExamQuestion, Lesson, QuizQuestion } from '../types';
 
 type Seed = { id: string; question: string; options: string[]; correctIndex: number; explanation: string; topic: string };
 
-function seedsForLesson(lesson: Lesson): Seed[] {
-  const quiz: Seed[] = lesson.quizQuestions.map((q) => ({
-    id: q.id, question: q.question, options: q.options, correctIndex: q.correctIndex,
-    explanation: q.explanation || `Review the lesson objective: ${q.learningObjective || lesson.title}.`,
-    topic: q.learningObjective || lesson.title,
-  }));
-  const activities: Seed[] = (lesson.activities || [])
-    .filter((a) => a.type === 'interactive-choice' && (a.data.choices || []).filter((c) => c.isCorrect).length === 1)
-    .map((a) => {
-      const choices = a.data.choices || [];
-      return {
-        id: a.id, question: a.instructions, options: choices.map((c) => c.label),
-        correctIndex: choices.findIndex((c) => c.isCorrect),
-        explanation: choices.find((c) => c.isCorrect)?.feedback || `Review ${lesson.title}.`,
-        topic: lesson.title,
-      };
-    });
-  return [...quiz, ...activities].filter((s) =>
-    s.options.length >= 2 && s.correctIndex >= 0 && s.correctIndex < s.options.length &&
-    s.options.every((option) => Boolean(option?.trim()))
-  );
-}
 
 function normalizeQuestion(value: string): string {
   return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -62,7 +40,7 @@ export function withCompleteAssessmentBanks(courses: Course[]): Course[] {
     const chapters = course.chapters.map((chapter) => ({
       ...chapter,
       lessons: chapter.lessons.map((lesson) => {
-        const sourceSeeds = [...lesson.quizQuestions.map((q) => ({ id: q.id, question: q.question, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation, topic: q.learningObjective || lesson.title })), ...seedsForLesson({ ...lesson, quizQuestions: [] })];
+        const sourceSeeds: Seed[] = lesson.quizQuestions.map((q) => ({ id: q.id, question: q.question, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation, topic: q.learningObjective || lesson.title }));
         const uniqueSeeds = sourceSeeds.filter((seed) => seed.options.length >= 2 && seed.correctIndex >= 0 && seed.correctIndex < seed.options.length && seed.options.every((option) => Boolean(option?.trim())))
           .filter((seed, index, all) => all.findIndex((candidate) => normalizeQuestion(candidate.question) === normalizeQuestion(seed.question)) === index)
           .filter((seed) => { const key = normalizeQuestion(seed.question); if (usedPrompts.has(key)) return false; usedPrompts.add(key); return true; });
