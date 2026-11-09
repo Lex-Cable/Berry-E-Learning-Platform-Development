@@ -22,4 +22,5 @@ test('legacy courses map into one stable module without changing chapter or less
 test('explicit modules retain chapter relationships and discard unknown chapter references', () => {
   const explicit = { ...course, modules: [{ id: 'm1', courseId: course.id, title: 'Foundations', order: 1, description: '', chapterIds: ['chapter-b', 'missing'] }] };
   assert.deepEqual(getCourseModules(explicit)[0].chapterIds, ['chapter-b']);
+  assert.equal(getCourseModules(explicit)[0].examination?.passingScorePercent, 60);
 });
