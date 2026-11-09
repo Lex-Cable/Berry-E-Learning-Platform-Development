@@ -43,12 +43,13 @@ test('assessment banks keep only distinct authored questions and cap their size'
   const mastery = course.chapters[0].lessons[0].quizQuestions;
   const exam = course.exam?.questions || [];
   assert.equal(mastery.length, 1);
-  assert.equal(exam.length, 2);
+  assert.equal(exam.length, 1);
   assert.ok(mastery.length <= 10);
   assert.ok(exam.length <= 30);
   assert.equal(new Set(mastery.map((question) => question.question.trim().toLowerCase())).size, mastery.length);
   assert.equal(new Set(exam.map((question) => question.question.trim().toLowerCase())).size, exam.length);
   assert.equal(course.exam?.durationMinutes, 60);
+  assert.equal(course.chapters[0].lessons[0].moduleExamQuestions?.length, 0);
   assert.ok(exam.every((question) => question.options.length >= 2 && question.correctIndex >= 0));
 });
 
