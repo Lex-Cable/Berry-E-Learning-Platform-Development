@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { COURSES } from './privateCurriculumData';
+import { INTERNATIONAL_STARTER_COURSES } from '../src/data/internationalStarterCourses';
 import { withInteractivePractice } from '../src/utils/interactiveActivities';
 
 test('every authored multiple-choice interactive activity has exactly one trusted correct option', () => {
-  const courses = withInteractivePractice(COURSES);
+  const courses = withInteractivePractice([...COURSES, ...INTERNATIONAL_STARTER_COURSES]);
   const activities = courses.flatMap((course) => course.chapters.flatMap((chapter) =>
     chapter.lessons.flatMap((lesson) => lesson.activities
       .filter((activity) => activity.type === 'interactive-choice')
