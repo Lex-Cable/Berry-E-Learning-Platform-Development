@@ -1,4 +1,5 @@
 import { hasActiveTrustedEnrollment } from './trustedEnrollment';
+import { isInteractiveChoiceCorrect } from './interactiveChoiceGrading';
 import { issueTrustedCertificateTransaction } from './trustedCertificateIssuance';
 
 import { randomInt as secureRandomInt, randomUUID } from 'node:crypto';
@@ -398,8 +399,7 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
       correct = response.length > 0 && (activity.data.blankSolutions || [])
         .some((solution) => solution.trim().toLowerCase() === response);
     } else if (activity.type === 'interactive-choice') {
-      const choice = (activity.data.choices || []).find((item) => item.id === answer?.choiceId);
-      correct = choice?.isCorrect === true;
+      correct = isInteractiveChoiceCorrect(activity.data.choices || [], answer);
     }
 
     const now = new Date().toISOString();
