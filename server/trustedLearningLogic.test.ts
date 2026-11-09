@@ -41,13 +41,13 @@ test('full retake is unavailable until every course lesson is completed', () => 
 });
 
 test('certificate eligibility rejects missing requirements and accepts a fully eligible course', () => {
-  const base = { totalLessons: 2, progress: [{ isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }, { isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }], examPassed: true, assignments: [{ status: 'graded', scorePercent: 75 }], approvedAssignmentCount: 1, moduleExaminations: [{ moduleId: 'm1', scorePercent: 70, passed: true }], approvedModuleCount: 1, approvedInteractiveLessonCount: 2, interactiveScorePercent: 90, certificateAlreadyIssued: false };
+  const base = { totalLessons: 2, progress: [{ isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }, { isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 90 }], examPassed: true, assignments: [{ status: 'graded', scorePercent: 75 }], approvedAssignmentCount: 1, chapterAssessments: [{ chapterId: 'c1', scorePercent: 80, passed: true }], approvedChapterCount: 1, moduleExaminations: [{ moduleId: 'm1', scorePercent: 70, passed: true }], approvedModuleCount: 1, approvedInteractiveLessonCount: 2, interactiveScorePercent: 90, certificateAlreadyIssued: false };
   assert.deepEqual(certificateUnmetRequirements(base), []);
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 0, assignments: [] }).some((item) => item.includes('rubric')));
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 2, assignments: [{ status: 'graded', scorePercent: 90 }] }).some((item) => item.includes('topic assignments completed')));
   assert.ok(certificateUnmetRequirements({ ...base, examPassed: false }).some((item) => item.includes('exam')));
   assert.ok(certificateUnmetRequirements({ ...base, certificateAlreadyIssued: true }).some((item) => item.includes('already issued')));
-  assert.ok(certificateUnmetRequirements({ ...base, progress: [{ isCompleted: true, isMastered: true }, { isCompleted: true, isMastered: false }] }).some((item) => item.includes('chapter assessments')));
+  assert.ok(certificateUnmetRequirements({ ...base, chapterAssessments: [] }).some((item) => item.includes('chapter assessments')));
   assert.ok(certificateUnmetRequirements({ ...base, assignments: [{ status: 'graded', scorePercent: 49 }] }).some((item) => item.includes('assignment')));
 });
 
