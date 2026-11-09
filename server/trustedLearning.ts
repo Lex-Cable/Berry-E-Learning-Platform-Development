@@ -718,11 +718,12 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const cycle = await ensureCycle(uid, course.id);
     const ref = cycleRef(uid, course.id, cycle);
     const lessonList = course.chapters.flatMap((chapter) => chapter.lessons);
-    const [cycleSnapshot, progress, attempts, assignments, allCycles, activitySnapshots, lessonAttemptsSnapshot] = await Promise.all([
+    const [cycleSnapshot, progress, attempts, assignments, allCycles, activitySnapshots, lessonAttemptsSnapshot, moduleExamAttemptsSnapshot] = await Promise.all([
       ref.get(), ref.collection('lessonProgress').get(), ref.collection('examAttempts').get(), ref.collection('assignments').get(),
       adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id).collection('cycles').get(),
       Promise.all(lessonList.map((lesson) => ref.collection('lessonProgress').doc(lesson.id).collection('activities').get())),
       ref.collection('lessonAttempts').get(),
+      ref.collection('moduleExamAttempts').get(),
     ]);
     const historySnapshots = await Promise.all(allCycles.docs.map((cycleDocument) => cycleDocument.ref.collection('examAttempts').get()));
     const examHistory = historySnapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data()))
@@ -771,6 +772,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
         })),
       ])),
       examAttempts: attempts.docs.map((doc) => doc.data()),
+      moduleExamAttempts: moduleExamAttemptsSnapshot.docs.map((doc) => doc.data()).sort((a,b) => Number(a.attemptNumber || 0) - Number(b.attemptNumber || 0)),
       examHistory,
       assignments: Object.fromEntries(assignments.docs.map((doc) => [doc.id, doc.data()])),
       examAttempted: cycleSnapshot.data()?.examAttempted === true,
