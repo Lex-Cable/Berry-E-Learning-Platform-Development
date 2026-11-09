@@ -839,6 +839,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const grade = weighted === null ? null : classifyAcademicGrade(weighted);
     const componentPass = chapterScores.length === totalLessons && chapterScores.every((score) => score >= 70) && assignmentsComplete && assignmentScores.length === requiredAssignments.length && assignmentScores.every((score) => score >= 50) && moduleScores.length === getCourseModules(course).length && moduleScores.every((score) => score >= 60) && finalScore !== null && finalScore >= 50 && cycleSnapshot.data()?.examPassed === true;
     const academicGrade = grade ? { ...grade, passed: componentPass && grade.percentage >= 60, componentsComplete, chapterAssessmentPercent: chapterScores.length ? chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length : null, assignmentPercent: assignmentScores.length ? assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length : null, moduleExaminationPercent: moduleScores.length ? moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length : null, finalExaminationPercent: finalScore } : { percentage: null, grade: null, classification: 'Awaiting results', passed: false, componentsComplete: false, chapterAssessmentPercent: null, assignmentPercent: null, moduleExaminationPercent: null, finalExaminationPercent: finalScore };
+    const fullCourseCompleted = courseCompleted && moduleScores.length === getCourseModules(course).length && cycleSnapshot.data()?.examPassed === true && academicGrade.passed;
     const academicGradeRecord = {
       learnerUid: uid, courseId: course.id, cycle, trusted: true, official: componentsComplete,
       percentage: grade?.percentage ?? null, grade: grade?.grade ?? null, classification: grade?.classification ?? 'Awaiting results',
@@ -861,7 +862,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
       academicGrade,
       assessmentHistory,
       cycle,
-      courseCompleted,
+      courseCompleted: fullCourseCompleted,
       courseMasteryPercent,
       lessonProgress: Object.fromEntries(progressRecords.map((record) => [record.lessonId, record])),
       lessonAttempts: Object.fromEntries(lessonList.map((lesson) => {
