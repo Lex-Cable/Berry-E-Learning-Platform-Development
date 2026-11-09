@@ -438,17 +438,38 @@ router.get('/api/assessments/courses/:courseId/modules/:moduleId/exam/questions'
     const count = Math.min(module.examination.questionCount, bank.length);
     if (count < 1) return res.status(422).json({ error: 'No approved module examination questions are available.' });
     const ref = cycleRef(context.uid, context.course.id, cycle);
-    const attempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+    let attempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
     const modulePassingMark = Math.max(60, module.examination?.passingScorePercent ?? 60);
     if (attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= modulePassingMark)) return res.status(409).json({ error: 'This module examination has already been passed.' });
     if (attempts.size >= module.examination.maximumAttempts) return res.status(409).json({ error: 'The maximum number of module examination attempts has been reached.' });
+    const sessionRef = ref.collection('moduleExamSessions').doc(module.id);
+    const byId = new Map(bank.map((question) => [question.id, question]));
+    const existingSession = await sessionRef.get();
+    if (existingSession.exists && existingSession.data()?.submitted !== true) {
+      const active = existingSession.data() || {};
+      const activeExpiry = Date.parse(String(active.expiresAt || ''));
+      const activeIds = Array.isArray(active.questionIds) ? active.questionIds as string[] : [];
+      const activeQuestions = activeIds.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+      if (Number.isFinite(activeExpiry) && activeExpiry > Date.now() && activeQuestions.length === activeIds.length && activeQuestions.length > 0) {
+        return res.json({ moduleId: module.id, questions: safeQuestions(activeQuestions), cycle, expiresAt: String(active.expiresAt), attemptNumber: Number(active.attemptNumber || attempts.size + 1), passingScorePercent: modulePassingMark });
+      }
+      const expiredAttemptNumber = Number(active.attemptNumber || attempts.size + 1);
+      const expiredAttemptRef = ref.collection('moduleExamAttempts').doc(`attempt-${module.id}-${expiredAttemptNumber}`);
+      await adminDb!.runTransaction(async (transaction) => {
+        const [currentSession, savedAttempt] = await Promise.all([transaction.get(sessionRef), transaction.get(expiredAttemptRef)]);
+        if (savedAttempt.exists || !currentSession.exists || currentSession.data()?.submitted === true || currentSession.data()?.sessionToken !== active.sessionToken) return;
+        const submittedAt = new Date().toISOString();
+        transaction.create(expiredAttemptRef, { id: expiredAttemptRef.id, moduleId: module.id, courseId: context.course.id, cycle, attemptNumber: expiredAttemptNumber, answers: {}, scorePercent: 0, passingScorePercent: modulePassingMark, passed: false, expired: true, submittedAt, trusted: true });
+        transaction.set(sessionRef, { submitted: true, expired: true, submittedAt }, { merge: true });
+      });
+      attempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
+      if (attempts.size >= module.examination.maximumAttempts) return res.status(409).json({ error: 'The module examination time expired and the maximum attempt count has been reached.' });
+    }
     const selected = rotateQuestionSet(bank, attempts.size, count);
     const questionIds = shuffle(selected.map((question) => question.id));
-    const sessionRef = ref.collection('moduleExamSessions').doc(module.id);
     const expiresAt = new Date(Date.now() + module.examination.durationMinutes * 60_000).toISOString();
     await sessionRef.set({ moduleId: module.id, questionIds, expiresAt, attemptNumber: attempts.size + 1, sessionToken: randomUUID(), submitted: false, createdAt: new Date().toISOString() });
-    const byId = new Map(bank.map((question) => [question.id, question]));
-    return res.json({ moduleId: module.id, questions: safeQuestions(questionIds.map((id) => byId.get(id)!).filter(Boolean)), cycle, expiresAt, attemptNumber: attempts.size + 1, passingScorePercent: module.examination.passingScorePercent });
+    return res.json({ moduleId: module.id, questions: safeQuestions(questionIds.map((id) => byId.get(id)!).filter(Boolean)), cycle, expiresAt, attemptNumber: attempts.size + 1, passingScorePercent: modulePassingMark });
   } catch (error) {
     console.error('Module examination session failed:', error);
     return res.status(500).json({ error: 'Unable to prepare module examination.' });
