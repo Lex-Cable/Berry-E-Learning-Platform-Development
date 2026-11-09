@@ -111,6 +111,7 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
                     <span>Learning Achievement Record</span>
                   </div>
                   <div className="berry-record-seal"><span>BERRY<br />RECORD</span></div>
+                  <div className="berry-qr"><img alt="QR code for public certificate verification" loading="lazy" src={`https://quickchart.io/qr?size=140&margin=1&text=${encodeURIComponent(window.location.origin + (selectedCert.verificationUrl || `/api/certificates/verify/${selectedCert.credentialId}`))}`}/><span>Scan to verify</span></div>
                   <div className="berry-credential">
                     <strong>{selectedCert.credentialId}</strong>
                     <span>Issued: {selectedCert.issuedDate}</span>
@@ -156,21 +157,26 @@ export const CertificationsView: React.FC<CertificationsViewProps> = ({
         .berry-score-line { font-size: 11px; color: #718096; margin: 0; }
         .berry-score-line strong { color: #64748b; }
         .berry-score-line span { padding: 0 3px; }
-        .berry-certificate-footer { width: 100%; margin-top: auto; padding-top: 30px; display: grid; grid-template-columns: 1fr 76px 1fr; align-items: center; gap: 18px; border-top: 1px solid #f1e4c4; text-align: left; }
+        .berry-certificate-footer { width: 100%; margin-top: auto; padding-top: 30px; display: grid; grid-template-columns: 1fr 64px 64px 1fr; align-items: center; gap: 18px; border-top: 1px solid #f1e4c4; text-align: left; }
         .berry-platform-signature, .berry-credential { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
         .berry-platform-signature strong { font-size: 16px; color: #263247; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; width: fit-content; }
         .berry-platform-signature span, .berry-credential span { font-size: 10px; color: #718096; }
-        .berry-record-seal { width: 64px; height: 64px; border: 2px dashed #f59e0b; border-radius: 50%; display: grid; place-items: center; text-align: center; color: #b45309; font-size: 9px; font-weight: 800; line-height: 1.2; justify-self: center; }
+        .berry-record-seal { width: 58px; height: 58px; border: 2px dashed #f59e0b; border-radius: 50%; display: grid; place-items: center; text-align: center; color: #b45309; font-size: 9px; font-weight: 800; line-height: 1.2; justify-self: center; }
+        .berry-qr { display: flex; flex-direction: column; align-items: center; gap: 2px; justify-self: center; }
+        .berry-qr img { width: 58px; height: 58px; image-rendering: pixelated; }
+        .berry-qr span { font-size: 7px; color: #64748b; white-space: nowrap; }
         .berry-credential { text-align: right; overflow-wrap: anywhere; }
         .berry-credential strong { color: #475569; font-size: 10px; text-decoration: underline; text-underline-offset: 3px; }
         @media (max-width: 640px) {
           .berry-certificate { min-height: 0; aspect-ratio: auto; padding: 22px 14px; }
           .berry-certificate-watermark { top: 44%; font-size: 42px; }
           .berry-eyebrow { font-size: 8px; letter-spacing: .1em; }
-          .berry-certificate-footer { grid-template-columns: 1fr 52px 1fr; gap: 7px; padding-top: 20px; }
+          .berry-certificate-footer { grid-template-columns: 1fr 42px 42px 1fr; gap: 7px; padding-top: 20px; }
           .berry-platform-signature strong { font-size: 11px; }
           .berry-platform-signature span, .berry-credential span { font-size: 8px; }
-          .berry-record-seal { width: 48px; height: 48px; font-size: 7px; }
+          .berry-record-seal { width: 40px; height: 40px; font-size: 6px; }
+          .berry-qr img { width: 40px; height: 40px; }
+          .berry-qr span { font-size: 6px; }
           .berry-credential strong { font-size: 8px; }
         }
         @media print {
