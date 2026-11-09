@@ -151,6 +151,7 @@ export const LessonView: React.FC<LessonViewProps> = ({
     setSelectedAnswers({});
     setSubmittedQuiz(false);
     setActivitySubmissionResults((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])) }));
+    setLiveActivityScores({});
     setMatchedPairs((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([, result]) => result.answer?.pairs ? Object.entries(result.answer.pairs) : [])) }));
     setActivityAnswers((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => result.answer?.choiceId ? [[id, result.answer.choiceId]] : [])) }));
     setActivityTextResponses((previous) => ({ ...previous, ...Object.fromEntries(Object.entries(savedActivityResults).flatMap(([id, result]) => typeof result.answer?.response === 'string' ? [[id, result.answer.response]] : [])) }));
