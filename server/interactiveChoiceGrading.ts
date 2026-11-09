@@ -1,4 +1,4 @@
-export interface InteractiveChoiceOption {
+﻿export interface InteractiveChoiceOption {
   id: string;
   label: string;
   isCorrect?: boolean;
@@ -10,6 +10,10 @@ function normalizeChoiceLabel(value: unknown): string {
     : '';
 }
 
+/**
+ * Grade a choice using its stable option ID first, then its visible label as a
+ * compatibility fallback for older clients that submitted a label-only answer.
+ */
 export function isInteractiveChoiceCorrect(
   choices: InteractiveChoiceOption[],
   answer: { choiceId?: unknown; choiceLabel?: unknown } | null | undefined,

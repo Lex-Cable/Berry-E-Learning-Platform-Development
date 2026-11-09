@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -14,6 +14,7 @@ import {
   FileCheck2,
 } from 'lucide-react';
 import { LearnerProfile, Course, LessonMasteryState } from '../../types';
+import { getCourseStatus } from '../../services/assessments';
 
 interface ProgressViewProps {
   learner: LearnerProfile;
@@ -27,6 +28,16 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
   masteryRecords,
 }) => {
   const [activeTab, setActiveTab] = useState<'analytics' | 'career'>('analytics');
+  const [trustedAcademicRecords, setTrustedAcademicRecords] = useState<Array<{ courseId: string; courseTitle: string; grade: { percentage: number; grade: string; classification: string; passed: boolean; componentsComplete: boolean } ; history: Array<{ id: string; type: string; title: string; submittedAt: string; scorePercent: number; passed: boolean; attemptNumber?: number }> }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const enrolled = courses.filter((course) => learner.enrolledCourseIds.includes(course.id));
+    Promise.all(enrolled.map(async (course) => {
+      try { const status = await getCourseStatus(course.id); return { courseId: course.id, courseTitle: course.title, grade: status.academicGrade || { percentage: 0, grade: 'F', classification: 'Not passed', passed: false, componentsComplete: false }, history: status.assessmentHistory || [] }; }
+      catch { return null; }
+    })).then((records) => { if (!cancelled) setTrustedAcademicRecords(records.filter((record): record is NonNullable<typeof record> => record !== null)); });
+    return () => { cancelled = true; };
+  }, [courses, learner.enrolledCourseIds.join('|')]);
 
   const recordsArray = Object.values(masteryRecords);
   const masteredCount = recordsArray.filter((r) => r.isMastered).length;
@@ -199,6 +210,11 @@ export const ProgressView: React.FC<ProgressViewProps> = ({
 
       {activeTab === 'analytics' && (
         <div className="space-y-6">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 md:p-6 shadow-sm space-y-4">
+            <div><h3 className="font-extrabold text-slate-900">Official academic record</h3><p className="text-xs text-slate-500 mt-1">Grades and assessment history retrieved from Berry's trusted learning records.</p></div>
+            {trustedAcademicRecords.length === 0 ? <p className="text-xs text-slate-500">No trusted course assessment records are available yet.</p> : <div className="space-y-4">{trustedAcademicRecords.map((record) => <div key={record.courseId} className="rounded-2xl border border-slate-100 p-4 space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="font-bold text-sm text-slate-900">{record.courseTitle}</h4><p className="text-[11px] text-slate-500">{record.grade.componentsComplete ? 'All grade components recorded' : 'Grade provisional · required components outstanding'}</p></div><div className="text-right"><strong className="text-xl text-purple-700">{record.grade.percentage.toFixed(2)}%</strong><p className="text-[11px] font-bold text-slate-600">{record.grade.grade} · {record.grade.classification}</p></div></div><div className="flex items-center justify-between text-xs"><span className="text-slate-500">Course completion decision</span><strong className={record.grade.passed?'text-emerald-700':'text-amber-700'}>{record.grade.passed?'Passed':'Not yet qualified'}</strong></div>{record.history.length>0 && <div className="overflow-x-auto"><table className="w-full text-left text-[11px]"><thead><tr className="text-slate-500 border-b"><th className="py-2 pr-2">Assessment</th><th className="py-2 pr-2">Date</th><th className="py-2 pr-2">Score</th><th className="py-2">Result</th></tr></thead><tbody>{record.history.slice().reverse().slice(0,12).map((item) => <tr key={item.id} className="border-b border-slate-50"><td className="py-2 pr-2 text-slate-700">{item.title} <span className="text-slate-400">({item.type.replaceAll('_',' ')})</span></td><td className="py-2 pr-2 text-slate-500">{item.submittedAt ? new Date(item.submittedAt).toLocaleDateString() : '—'}</td><td className="py-2 pr-2 font-bold text-slate-800">{item.scorePercent}%</td><td className={item.passed?'py-2 text-emerald-700':'py-2 text-rose-700'}>{item.passed?'Passed':'Not passed'}</td></tr>)}</tbody></table></div>}</div>)}</div>}
+          </section>
+
           {/* Key Metric Highlights */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-1">
