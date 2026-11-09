@@ -60,6 +60,7 @@ test('certificate issuance creates one trusted certificate under concurrent requ
     });
 
     await cycleRef.collection('moduleExamAttempts').doc('module-attempt-1').set({ moduleId: 'module-1', scorePercent: 90, passed: true, trusted: true });
+    await cycleRef.collection('chapterAssessmentAttempts').doc('chapter-attempt-1').set({ chapterId: 'chapter-1', scorePercent: 90, passed: true, trusted: true });
 
     await cycleRef.collection('assignments').doc('assignment-1').set({
       assignmentId: 'assignment-1',
@@ -93,6 +94,7 @@ test('certificate issuance creates one trusted certificate under concurrent requ
         certificate,
         totalLessons: 1,
         approvedAssignmentCount: 1,
+        approvedChapterCount: 1,
         approvedModuleCount: 1,
         cycle,
       });
