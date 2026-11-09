@@ -232,11 +232,12 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     setExamLoading(true); setExamError(null); setExamQuestions([]);
     getCourseStatus(activeCourse.id).then(async (status) => {
       if (cancelled) return;
-      const existing = status.examAttempts?.[0];
-      if (existing) {
+      const attempts = status.examAttempts || [];
+      const existing = attempts[attempts.length - 1];
+      if (existing && (existing.passed || attempts.length >= 2)) {
         try { clearExamDraft(localStorage, `berry_exam_draft_${learner.id}_${activeCourse.id}`); } catch { /* draft cleanup is optional */ }
         setExamScore(existing.scorePercent); setExamPassed(existing.passed); setExamSubmitted(true);
-        setExamError('This enrolment cycle already has a recorded final-exam attempt. Complete every lesson and start a full course retake to attempt again.');
+        setExamError(existing.passed ? 'The final examination has been passed.' : 'Both final-examination attempts have been used. Start a full course retake when eligible.');
         return;
       }
       const exam = await getCourseExam(activeCourse.id);
@@ -386,7 +387,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">{exam.title}</h2>
           <p className="text-xs text-slate-500">
-            Passing threshold: <strong>{exam.passingScorePercent}%</strong>. Passing this exam awards
+            Passing threshold: <strong>50%</strong>. Two attempts are available. Passing this exam records
             a Berry course assessment record. Berry records are not government-issued or externally accredited qualifications.
           </p>
         </div>
@@ -440,21 +441,15 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
                   <p className="text-xs opacity-90">
                     {examPassed
                       ? 'You passed this course assessment. Any Berry learning record is not an official Kenyan CBC qualification.'
-                      : `You scored ${examScore}%. You need ${exam.passingScorePercent}% to earn the verified certificate.`}
+                      : `You scored ${examScore}%. You need 50% to pass the final examination. The overall course grade and all required components must also be passed for a certificate.`}
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
-              <button
-                onClick={handleStartFullRetake}
-                disabled={retakeLoading}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:bg-slate-50 shadow-xs"
-              >
-                <RotateCcw size={14} />
-                <span>{retakeLoading ? 'Preparing full retake…' : 'Start Full Course Retake'}</span>
-              </button>
+              {!examPassed && courseExamAttempts.length < 2 && <button type="button" onClick={async () => { setExamLoading(true); setExamError(null); setExamSubmitted(false); setExamAnswers({}); setExamResults({}); try { const next = await getCourseExam(activeCourse.id); setExamQuestions(next.questions); setExamExpiresAt(next.expiresAt); setExamTimeRemaining(Math.max(0, Math.ceil((Date.parse(next.expiresAt)-Date.now())/1000))); } catch (error) { setExamError(error instanceof Error ? error.message : 'Unable to start the next attempt.'); } finally { setExamLoading(false); } }} disabled={examLoading} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:bg-slate-50 shadow-xs"><RotateCcw size={14}/><span>{examLoading?'Preparing next attempt…':'Try final examination again'}</span></button>}
+              {(examPassed || courseExamAttempts.length >= 2) && <button onClick={handleStartFullRetake} disabled={retakeLoading} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:bg-slate-50 shadow-xs"><RotateCcw size={14}/><span>{retakeLoading?'Preparing full retake…':'Start Full Course Retake'}</span></button>}
 
               {examPassed && onNavigateToCertificates && (
                 <button
