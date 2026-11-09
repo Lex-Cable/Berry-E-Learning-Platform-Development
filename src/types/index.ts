@@ -48,6 +48,7 @@ export interface Course {
   chapters: Chapter[];
   /** Explicit course modules. Older catalogue records are mapped into a stable legacy module. */
   modules?: CourseModule[];
+  assessmentWeights?: { chapterAssessments: number; assignments: number; moduleExaminations: number; finalExamination: number };
   exam?: CourseExam;
   isCompulsoryCBC?: boolean;
   isInternationalComparison?: boolean;
