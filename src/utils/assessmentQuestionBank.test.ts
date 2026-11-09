@@ -125,3 +125,19 @@ test('lesson source questions are partitioned into distinct mastery and module-e
   assert.equal(result.moduleExamQuestions?.length, 2);
   assert.equal(new Set([...result.quizQuestions, ...(result.chapterAssessmentQuestions || []), ...(result.moduleExamQuestions || [])].map((question) => question.question)).size, 4);
 });
+
+test('Grade 8 Pre-Technical Workshop has approved chapter and module assessment coverage', () => {
+  const rawCourse = SERVER_COURSES.find((course) => course.id === 'cbc-g8-pretech');
+  assert.ok(rawCourse, 'Grade 8 Pre-Technical course must exist in the trusted catalogue');
+  const course = withCompleteAssessmentBanks([rawCourse as Course])[0];
+  const lesson = course.chapters.find((chapter) => chapter.id === 'g8-pt-c1')?.lessons.find((item) => item.id === 'g8-pt-l1');
+  assert.ok(lesson, 'Workshop measuring-tools lesson must exist');
+  assert.equal(lesson.chapterAssessmentQuestions?.length, 4);
+  assert.equal(lesson.moduleExamQuestions?.length, 4);
+  for (const question of [...(lesson.chapterAssessmentQuestions || []), ...(lesson.moduleExamQuestions || [])]) {
+    assert.ok(question.question.trim().length > 0);
+    assert.ok(question.options.length >= 2);
+    assert.ok(question.correctIndex >= 0 && question.correctIndex < question.options.length);
+    assert.ok(question.explanation.trim().length > 0);
+  }
+});
