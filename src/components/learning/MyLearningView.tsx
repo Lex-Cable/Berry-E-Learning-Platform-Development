@@ -31,6 +31,9 @@ import { findFallbackLesson } from '../../utils/curriculumCoverage';
 import { firebaseAuth } from '../../lib/firebase';
 import { getCourseExam, getCourseStatus, submitCourseExam, startCourseRetake } from '../../services/assessments';
 import { clearExamDraft, readExamDraft, writeExamDraft } from '../../utils/examDraft';
+import { getCourseModules, getModuleChapters } from '../../utils/courseModules';
+import { ModuleExamPanel } from './ModuleExamPanel';
+import type { ModuleExamAttempt } from '../../services/assessments';
 
 interface MyLearningViewProps {
   learner: LearnerProfile;
@@ -81,6 +84,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [trustedLessonProgress, setTrustedLessonProgress] = useState<Record<string, LessonMasteryState>>({});
   const [trustedActivities, setTrustedActivities] = useState<Record<string, Record<string, { scorePercent: number; passed: boolean; feedback: string; answer?: { pairs?: Record<string, string>; order?: string[]; response?: string; choiceId?: string } }>>>({});
   const [trustedLessonAttempts, setTrustedLessonAttempts] = useState<Record<string, { answers: Record<string, number>; scorePercent: number; submittedAt: string; results: Record<string, { correct: boolean; correctAnswerIndex?: number; feedback?: string }> }>>({});
+  const [moduleExamAttempts, setModuleExamAttempts] = useState<ModuleExamAttempt[]>([]);
 
   useEffect(() => {
     if (!initialCourseId) return;
@@ -689,118 +693,32 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           </div>
 
           <div className="space-y-4">
-            {activeCourse.chapters.map((chapter) => (
-              <div
-                key={chapter.id}
-                className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4"
-              >
-                <div>
-                  <h4 className="font-bold text-base text-slate-900">{chapter.title}</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">{chapter.description}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
-                      {chapter.lessons.filter((lesson) => currentMasteryRecords[lesson.id]?.isMastered).length}/{chapter.lessons.length} lessons mastered
-                    </span>
-                    {chapter.lessons.length > 0 && chapter.lessons.every((lesson) => currentMasteryRecords[lesson.id]?.isCompleted === true) && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">
-                        <CheckCircle2 size={12} /> Chapter completed
-                      </span>
-                    )}
-                  </div>
+
+            {getCourseModules(activeCourse).map((module) => (
+              <section key={module.id} className="rounded-3xl border border-slate-200 bg-white p-5 md:p-6 shadow-xs space-y-4">
+                <div className="flex items-start justify-between gap-3"><div><span className="text-[10px] font-extrabold uppercase tracking-widest text-purple-600">Module {module.order}</span><h4 className="font-extrabold text-base text-slate-900">{module.title}</h4><p className="text-xs text-slate-500 mt-1">{module.description}</p></div><span className="text-[10px] font-bold rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">{getModuleChapters(activeCourse,module).length} chapters</span></div>
+                <div className="space-y-4">
+                  {getModuleChapters(activeCourse,module).map((chapter) => (
+                    <div key={chapter.id} className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
+                      <div><h5 className="font-bold text-sm text-slate-900">{chapter.title}</h5><p className="text-xs text-slate-500 mt-0.5">{chapter.description}</p><div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold"><span className="rounded-full bg-white px-2.5 py-1 text-slate-600">{chapter.lessons.filter((lesson) => currentMasteryRecords[lesson.id]?.isMastered).length}/{chapter.lessons.length} lessons mastered</span>{chapter.lessons.length > 0 && chapter.lessons.every((lesson) => currentMasteryRecords[lesson.id]?.isCompleted === true) && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800"><CheckCircle2 size={12}/> Chapter completed</span>}</div></div>
+                      <div className="space-y-2">{chapter.lessons.map((lesson) => {
+                        const isPrerequisiteUnlocked = isLessonUnlocked(lesson, completedLessonIds, masteredLessonIds);
+                        const orderedLessons = activeCourse.chapters.flatMap((item) => item.lessons);
+                        const lessonIndex = orderedLessons.findIndex((item) => item.id === lesson.id);
+                        const previousLesson = lessonIndex > 0 ? orderedLessons[lessonIndex - 1] : undefined;
+                        const previousAssignment = previousLesson ? trustedAssignments[`assignment-${activeCourse.id}-${previousLesson.id}`] : undefined;
+                        const previousTopicComplete = !previousLesson || (currentMasteryRecords[previousLesson.id]?.isMastered === true && currentMasteryRecords[previousLesson.id]?.isCompleted === true && previousAssignment?.status === 'graded' && Number(previousAssignment.scorePercent) >= 50);
+                        const isUnlocked = isPrerequisiteUnlocked && previousTopicComplete && !trustedAssignmentsLoading;
+                        const mastery = currentMasteryRecords[lesson.id];
+                        return <div key={lesson.id} onClick={() => { if (isUnlocked) setActiveLessonId(lesson.id); }} className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${isUnlocked?'bg-white border-slate-200 hover:border-purple-300 cursor-pointer':'bg-slate-100/60 border-slate-200/60 opacity-60 cursor-not-allowed'}`}><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-lg flex items-center justify-center ${mastery?.isMastered?'bg-emerald-100 text-emerald-700':isUnlocked?'bg-purple-100 text-purple-700':'bg-slate-200 text-slate-500'}`}>{mastery?.isMastered?<CheckCircle2 size={16}/>:isUnlocked?<Play size={14}/>:<Lock size={14}/>}</div><div><span className="font-bold text-xs text-slate-900 block">{lesson.title}</span><span className="text-[10px] text-slate-400">{lesson.durationMinutes} mins · {lesson.quizQuestions.length} practice questions</span></div></div><span className="text-[10px] font-bold text-slate-600">{mastery?.isCompleted?'Completed':mastery?.isMastered?'Assignment pending':isUnlocked?'Start lesson':trustedAssignmentsLoading?'Checking':'Locked'}</span></div>;
+                      })}</div>
+                    </div>
+                  ))}
                 </div>
-
-                <div className="space-y-2">
-                  {chapter.lessons.map((lesson) => {
-                    const isPrerequisiteUnlocked = isLessonUnlocked(
-                      lesson,
-                      completedLessonIds,
-                      masteredLessonIds
-                    );
-                    const orderedLessons = activeCourse.chapters.flatMap((item) => item.lessons);
-                    const lessonIndex = orderedLessons.findIndex((item) => item.id === lesson.id);
-                    const previousLesson = lessonIndex > 0 ? orderedLessons[lessonIndex - 1] : undefined;
-                    const previousAssignment = previousLesson
-                      ? trustedAssignments[`assignment-${activeCourse.id}-${previousLesson.id}`]
-                      : undefined;
-                    const previousTopicComplete = !previousLesson || (
-                      currentMasteryRecords[previousLesson.id]?.isMastered === true &&
-                      currentMasteryRecords[previousLesson.id]?.isCompleted === true &&
-                      previousAssignment?.status === 'graded' &&
-                      Number(previousAssignment.scorePercent) >= 50
-                    );
-                    const isUnlocked = isPrerequisiteUnlocked && previousTopicComplete && !trustedAssignmentsLoading;
-                    const mastery = currentMasteryRecords[lesson.id];
-                    const isMastered = mastery?.isMastered;
-
-                    return (
-                      <div
-                        key={lesson.id}
-                        onClick={() => {
-                          if (isUnlocked) setActiveLessonId(lesson.id);
-                        }}
-                        className={`p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-                          isUnlocked
-                            ? 'bg-slate-50/70 border-slate-200 hover:border-purple-300 hover:bg-white cursor-pointer'
-                            : 'bg-slate-100/60 border-slate-200/60 opacity-60 cursor-not-allowed'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                              isMastered
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : isUnlocked
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-slate-200 text-slate-500'
-                            }`}
-                          >
-                            {isMastered ? (
-                              <CheckCircle2 size={18} />
-                            ) : isUnlocked ? (
-                              <Play size={15} />
-                            ) : (
-                              <Lock size={15} />
-                            )}
-                          </div>
-
-                          <div>
-                            <span className="font-bold text-xs text-slate-900 block">
-                              {lesson.title}
-                            </span>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                              <span>{lesson.durationMinutes} mins</span>
-                              <span>•</span>
-                              <span>{lesson.quizQuestions.length} Practice Questions</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {mastery?.isCompleted === true ? (
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                              Completed · {mastery?.scorePercent ?? 0}% mastery
-                            </span>
-                          ) : isMastered ? (
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">
-                              Assessment passed · Assignment pending
-                            </span>
-                          ) : isUnlocked ? (
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-800">
-                              Start Lesson
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">
-                              {trustedAssignmentsLoading ? 'Checking requirements' : !previousTopicComplete ? 'Complete previous chapter assignment' : 'Prerequisite Locked'}
-                            </span>
-                          )}
-                          {isUnlocked && <ChevronRight size={16} className="text-slate-400" />}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                {module.examination && <ModuleExamPanel courseId={activeCourse.id} module={module} attempts={moduleExamAttempts} onAttemptSaved={(attempt) => setModuleExamAttempts((current) => [...current, attempt])}/>}
+              </section>
             ))}
+
           </div>
         </div>
       </div>
