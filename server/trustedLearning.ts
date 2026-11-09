@@ -507,20 +507,22 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     if (!moduleRequirements.every(Boolean)) return res.status(409).json({ error: 'Complete and pass every module examination before starting the final course examination.' });
     const cycleDocument = cycleRef(uid, course.id, cycle);
     const sessionCollection = cycleDocument.collection('examSessions');
-    const existingAttempt = await cycleDocument.collection('examAttempts').limit(1).get();
-    if (!existingAttempt.empty) return res.status(409).json({ error: 'This enrolment cycle already has a final-exam attempt. Complete a full course retake to unlock another attempt.' });
+    const existingAttempts = await cycleDocument.collection('examAttempts').get();
+    if (existingAttempts.docs.some((doc) => doc.data().passed === true) || existingAttempts.size >= 2) return res.status(409).json({ error: 'The final examination has already been passed or the two-attempt limit has been reached.' });
     let session = await sessionCollection.doc('active').get();
-    if (!session.exists) {
+    if (!session.exists || session.data()?.submitted === true) {
       const requiredExamQuestions = selectRequiredQuestionSet(course.exam.questions, Math.min(30, course.exam.questions.length));
       if (!requiredExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet. The course content needs to be completed before assessment.' });
-      const questionIds = shuffle(requiredExamQuestions.map((question) => question.id));
+      const attemptNumber = existingAttempts.size + 1;
+      const rotated = rotateQuestionSet(requiredExamQuestions, existingAttempts.size, requiredExamQuestions.length);
+      const questionIds = shuffle(rotated.map((question) => question.id));
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
       await adminDb!.runTransaction(async (transaction) => {
         const current = await transaction.get(sessionCollection.doc('active'));
-        const attempt = await transaction.get(cycleDocument.collection('examAttempts').limit(1));
-        if (!current.exists && attempt.empty) transaction.create(sessionCollection.doc('active'), {
-          cycle, questionIds, createdAt: now.toISOString(), expiresAt,
+        const attempt = await transaction.get(cycleDocument.collection('examAttempts'));
+        if ((!current.exists || current.data()?.submitted === true) && attempt.size < 2 && !attempt.docs.some((doc) => doc.data().passed === true)) transaction.set(sessionCollection.doc('active'), {
+          cycle, questionIds, attemptNumber, submitted: false, createdAt: now.toISOString(), expiresAt,
         });
       });
       session = await sessionCollection.doc('active').get();
@@ -541,7 +543,7 @@ router.get('/api/assessments/courses/:courseId/exam/questions', requireFirebaseA
     // Return the same expired session as well: the client restores its locally
     // saved selections and immediately submits them. Never create a fresh timer
     // merely because the learner refreshed after the deadline.
-    return res.json({ questions: safeQuestions(questions.map((question) => ({ ...question, topic: question.topic }))), cycle, expiresAt });
+    return res.json({ questions: safeQuestions(questions.map((question) => ({ ...question, topic: question.topic }))), cycle, expiresAt, attemptNumber: Number(sessionData.attemptNumber || 1), maximumAttempts: 2 });
   } catch (error) {
     console.error('Trusted exam session creation failed:', error);
     return res.status(500).json({ error: 'Unable to prepare the final exam.' });
@@ -572,7 +574,9 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     if (!approvedExamQuestions?.length) return res.status(422).json({ error: 'This course has no unique approved final-exam questions yet.' });
     const questionById = new Map(approvedExamQuestions.map((question) => [question.id, question]));
     const questions = questionIds.map((id) => questionById.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
-    const attemptRef = cycleDocument.collection('examAttempts').doc('final');
+    const attemptNumber = Number(session.data()?.attemptNumber || 1);
+    if (attemptNumber > 2) return res.status(409).json({ error: 'The final examination attempt limit has been reached.' });
+    const attemptRef = cycleDocument.collection('examAttempts').doc(`attempt-${attemptNumber}`);
     // Make submission idempotent: if the server saved an attempt but the browser
     // lost the response, a retry must return that trusted result even after expiry.
     const previousAttempt = await attemptRef.get();
@@ -597,7 +601,7 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     if (!validAnswers(questions, req.body?.answers, true)) return res.status(400).json({ error: 'Submit valid answers for the questions you attempted.' });
     const answers = req.body.answers as Record<string, number>;
     const scorePercent = scoreAnswers(questions, answers);
-    const passingScorePercent = Math.max(PASS_MARK, course.exam.passingScorePercent || PASS_MARK);
+    const passingScorePercent = PASS_MARK;
     const passed = isPassingExamScore(scorePercent, passingScorePercent);
     const results = Object.fromEntries(questions.map((question) => [question.id, {
       correct: answers[question.id] === question.correctIndex,
@@ -610,9 +614,17 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
       if (previous.exists) return previous.data();
       const sessionSnapshot = await transaction.get(cycleDocument.collection('examSessions').doc('active'));
       if (!sessionSnapshot.exists) throw new Error('EXAM_SESSION_MISSING');
-      const data = { id: attemptRef.id, courseId: course.id, examId: course.exam!.id, cycle, scorePercent, passed, passingScorePercent, answers, submittedAt: now, trusted: true };
+      if (sessionSnapshot.data()?.submitted === true) {
+        const saved = await transaction.get(attemptRef);
+        if (saved.exists) return saved.data();
+        throw new Error('EXAM_SESSION_ALREADY_SUBMITTED');
+      }
+      const data = { id: attemptRef.id, courseId: course.id, examId: course.exam!.id, cycle, attemptNumber, scorePercent, passed, passingScorePercent, answers, submittedAt: now, trusted: true };
       transaction.create(attemptRef, data);
-      transaction.set(cycleDocument, { cycle, examAttempted: true, examPassed: passed, examScorePercent: scorePercent, updatedAt: now }, { merge: true });
+      transaction.set(sessionSnapshot.ref, { submitted: true, submittedAt: now }, { merge: true });
+      const cycleData = await transaction.get(cycleDocument);
+      const bestScore = Math.max(Number(cycleData.data()?.examScorePercent || 0), scorePercent);
+      transaction.set(cycleDocument, { cycle, examAttempted: true, examPassed: passed || cycleData.data()?.examPassed === true, examScorePercent: bestScore, updatedAt: now }, { merge: true });
       return data;
     });
     if (!attempt) return res.status(500).json({ error: 'Unable to save exam attempt.' });
@@ -625,6 +637,7 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
     return res.json({ scorePercent: attempt.scorePercent, passed: attempt.passed, passingScorePercent, results: savedResults, attempt, cycle, alreadySubmitted: attempt.submittedAt !== now });
   } catch (error) {
     if (error instanceof Error && error.message === 'EXAM_SESSION_MISSING') return res.status(409).json({ error: 'The exam session expired. Please start the exam again.' });
+    if (error instanceof Error && error.message === 'EXAM_SESSION_ALREADY_SUBMITTED') return res.status(409).json({ error: 'This examination attempt has already been submitted.' });
     console.error('Trusted exam submission failed:', error);
     return res.status(500).json({ error: 'Unable to submit the final exam.' });
   }
