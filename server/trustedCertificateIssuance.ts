@@ -3,7 +3,7 @@ import { calculateWeightedCertificateScore, certificateUnmetRequirements, summar
 
 type IssueTrustedCertificateInput = {
   db: Firestore; cycleRef: DocumentReference; certificateRef: DocumentReference; learnerCertificateRef: DocumentReference;
-  certificate: object; totalLessons: number; approvedAssignmentCount: number; approvedModuleCount: number; weights?: { chapterAssessments: number; assignments: number; moduleExaminations: number; finalExamination: number }; cycle: number;
+  certificate: object; totalLessons: number; approvedAssignmentCount: number; approvedChapterCount: number; approvedModuleCount: number; weights?: { chapterAssessments: number; assignments: number; moduleExaminations: number; finalExamination: number }; cycle: number;
 };
 export type TrustedCertificateIssuanceResult =
   | { eligible: false; unmet: string[]; cycle: number; courseMasteryPercent: number }
@@ -11,14 +11,22 @@ export type TrustedCertificateIssuanceResult =
 
 export async function issueTrustedCertificateTransaction(input: IssueTrustedCertificateInput): Promise<TrustedCertificateIssuanceResult> {
   return input.db.runTransaction(async (transaction) => {
-    const [cycleSnapshot, progress, assignments, existingCertificate, moduleAttempts] = await Promise.all([
+    const [cycleSnapshot, progress, assignments, existingCertificate, moduleAttempts, chapterAttempts] = await Promise.all([
       transaction.get(input.cycleRef), transaction.get(input.cycleRef.collection('lessonProgress')),
       transaction.get(input.cycleRef.collection('assignments')), transaction.get(input.learnerCertificateRef),
       transaction.get(input.cycleRef.collection('moduleExamAttempts')),
+      transaction.get(input.cycleRef.collection('chapterAssessmentAttempts')),
     ]);
     const progressRecords = progress.docs.map((document) => document.data());
     const assignmentRecords = assignments.docs.map((document) => document.data());
     const moduleRecords = moduleAttempts.docs.map((document) => document.data());
+    const chapterRecords = chapterAttempts.docs.map((document) => document.data());
+    const passedChapters = new Map<string, number>();
+    for (const attempt of chapterRecords) {
+      if (attempt.passed !== true || Number(attempt.scorePercent) < 70) continue;
+      const chapterId = String(attempt.chapterId);
+      passedChapters.set(chapterId, Math.max(passedChapters.get(chapterId) ?? 0, Number(attempt.scorePercent)));
+    }
     const courseMasteryPercent = summarizeCourseProgress(progressRecords, input.totalLessons).courseMasteryPercent;
     const passedModules = new Map<string, number>();
     for (const attempt of moduleRecords) {
@@ -30,12 +38,14 @@ export async function issueTrustedCertificateTransaction(input: IssueTrustedCert
       totalLessons: input.totalLessons, progress: progressRecords,
       examPassed: cycleSnapshot.data()?.examPassed === true, assignments: assignmentRecords,
       approvedAssignmentCount: input.approvedAssignmentCount,
+      chapterAssessments: Array.from(passedChapters, ([chapterId, scorePercent]) => ({ chapterId, scorePercent, passed: true })),
+      approvedChapterCount: input.approvedChapterCount,
       moduleExaminations: Array.from(passedModules, ([moduleId, scorePercent]) => ({ moduleId, scorePercent, passed: true })),
       approvedModuleCount: input.approvedModuleCount, certificateAlreadyIssued: existingCertificate.exists,
     });
     if (unmet.length) return { eligible: false, unmet, cycle: input.cycle, courseMasteryPercent };
     const scorePercent = calculateWeightedCertificateScore({
-      chapterAssessmentScores: progressRecords.map((record) => Number(record.scorePercent)),
+      chapterAssessmentScores: Array.from(passedChapters.values()),
       assignmentScores: assignmentRecords.map((record) => Number(record.scorePercent)),
       moduleExaminationScores: Array.from(passedModules.values()),
       finalExamScorePercent: Number(cycleSnapshot.data()?.examScorePercent || 0),
