@@ -860,6 +860,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
       curriculum: course.curriculum,
       issuedDate: new Date().toISOString(),
       scorePercent: Number((await ref.get()).data()?.examScorePercent || 0),
+      verificationUrl: `/api/certificates/verify/${credentialId}`,
       authority: 'Berry Learning Platform',
       verified: true,
       uid,
@@ -911,7 +912,7 @@ router.get('/api/certificates/verify/:credentialId', async (req, res) => {
     const snapshot = await adminDb.collection('trustedCertificates').doc(req.params.credentialId).get();
     if (!snapshot.exists || snapshot.data()?.trusted !== true) return res.status(404).json({ valid: false, error: 'Certificate not found or not verified.' });
     const certificate = snapshot.data()!;
-    return res.json({ valid: true, credentialId: certificate.credentialId, recipientName: certificate.recipientName, courseTitle: certificate.courseTitle, issuedDate: certificate.issuedDate, authority: certificate.authority });
+    return res.json({ valid: true, credentialId: certificate.credentialId, recipientName: certificate.recipientName, courseTitle: certificate.courseTitle, issuedDate: certificate.issuedDate, scorePercent: certificate.scorePercent, grade: certificate.grade, classification: certificate.classification, authority: certificate.authority });
   } catch (error) {
     console.error('Certificate verification failed:', error);
     return res.status(500).json({ error: 'Unable to verify this certificate.' });
