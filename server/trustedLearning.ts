@@ -619,10 +619,10 @@ router.post('/api/assessments/courses/:courseId/exam/submit', requireFirebaseAut
         if (saved.exists) return saved.data();
         throw new Error('EXAM_SESSION_ALREADY_SUBMITTED');
       }
+      const cycleData = await transaction.get(cycleDocument);
       const data = { id: attemptRef.id, courseId: course.id, examId: course.exam!.id, cycle, attemptNumber, scorePercent, passed, passingScorePercent, answers, submittedAt: now, trusted: true };
       transaction.create(attemptRef, data);
       transaction.set(sessionSnapshot.ref, { submitted: true, submittedAt: now }, { merge: true });
-      const cycleData = await transaction.get(cycleDocument);
       const bestScore = Math.max(Number(cycleData.data()?.examScorePercent || 0), scorePercent);
       transaction.set(cycleDocument, { cycle, examAttempted: true, examPassed: passed || cycleData.data()?.examPassed === true, examScorePercent: bestScore, updatedAt: now }, { merge: true });
       return data;
