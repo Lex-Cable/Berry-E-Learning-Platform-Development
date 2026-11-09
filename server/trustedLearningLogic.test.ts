@@ -47,7 +47,7 @@ test('certificate eligibility rejects missing requirements and accepts a fully e
   assert.ok(certificateUnmetRequirements({ ...base, approvedAssignmentCount: 2, assignments: [{ status: 'graded', scorePercent: 90 }] }).some((item) => item.includes('topic assignments completed')));
   assert.ok(certificateUnmetRequirements({ ...base, examPassed: false }).some((item) => item.includes('exam')));
   assert.ok(certificateUnmetRequirements({ ...base, certificateAlreadyIssued: true }).some((item) => item.includes('already issued')));
-  assert.deepEqual(certificateUnmetRequirements({ ...base, progress: [{ isCompleted: true, isMastered: true }, { isCompleted: true, isMastered: false }] }), []);
+  assert.ok(certificateUnmetRequirements({ ...base, progress: [{ isCompleted: true, isMastered: true }, { isCompleted: true, isMastered: false }] }).some((item) => item.includes('chapter assessments')));
   assert.ok(certificateUnmetRequirements({ ...base, assignments: [{ status: 'graded', scorePercent: 49 }] }).some((item) => item.includes('assignment')));
 });
 
