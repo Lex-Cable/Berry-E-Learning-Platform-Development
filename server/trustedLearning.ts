@@ -105,7 +105,7 @@ function moduleExamQuestions(course: PrivateCourse, moduleId: string) {
   if (!module) return null;
   const chapters = getModuleChapters(course, module);
   const seen = new Set<string>();
-  return chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => lesson.quizQuestions))
+  return chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => lesson.moduleExamQuestions || []))
     .filter((question) => { if (seen.has(question.id)) return false; seen.add(question.id); return true; })
     .map((question) => ({ id: question.id, question: question.question, options: question.options, correctIndex: question.correctIndex, explanation: question.explanation, topic: question.learningObjective }));
 }
