@@ -141,3 +141,23 @@ test('Grade 8 Pre-Technical Workshop has approved chapter and module assessment 
     assert.ok(question.explanation.trim().length > 0);
   }
 });
+
+test('professional Data AI lesson has mastery, chapter and module question banks in both catalogues', () => {
+  for (const catalogue of [CLIENT_COURSES, SERVER_COURSES]) {
+    const source = catalogue.find((course) => course.id === 'prof-data-ai');
+    assert.ok(source, 'professional Data AI course exists');
+    const complete = withCompleteAssessmentBanks([source as Course])[0];
+    const lesson = complete.chapters.flatMap((chapter) => chapter.lessons).find((item) => item.id === 'prof-l1');
+    assert.ok(lesson, 'professional Data AI lesson exists');
+    assert.ok(lesson.quizQuestions.length > 0, 'mastery assessment bank is not empty');
+    assert.ok((lesson.chapterAssessmentQuestions?.length || 0) >= 4, 'chapter assessment has authored questions');
+    assert.ok((lesson.moduleExamQuestions?.length || 0) >= 4, 'module exam has a separate authored question bank');
+    const pools = [
+      lesson.quizQuestions,
+      lesson.chapterAssessmentQuestions || [],
+      lesson.moduleExamQuestions || [],
+    ];
+    const prompts = pools.flatMap((pool) => pool.map((question) => question.question.trim().toLowerCase()));
+    assert.equal(new Set(prompts).size, prompts.length, 'formal assessment pools do not reuse prompts');
+  }
+});
