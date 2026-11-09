@@ -3,7 +3,7 @@ import type { Course, ExamQuestion, Lesson, QuizQuestion } from '../types';
 type Seed = { id: string; question: string; options: string[]; correctIndex: number; explanation: string; topic: string };
 
 function normalizeQuestion(value: string): string {
-  return value.toLocaleLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 }
 
 function asSeed(question: QuizQuestion): Seed {
