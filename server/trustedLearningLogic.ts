@@ -6,6 +6,8 @@ export interface CertificateRequirements {
   examPassed: boolean;
   assignments: TrustedAssignmentSnapshot[];
   approvedAssignmentCount: number;
+  chapterAssessments: Array<{ chapterId: string; scorePercent: number; passed: boolean }>;
+  approvedChapterCount: number;
   moduleExaminations: Array<{ moduleId: string; scorePercent: number; passed: boolean }>;
   approvedModuleCount: number;
   certificateAlreadyIssued: boolean;
