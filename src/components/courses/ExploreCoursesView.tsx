@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   Filter,
@@ -8,15 +8,18 @@ import {
   Globe2,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   ShieldCheck,
   Sparkles,
   Info,
 } from 'lucide-react';
 import { Course, LearnerProfile, LearnerStage, Curriculum } from '../../types';
-import { KENYA_CBC_LEVELS } from '../../utils/mastery';
+import type { CurriculumRepository } from '../../curriculum/repository';
+import { resolveCanonicalStage } from '../../curriculum/repository';
 
 interface ExploreCoursesViewProps {
   courses: Course[];
+  curriculumRepository: CurriculumRepository;
   learner: LearnerProfile;
   onSelectCourse: (course: Course) => void;
   onOpenLesson: (course: Course, lessonId: string) => void;
@@ -26,6 +29,7 @@ interface ExploreCoursesViewProps {
 
 export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   courses,
+  curriculumRepository,
   learner,
   onSelectCourse,
   onOpenLesson,
@@ -33,17 +37,33 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   onEnrollCourse,
 }) => {
   const [selectedStage, setSelectedStage] = useState<LearnerStage | 'all'>(learner.stage);
-  const [selectedCurriculum, setSelectedCurriculum] = useState<Curriculum | 'all'>(learner.curriculum);
-  const [selectedGrade, setSelectedGrade] = useState<string>(learner.gradeLevel);
+  const [selectedGrade, setSelectedGrade] = useState<string>('all');
 
   const stageGrades = useMemo(() => {
-    if (selectedStage === 'early') return ['PP1', 'PP2'];
-    if (selectedStage === 'junior') return Array.from({ length: 9 }, (_, index) => `Grade ${index + 1}`);
-    if (selectedStage === 'senior') return ['Grade 10', 'Grade 11', 'Grade 12'];
-    return Array.from(new Set(courses
-      .filter((course) => course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals')
-      .map((course) => course.gradeLevel))).sort((a, b) => a.localeCompare(b));
-  }, [courses, selectedStage]);
+    if (selectedStage === 'all') {
+      return Array.from(new Set(curriculumRepository.entries.map(({ placement }) => placement.gradeLevel)))
+        .sort((a, b) => a.localeCompare(b));
+    }
+    const canonicalStage = resolveCanonicalStage(selectedStage);
+    const authoredGrades = curriculumRepository.byStage[canonicalStage].map(({ placement }) => placement.gradeLevel);
+    const stageGradesById: Record<string, string[]> = {
+      early_years: ['PP1', 'PP2', 'Nursery', 'Reception', 'Pre-K', 'Kindergarten'],
+      primary: [
+        ...Array.from({ length: 9 }, (_, index) => `Grade ${index + 1}`),
+        ...Array.from({ length: 6 }, (_, index) => `Cambridge Primary Stage ${index + 1}`),
+        ...Array.from({ length: 6 }, (_, index) => `Year ${index + 1}`),
+      ],
+      secondary: [
+        ...Array.from({ length: 3 }, (_, index) => `Grade ${index + 10}`),
+        ...Array.from({ length: 7 }, (_, index) => `Year ${index + 7}`),
+        'IGCSE', 'AS Level', 'A Level',
+      ],
+      advanced: ['Bachelor Year 1', 'Bachelor Year 2', 'Bachelor Year 3', 'Bachelor Year 4', 'Masters', 'Doctorate', 'Professional'],
+    };
+    return Array.from(new Set([...stageGradesById[canonicalStage], ...authoredGrades, learner.gradeLevel]))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [curriculumRepository, selectedStage, learner.gradeLevel]);
 
   useEffect(() => {
     if (selectedGrade !== 'all' && !stageGrades.includes(selectedGrade)) {
@@ -52,37 +72,80 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
   }, [learner.gradeLevel, selectedGrade, stageGrades]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCurriculumComparison, setShowCurriculumComparison] = useState(false);
+  const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrollShelf = (sectionId: string, direction: -1 | 1) => {
+    shelfRefs.current[sectionId]?.scrollBy({ left: direction * 620, behavior: 'smooth' });
+  };
 
-  // Available curricula
-  const curricula = [
-    { id: 'kenya_cbc' as Curriculum, name: 'Kenya CBC (CBC-aligned)', flag: '🇰🇪' },
-    { id: 'cambridge' as Curriculum, name: 'Cambridge International (CIE)', flag: '🌐' },
-    { id: 'uk_national' as Curriculum, name: 'England National Curriculum', flag: '🇬🇧' },
-    { id: 'us_common_core' as Curriculum, name: 'US State Standards / Common Core', flag: '🇺🇸' },
-    { id: 'ib' as Curriculum, name: 'International Baccalaureate (IB)', flag: '🏛️' },
+  // Three independent curriculum pathways requested for Berry Explore Courses.
+  // Courses are never copied across curricula based on comparison flags.
+  const curriculumSections: {
+    id: Curriculum;
+    name: string;
+    flag: string;
+    description: string;
+  }[] = [
+    { id: 'kenya_cbc', name: 'Kenyan CBC', flag: '🇰🇪', description: 'Kenya Competency-Based Curriculum courses and learning activities.' },
+    { id: 'cambridge', name: 'UK Cambridge International', flag: '🇬🇧', description: 'Cambridge International courses, subjects and learning pathways.' },
+    { id: 'us_common_core', name: 'US International', flag: '🇺🇸', description: 'US-aligned Common Core courses and international learning pathways.' },
   ];
 
-  // Filter courses
-  const filteredCourses = courses.filter((c) => {
-    if (selectedStage !== 'all') {
-      if (selectedStage === 'advance') {
-        if (c.stage !== 'advance' && c.stage !== 'university' && c.stage !== 'professionals') return false;
-      } else if (c.stage !== selectedStage) {
-        return false;
-      }
-    }
-    if (selectedCurriculum !== 'all' && c.curriculum !== selectedCurriculum && !c.isInternationalComparison) return false;
-    if (selectedGrade !== 'all' && c.gradeLevel !== selectedGrade) return false;
-    if (
-      searchQuery &&
-      !c.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !c.subject.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !c.description.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const coursesByCurriculum = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return Object.fromEntries(curriculumSections.map((section) => [
+      section.id,
+      curriculumRepository.entries
+        .filter(({ placement }) =>
+          placement.curriculum === section.id
+          && (selectedStage === 'all' || placement.canonicalStage === resolveCanonicalStage(selectedStage))
+          && (selectedGrade === 'all' || placement.gradeLevel === selectedGrade),
+        )
+        .map(({ course }) => course)
+        .filter((course) => !query
+          || course.title.toLocaleLowerCase().includes(query)
+          || course.subject.toLocaleLowerCase().includes(query)
+          || course.description.toLocaleLowerCase().includes(query)),
+    ])) as Record<Curriculum, Course[]>;
+  }, [curriculumRepository, selectedStage, selectedGrade, searchQuery]);
+
+  const renderCourseCard = (course: Course) => {
+    const isEnrolled = learner.enrolledCourseIds.includes(course.id);
+    return (
+      <div key={course.id} className="bg-white rounded-3xl border border-slate-200/80 hover:border-purple-300 hover:shadow-lg transition-all duration-200 flex flex-col overflow-hidden group">
+        <div className={`h-24 bg-gradient-to-r ${course.bannerColor} p-4 text-white flex flex-col justify-between relative`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider bg-black/20 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/20">{course.code}</span>
+            <span className="text-[10px] font-bold bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-full">{course.gradeLevel}</span>
+          </div>
+          <h3 className="font-bold text-sm leading-tight text-white/95 line-clamp-1">{course.subject}</h3>
+        </div>
+        <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-xs text-purple-700 font-semibold"><ShieldCheck size={14} /><span>{course.badgeText}</span></div>
+            <h4 className="font-extrabold text-slate-900 text-base leading-snug group-hover:text-purple-700 transition-colors">{course.title}</h4>
+            <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{course.description}</p>
+          </div>
+          <div className="pt-2 border-t border-slate-100 text-xs text-slate-600 space-y-1">
+            <div className="flex justify-between items-center text-slate-500">
+              <span className="flex items-center gap-1"><BookOpen size={13} /><span>{course.chapters.length} Chapters</span></span>
+              <span className="flex items-center gap-1"><Clock size={13} /><span>~{course.estimatedHours} hrs</span></span>
+            </div>
+          </div>
+          <div className="pt-2 flex items-center gap-2">
+            {isEnrolled ? (
+              <button onClick={() => onOpenCourse(course)} className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                <span>Continue Learning</span><ChevronRight size={14} />
+              </button>
+            ) : (
+              <button onClick={() => onEnrollCourse(course.id)} className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-purple-600 text-white font-bold text-xs shadow transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                <span>Enroll in Course</span><ChevronRight size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -194,14 +257,8 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
             <button
               key={st.id}
               onClick={() => {
-                const nextStage = st.id as LearnerStage;
-                setSelectedStage(nextStage);
-                const nextGrades = courses.filter((course) =>
-                  nextStage === 'advance'
-                    ? course.stage === 'advance' || course.stage === 'university' || course.stage === 'professionals'
-                    : course.stage === nextStage
-                ).map((course) => course.gradeLevel);
-                setSelectedGrade(nextGrades.includes(learner.gradeLevel) ? learner.gradeLevel : nextGrades[0] || 'all');
+                setSelectedStage(st.id as LearnerStage);
+                setSelectedGrade('all');
               }}
               className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
                 selectedStage === st.id
@@ -214,151 +271,70 @@ export const ExploreCoursesView: React.FC<ExploreCoursesViewProps> = ({
           ))}
         </div>
 
-        {/* Curriculum & Grade Selector & Search */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Curriculum Select */}
+        {/* Grade and search filters apply consistently to all three curriculum sections. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Curriculum System
-            </label>
-            <select
-              value={selectedCurriculum}
-              onChange={(e) => setSelectedCurriculum(e.target.value as Curriculum)}
-              className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
-            >
-              {curricula.map((curr) => (
-                <option key={curr.id} value={curr.id}>
-                  {curr.flag} {curr.name}
-                </option>
-              ))}
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Grade or Level</label>
+            <select value={selectedGrade} onChange={(e) => setSelectedGrade(e.target.value)} className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300">
+              <option value="all">All grades and levels</option>
+              {stageGrades.map((grade) => <option key={grade} value={grade}>{grade}</option>)}
             </select>
           </div>
-
-          {/* Grade / Level Select */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Grade or Qualification
-            </label>
-            <select
-              value={selectedGrade}
-              onChange={(e) => setSelectedGrade(e.target.value)}
-              className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
-            >
-              {stageGrades.map((grade) => (
-                <option key={grade} value={grade}>{grade}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Search box */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-              Keyword or Learning Outcome
-            </label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search courses, subjects or learning outcomes</label>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search chemistry, fractions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300"
-              />
+              <input type="text" placeholder="Search chemistry, fractions..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full text-xs pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-purple-300" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Course Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCourses.map((course) => {
-          const isEnrolled = learner.enrolledCourseIds.includes(course.id);
-          const firstLesson = course.chapters[0]?.lessons[0];
-
+      {/* Three independent curriculum sections remain visible for every learner. */}
+      <div className="space-y-8">
+        {curriculumSections.map((section) => {
+          const sectionCourses = coursesByCurriculum[section.id] ?? [];
           return (
-            <div
-              key={course.id}
-              className="bg-white rounded-3xl border border-slate-200/80 hover:border-purple-300 hover:shadow-lg transition-all duration-200 flex flex-col overflow-hidden group"
-            >
-              {/* Card Banner */}
-              <div className={`h-24 bg-gradient-to-r ${course.bannerColor} p-4 text-white flex flex-col justify-between relative`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-black/20 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/20">
-                    {course.code}
-                  </span>
-                  <span className="text-[10px] font-bold bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-full">
-                    {course.gradeLevel}
-                  </span>
+            <section key={section.id} aria-labelledby={`curriculum-${section.id}`} className="space-y-4">
+              <div className="flex flex-col gap-2 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-purple-50 text-2xl">{section.flag}</div>
+                <div className="min-w-0 flex-1">
+                  <h3 id={`curriculum-${section.id}`} className="text-lg font-black text-slate-900">{section.name}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{section.description}</p>
                 </div>
-                <h3 className="font-bold text-sm leading-tight text-white/95 line-clamp-1">
-                  {course.subject}
-                </h3>
+                <span className="w-fit rounded-full bg-purple-50 px-3 py-1.5 text-xs font-extrabold text-purple-800">
+                  {sectionCourses.length} {sectionCourses.length === 1 ? 'course' : 'courses'}
+                </span>
               </div>
-
-              {/* Card Body */}
-              <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs text-purple-700 font-semibold">
-                    <ShieldCheck size={14} />
-                    <span>{course.badgeText}</span>
+              {sectionCourses.length > 0 ? (
+                <div className="relative">
+                  {sectionCourses.length > 2 && (
+                    <>
+                      <button type="button" aria-label={`Scroll ${section.name} courses left`} onClick={() => scrollShelf(section.id, -1)} className="absolute -left-3 top-1/2 z-10 hidden -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-lg transition hover:bg-purple-50 md:grid">
+                        <ChevronLeft size={20} />
+                      </button>
+                      <button type="button" aria-label={`Scroll ${section.name} courses right`} onClick={() => scrollShelf(section.id, 1)} className="absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-lg transition hover:bg-purple-50 md:grid">
+                        <ChevronRight size={20} />
+                      </button>
+                    </>
+                  )}
+                  <div ref={(node) => { shelfRefs.current[section.id] = node; }} className="flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-smooth pb-4 [scrollbar-width:thin]">
+                    {sectionCourses.map((course) => <div key={course.id} className="w-[285px] shrink-0 snap-start">{renderCourseCard(course)}</div>)}
                   </div>
-
-                  <h4 className="font-extrabold text-slate-900 text-base leading-snug group-hover:text-purple-700 transition-colors">
-                    {course.title}
-                  </h4>
-
-                  <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
-                    {course.description}
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-9 text-center">
+                  <BookOpen size={32} className="mx-auto mb-3 text-slate-300" />
+                  <h4 className="text-sm font-bold text-slate-700">No published courses for this selection yet</h4>
+                  <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-slate-500">
+                    This section is ready for {section.name} content. No courses are currently published for the selected grade and stage, so Berry will not substitute courses from another curriculum.
                   </p>
                 </div>
-
-                {/* Chapter breakdown overview */}
-                <div className="pt-2 border-t border-slate-100 text-xs text-slate-600 space-y-1">
-                  <div className="flex justify-between items-center text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <BookOpen size={13} />
-                      <span>{course.chapters.length} Chapters</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock size={13} />
-                      <span>~{course.estimatedHours} hrs</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Action button */}
-                <div className="pt-2 flex items-center gap-2">
-                  {isEnrolled ? (
-                    <button
-                      onClick={() => onOpenCourse(course)}
-                      className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                    >
-                      <span>Continue Learning</span>
-                      <ChevronRight size={14} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => onEnrollCourse(course.id)}
-                      className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-purple-600 text-white font-bold text-xs shadow transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                    >
-                      <span>Enroll in Course</span>
-                      <ChevronRight size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+              )}
+            </section>
           );
         })}
       </div>
-
-      {filteredCourses.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-3xl border border-slate-200">
-          <BookOpen size={40} className="mx-auto text-slate-300 mb-3" />
-          <h3 className="text-base font-bold text-slate-700">No courses match your filter</h3>
-          <p className="text-xs text-slate-500 mt-1">Try selecting a different grade or curriculum above.</p>
-        </div>
-      )}
     </div>
   );
 };

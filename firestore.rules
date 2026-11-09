@@ -69,25 +69,7 @@ service cloud.firestore {
 
       match /learningProgress/{lessonId} {
         allow get, list: if isOwner(userId);
-        allow create, update: if isOwner(userId)
-          && request.resource.data.keys().hasOnly([
-            'lessonId', 'isCompleted', 'isMastered', 'scorePercent', 'attemptsCount',
-            'lastAttemptDate', 'identifiedMisconceptions', 'remedialActivitiesCompleted', 'updatedAt'
-          ])
-          && request.resource.data.keys().hasAll([
-            'lessonId', 'isCompleted', 'isMastered', 'scorePercent', 'attemptsCount',
-            'identifiedMisconceptions', 'remedialActivitiesCompleted', 'updatedAt'
-          ])
-          && request.resource.data.lessonId == lessonId
-          && request.resource.data.isCompleted is bool
-          && request.resource.data.isMastered is bool
-          && request.resource.data.scorePercent is number
-          && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100
-          && request.resource.data.attemptsCount is int && request.resource.data.attemptsCount >= 0
-          && request.resource.data.identifiedMisconceptions is list
-          && request.resource.data.identifiedMisconceptions.size() <= 50
-          && request.resource.data.remedialActivitiesCompleted is bool;
-        allow delete: if isOwner(userId);
+        allow create, update, delete: if false;
       }
 
       match /lessonNotes/{lessonId} {
@@ -103,31 +85,7 @@ service cloud.firestore {
 
       match /learningCertificates/{certificateId} {
         allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId)
-          && request.resource.data.keys().hasOnly([
-            'id', 'credentialId', 'courseId', 'courseTitle', 'recipientName', 'stage',
-            'gradeLevel', 'curriculum', 'issuedDate', 'scorePercent', 'authority',
-            'verified', 'seniorPathway', 'updatedAt'
-          ])
-          && request.resource.data.keys().hasAll([
-            'id', 'credentialId', 'courseId', 'courseTitle', 'recipientName', 'stage',
-            'gradeLevel', 'curriculum', 'issuedDate', 'scorePercent', 'authority',
-            'verified', 'updatedAt'
-          ])
-          && request.resource.data.id == certificateId
-          && request.resource.data.credentialId is string
-          && request.resource.data.courseId is string
-          && request.resource.data.courseTitle is string
-          && request.resource.data.recipientName is string
-          && request.resource.data.stage in ['early', 'junior', 'senior', 'advance', 'university', 'professionals']
-          && request.resource.data.gradeLevel is string
-          && request.resource.data.curriculum in ['kenya_cbc', 'cambridge', 'uk_national', 'us_common_core', 'ib']
-          && request.resource.data.issuedDate is string
-          && request.resource.data.scorePercent is number
-          && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100
-          && request.resource.data.authority == 'Berry Learning Platform'
-          && request.resource.data.verified == false;
-        allow update, delete: if false;
+        allow create, update, delete: if false;
       }
 
       match /learningState/{courseId} {
@@ -177,45 +135,34 @@ service cloud.firestore {
 
       match /assignmentSubmissions/{assignmentId} {
         allow get, list: if isOwner(userId);
+        allow create, update, delete: if false;
+      }
+
+      match /practiceAssignmentSubmissions/{assignmentId} {
+        allow get, list: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && request.resource.data.keys().hasOnly([
-            'assignmentId', 'content', 'submittedAt', 'attemptNumber', 'status',
-            'scorePercent', 'markerFeedback', 'gradedAt', 'criterionScores', 'updatedAt'
+            'assignmentId', 'content', 'submittedAt', 'attemptNumber', 'status', 'updatedAt'
           ])
-          && request.resource.data.keys().hasAll(['assignmentId', 'content', 'submittedAt', 'attemptNumber', 'status', 'updatedAt'])
+          && request.resource.data.keys().hasAll([
+            'assignmentId', 'content', 'submittedAt', 'attemptNumber', 'status', 'updatedAt'
+          ])
           && request.resource.data.assignmentId == assignmentId
-          && request.resource.data.content is string && request.resource.data.content.size() <= 20000
-          && request.resource.data.submittedAt is string && request.resource.data.submittedAt.size() <= 60
-          && request.resource.data.attemptNumber is int && request.resource.data.attemptNumber >= 1 && request.resource.data.attemptNumber <= 20
-          && request.resource.data.status in ['submitted', 'graded', 'returned_for_revision']
-          && (!('scorePercent' in request.resource.data)
-            || (request.resource.data.scorePercent is number
-              && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100))
-          && (!('markerFeedback' in request.resource.data)
-            || (request.resource.data.markerFeedback is string && request.resource.data.markerFeedback.size() <= 5000))
-          && (!('gradedAt' in request.resource.data)
-            || (request.resource.data.gradedAt is string && request.resource.data.gradedAt.size() <= 60))
-          && (!('criterionScores' in request.resource.data)
-            || (request.resource.data.criterionScores is list && request.resource.data.criterionScores.size() <= 20));
+          && request.resource.data.content is string
+          && request.resource.data.content.size() <= 20000
+          && request.resource.data.submittedAt is string
+          && request.resource.data.submittedAt.size() <= 60
+          && request.resource.data.attemptNumber is int
+          && request.resource.data.attemptNumber >= 1
+          && request.resource.data.attemptNumber <= 20
+          && request.resource.data.status == 'submitted'
+          && request.resource.data.updatedAt == request.time;
         allow delete: if isOwner(userId);
       }
 
       match /examAttempts/{attemptId} {
         allow get, list: if isOwner(userId);
-        allow create, update: if isOwner(userId)
-          && request.resource.data.keys().hasOnly(['id', 'courseId', 'examId', 'scorePercent', 'passed', 'passingScorePercent', 'answers', 'submittedAt', 'updatedAt'])
-          && request.resource.data.keys().hasAll(['id', 'courseId', 'examId', 'scorePercent', 'passed', 'passingScorePercent', 'answers', 'submittedAt', 'updatedAt'])
-          && request.resource.data.id == attemptId
-          && request.resource.data.courseId is string && request.resource.data.courseId.size() <= 150
-          && request.resource.data.examId is string && request.resource.data.examId.size() <= 150
-          && request.resource.data.scorePercent is number
-          && request.resource.data.scorePercent >= 0 && request.resource.data.scorePercent <= 100
-          && request.resource.data.passed is bool
-          && request.resource.data.passingScorePercent is number
-          && request.resource.data.passingScorePercent >= 0 && request.resource.data.passingScorePercent <= 100
-          && request.resource.data.answers is map && request.resource.data.answers.size() <= 100
-          && request.resource.data.submittedAt is string && request.resource.data.submittedAt.size() <= 60;
-        allow delete: if false;
+        allow create, update, delete: if false;
       }
 
       match /transcriptSessions/{sessionId} {
@@ -558,5 +505,12 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if false;
     }
+
+    // Trusted enrollment records are managed exclusively by the server.
+    // Client profile fields must never grant or modify course access.
+    match /users/{userId}/enrollments/{courseId} {
+      allow read, write: if false;
+    }
+
   }
 }

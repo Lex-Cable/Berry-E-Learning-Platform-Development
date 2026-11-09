@@ -46,11 +46,33 @@ export interface Course {
   objectives: string[];
   prerequisites: string[];
   chapters: Chapter[];
+  /** Explicit course modules. Older catalogue records are mapped into a stable legacy module. */
+  modules?: CourseModule[];
+  assessmentWeights?: { chapterAssessments: number; assignments: number; moduleExaminations: number; finalExamination: number };
   exam?: CourseExam;
   isCompulsoryCBC?: boolean;
   isInternationalComparison?: boolean;
   seniorPathway?: SeniorPathway;
   advanceTrack?: AdvanceTrack;
+}
+
+export interface CourseModule {
+  id: string;
+  courseId: string;
+  title: string;
+  order: number;
+  description: string;
+  chapterIds: string[];
+  examination?: ModuleExaminationConfig;
+}
+
+export interface ModuleExaminationConfig {
+  id: string;
+  title: string;
+  passingScorePercent: number;
+  durationMinutes: number;
+  questionCount: number;
+  maximumAttempts: number;
 }
 
 export interface Chapter {
@@ -109,6 +131,10 @@ export interface Lesson {
   notesMarkdown: string;
   activities: InteractiveActivity[];
   quizQuestions: QuizQuestion[];
+  /** Distinct authored prompts reserved for chapter-level assessments. */
+  chapterAssessmentQuestions?: QuizQuestion[];
+  /** Distinct authored prompts reserved for module exams, never reused for lesson mastery. */
+  moduleExamQuestions?: QuizQuestion[];
   masteryThresholdPercent: number; // default: 80
 }
 
@@ -152,6 +178,9 @@ export interface CertificateRecord {
   curriculum: Curriculum;
   issuedDate: string;
   scorePercent: number;
+  grade?: 'A' | 'B' | 'C' | 'D' | 'F';
+  classification?: 'Distinction' | 'Merit' | 'Credit' | 'Pass' | 'Not passed';
+  verificationUrl?: string;
   authority: string;
   verified: boolean;
   seniorPathway?: SeniorPathway;

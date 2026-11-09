@@ -2,11 +2,9 @@ name: Berry validation
 
 on:
   push:
-    branches:
-      - security/trusted-assessment-backend
+    branches: [Jaccie-Jay]
   pull_request:
-    branches:
-      - security/trusted-assessment-backend
+    branches: [Jaccie-Jay]
 
 permissions:
   contents: read
@@ -31,5 +29,26 @@ jobs:
       - name: Build application
         run: npm run build
 
-# Firestore rules deployment is intentionally excluded. Production deployment
-# requires a separate, explicit approval after security review and staging tests.
+  firestore-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: npm ci
+      - name: Firestore security rules tests
+        run: npm run test:rules
+      - name: Trusted certificate issuance tests
+        run: npm run test:certificates
+
+# Production deployment and Firestore rules publication require separate approval.

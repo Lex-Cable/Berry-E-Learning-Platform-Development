@@ -46,18 +46,20 @@ import {
   loadAssignmentSubmission,
   loadExamAttempts,
   loadLearnerNotifications,
-  loadLearnerTasks,
-  saveAssignmentMarking,
-  saveAssignmentSubmission,
+  loadLearnerTasks,  saveAssignmentSubmission,
   saveExamAttempt,
   saveLearnerNotification,
   saveLearnerTask,
 } from './services/learnerWorkspace';
-import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, type AssignmentMarkingResult } from './utils/assignments';
+import { buildCourseAssignments, markAssignmentSubmission, nextAttemptNumber, resolveAssignmentDueDate, type AssignmentMarkingResult } from './utils/assignments';
+import { withInteractivePractice } from './utils/interactiveActivities';
+import { withCompleteAssessmentBanks } from './utils/assessmentQuestionBank';
 import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumCoverage';
+import { buildCurriculumRepository } from './curriculum/repository';
+import { INTERNATIONAL_STARTER_COURSES } from './data/internationalStarterCourses';
 import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
-import { loadLearningCertificates, loadLearningProgress } from './services/learningProgress';
-import { getCourseStatus, issueTrustedCertificate, loadTrustedCertificates } from './services/assessments';
+import { loadLearningProgress } from './services/learningProgress';
+import { enrollInCourse, getCourseStatus, issueTrustedCertificate, loadTrustedCertificates, submitTrustedAssignment } from './services/assessments';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
   registerBerryUser,
@@ -66,9 +68,11 @@ import {
   signOutBerryUser,
 } from './services/firebaseAuth';
 
+const INITIAL_COURSE_CATALOGUE: Course[] = withInteractivePractice(withCompleteAssessmentBanks([...COURSES, ...INTERNATIONAL_STARTER_COURSES]));
+
 export default function App() {
   const [learner, setLearner] = useState<LearnerProfile>(INITIAL_LEARNER);
-  const [courses, setCourses] = useState<Course[]>(COURSES);
+  const [courses, setCourses] = useState<Course[]>(INITIAL_COURSE_CATALOGUE);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [libraryResources, setLibraryResources] = useState<LibraryResource[]>(LIBRARY_RESOURCES);
@@ -92,8 +96,139 @@ export default function App() {
     criterionScores: { criterionId: string; awarded: number; outOf: number }[];
   }>>({});
   // Real curriculum coverage report recomputed whenever the catalogue changes.
-  const coverageReport = useMemo(() => auditCurriculumCoverage(courses), [courses]);
-  const assignments = useMemo(() => buildCourseAssignments(courses), [courses]);
+  const curriculumRepository = useMemo(() => buildCurriculumRepository(courses), [courses]);
+  const coverageReport = useMemo(() => auditCurriculumCoverage(curriculumRepository.courses), [curriculumRepository]);
+  const assignments = useMemo(() => {
+    const savedDeadlines = new Map(
+      tasks
+        .filter((task) => task.type === 'assignment')
+        .map((task) => [task.id.replace(/^assignment-deadline-/, ''), task.dueDate]),
+    );
+    return buildCourseAssignments(courses).map((assignment) => ({
+      ...assignment,
+      dueDate: resolveAssignmentDueDate(
+        assignment.dueDate,
+        savedDeadlines.get(assignment.id),
+      ),
+    }));
+  }, [courses, tasks]);
+
+  // Every enrolled course assignment gets one planner task and one reminder.
+  // Reconcile tasks and notifications independently so a missing reminder is restored.
+  useEffect(() => {
+    if (workspaceLoadedFor !== learner.id) return;
+    const enrolledAssignments = assignments.filter((assignment) => learner.enrolledCourseIds.includes(assignment.courseId));
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const generatedTasks: TaskItem[] = enrolledAssignments.map((assignment) => {
+      const id = `assignment-deadline-${assignment.id}`;
+      const existing = taskById.get(id);
+      const course = courses.find((item) => item.id === assignment.courseId);
+      return {
+        id,
+        title: assignment.title,
+        subject: course?.subject || assignment.courseTitle,
+        courseId: assignment.courseId,
+        stage: course?.stage || learner.stage,
+        dueDate: resolveAssignmentDueDate(assignment.dueDate, existing?.dueDate),
+        urgency: existing?.urgency || 'medium',
+        status: existing?.status || 'pending',
+        type: 'assignment',
+      };
+    });
+    const changedTasks = generatedTasks.filter((task) => {
+      const existing = taskById.get(task.id);
+      return !existing || existing.title !== task.title || existing.subject !== task.subject ||
+        existing.dueDate !== task.dueDate || existing.courseId !== task.courseId || existing.stage !== task.stage;
+    });
+    if (changedTasks.length) {
+      setTasks((current) => {
+        const generatedById = new Map(changedTasks.map((task) => [task.id, task]));
+        const known = new Set(current.map((task) => task.id));
+        return [
+          ...changedTasks.filter((task) => !known.has(task.id)),
+          ...current.map((task) => generatedById.get(task.id) || task),
+        ];
+      });
+    }
+    const notificationsById = new Map(notifications.map((item) => [item.id, item]));
+    const updatedDeadlineNotifications: AppNotification[] = generatedTasks.map((task) => {
+      const id = `notif-deadline-${task.id}`;
+      const existing = notificationsById.get(id);
+      return {
+        id,
+        title: existing?.title || 'Assignment deadline added to your calendar',
+        message: `${task.title} is due ${new Date(task.dueDate).toLocaleString()}. It is listed in your planner.`,
+        stage: task.stage,
+        type: 'deadline',
+        date: existing?.date || 'Just now',
+        unread: existing?.unread ?? true,
+        actionUrl: 'calendar',
+      };
+    });
+    const changedNotifications = updatedDeadlineNotifications.filter((item) => {
+      const existing = notificationsById.get(item.id);
+      return !existing || existing.message !== item.message || existing.stage !== item.stage;
+    });
+    if (changedNotifications.length) {
+      setNotifications((current) => {
+        const updatedById = new Map(changedNotifications.map((item) => [item.id, item]));
+        const known = new Set(current.map((item) => item.id));
+        return [
+          ...changedNotifications.filter((item) => !known.has(item.id)),
+          ...current.map((item) => updatedById.get(item.id) || item),
+        ];
+      });
+    }
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) {
+      changedTasks.forEach((task) => void saveLearnerTask(uid, task).catch((error) =>
+        console.warn('Assignment deadline remains on this device; cloud sync failed:', error)));
+      changedNotifications.forEach((notification) => void saveLearnerNotification(uid, notification).catch((error) =>
+        console.warn('Assignment reminder remains on this device; cloud sync failed:', error)));
+    }
+  }, [workspaceLoadedFor, learner.id, learner.stage, learner.enrolledCourseIds.join('|'), assignments, courses, tasks, notifications]);
+
+  // Surface due-soon and overdue reminders from saved planner deadlines.
+  // The stable notification IDs make this safe to run on every app refresh.
+  useEffect(() => {
+    const checkUpcomingDeadlines = () => {
+      const now = Date.now();
+      const dueWindow = 24 * 60 * 60 * 1000;
+      const reminders: AppNotification[] = [];
+      tasks.forEach((task) => {
+        if (task.status === 'completed') return;
+        const dueAt = new Date(task.dueDate).getTime();
+        if (!Number.isFinite(dueAt)) return;
+        const overdue = dueAt <= now;
+        if (!overdue && dueAt - now > dueWindow) return;
+        const reminderId = `notif-task-reminder-${task.id}-${overdue ? 'overdue' : 'due-soon'}`;
+        if (notifications.some((notification) => notification.id === reminderId)) return;
+        reminders.push({
+          id: reminderId,
+          title: overdue ? 'Assignment or task is overdue' : 'Deadline coming up',
+          message: overdue
+            ? `${task.title} was due ${new Date(task.dueDate).toLocaleString()}. Open your planner to update its status.`
+            : `${task.title} is due ${new Date(task.dueDate).toLocaleString()} (within 24 hours).`,
+          stage: task.stage,
+          type: 'deadline',
+          date: 'Just now',
+          unread: true,
+          actionUrl: 'calendar',
+        });
+      });
+      if (reminders.length) {
+        setNotifications((current) => {
+          const existing = new Set(current.map((notification) => notification.id));
+          return [...reminders.filter((item) => !existing.has(item.id)), ...current];
+        });
+        const uid = firebaseAuth?.currentUser?.uid;
+        if (uid) reminders.forEach((item) => void saveLearnerNotification(uid, item).catch((error) => console.warn('Deadline reminder could not sync:', error)));
+      }
+    };
+    checkUpcomingDeadlines();
+    const interval = window.setInterval(checkUpcomingDeadlines, 60_000);
+    return () => window.clearInterval(interval);
+  }, [tasks, notifications]);
 
   // Auth / Session State (starts logged out on landing page as requested)
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
@@ -105,7 +240,7 @@ export default function App() {
   const [history, setHistory] = useState<string[]>([]);
 
   // Active course and lesson state
-  const [activeCourse, setActiveCourse] = useState<Course>(COURSES[0]);
+  const [activeCourse, setActiveCourse] = useState<Course>(INITIAL_COURSE_CATALOGUE[0]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   const [learningTargetCourseId, setLearningTargetCourseId] = useState<string | null>(null);
 
@@ -127,6 +262,9 @@ export default function App() {
         if (Array.isArray(saved.certificates)) setCertificates(saved.certificates as CertificateRecord[]);
         if (saved.masteryRecords && typeof saved.masteryRecords === 'object' && !Array.isArray(saved.masteryRecords)) {
           setMasteryRecords(saved.masteryRecords as Record<string, LessonMasteryState>);
+        }
+        if (saved.assignmentSubmissions && typeof saved.assignmentSubmissions === 'object' && !Array.isArray(saved.assignmentSubmissions)) {
+          setAssignmentSubmissions(saved.assignmentSubmissions as typeof assignmentSubmissions);
         }
       }
     } catch (error) {
@@ -157,18 +295,18 @@ export default function App() {
   }, [learner.id, learner.enrolledCourseIds.join('|'), courses, isLoggedIn, authStateReady]);
 
 
+  // Trusted certificate issuance writes to users/{uid}/trustedCertificates.
+  // Load from the same authoritative collection; the legacy learningCertificates
+  // collection is not used for verified Berry credentials.
   useEffect(() => {
     const uid = firebaseAuth?.currentUser?.uid;
     if (!authStateReady || !isLoggedIn || !uid) return;
     let cancelled = false;
-    void loadLearningCertificates(uid).then((cloudCertificates) => {
-      if (cancelled || cloudCertificates.length === 0) return;
-      setCertificates((current) => [
-        ...cloudCertificates,
-        ...current.filter((item) => !cloudCertificates.some((cloudItem) => cloudItem.id === item.id)),
-      ]);
+    void loadTrustedCertificates().then((cloudCertificates) => {
+      if (cancelled) return;
+      setCertificates(cloudCertificates);
     }).catch((error) => {
-      console.warn('Could not load cloud learning certificates; keeping this device cache:', error);
+      console.warn('Could not load trusted Berry certificates:', error);
     });
     return () => { cancelled = true; };
   }, [learner.id, isLoggedIn, authStateReady]);
@@ -244,7 +382,7 @@ export default function App() {
     if (!authStateReady || !isLoggedIn || !learner.enrolledCourseIds.length) return;
     let cancelled = false;
     void Promise.all(learner.enrolledCourseIds.map((courseId) =>
-      getCourseStatus(courseId).then((status) => ({ courseId, status })).catch((error) => {
+      enrollInCourse(courseId).then(() => getCourseStatus(courseId)).then((status) => ({ courseId, status })).catch((error) => {
         console.warn(`Could not load trusted status for ${courseId}:`, error);
         return null;
       }),
@@ -260,6 +398,32 @@ export default function App() {
         const merged = new Map(current.map((attempt) => [attempt.id, attempt]));
         trusted.forEach(({ status }) => status.examHistory.forEach((attempt) => merged.set(`trusted-${attempt.cycle}-${attempt.id}`, { ...attempt, id: `trusted-${attempt.cycle}-${attempt.id}`, trusted: true })));
         return Array.from(merged.values());
+      });
+      setAssignmentSubmissions((current) => {
+        const merged = { ...current };
+        trusted.forEach(({ status }) => {
+          Object.entries(status.assignments || {}).forEach(([assignmentId, saved]) => {
+            const record = saved as {
+              content?: string; attemptNumber?: number; status?: AssignmentSubmissionStatus;
+              scorePercent?: number; marksAwarded?: number; totalMarks?: number;
+              markerFeedback?: string; submittedAt?: string;
+              criterionScores?: { criterionId: string; awarded: number; outOf: number }[];
+            };
+            if (!record.content || !record.status) return;
+            merged[assignmentId] = {
+              content: record.content,
+              attemptNumber: Number(record.attemptNumber) || 1,
+              status: record.status,
+              scorePercent: Number(record.scorePercent) || 0,
+              marksAwarded: Number(record.marksAwarded) || 0,
+              totalMarks: Number(record.totalMarks) || 0,
+              markerFeedback: record.markerFeedback || '',
+              submittedAt: record.submittedAt || '',
+              criterionScores: Array.isArray(record.criterionScores) ? record.criterionScores : [],
+            };
+          });
+        });
+        return merged;
       });
     });
     void loadTrustedCertificates().then((items) => {
@@ -307,6 +471,7 @@ export default function App() {
         transcriptSessions,
         certificates,
         masteryRecords,
+        assignmentSubmissions,
       }));
     } catch (error) {
       console.warn('Could not save Berry workspace data:', error);
@@ -320,6 +485,7 @@ export default function App() {
     transcriptSessions,
     certificates,
     masteryRecords,
+    assignmentSubmissions,
   ]);
 
 
@@ -496,6 +662,22 @@ export default function App() {
     }
   };
 
+  // A full retake starts a fresh active-cycle workspace. Historical attempts remain
+  // in Firestore under their original cycle; only the device-level current-state
+  // projections are cleared so old assignment drafts/marks cannot leak forward.
+  const handleCourseRetakeStarted = (courseId: string) => {
+    const course = courses.find((item) => item.id === courseId);
+    if (!course) return;
+    const lessonIds = new Set(course.chapters.flatMap((chapter) => chapter.lessons.map((lesson) => lesson.id)));
+    const assignmentIds = new Set(buildCourseAssignments([course]).map((assignment) => assignment.id));
+    setAssignmentSubmissions((current) => Object.fromEntries(
+      Object.entries(current).filter(([id]) => !assignmentIds.has(id)),
+    ));
+    setMasteryRecords((current) => Object.fromEntries(
+      Object.entries(current).filter(([lessonId]) => !lessonIds.has(lessonId)),
+    ));
+  };
+
   // Open a specific course from Explore Courses in the learner's own learning workspace.
   const handleOpenCourse = (course: Course) => {
     setActiveCourse(course);
@@ -540,6 +722,18 @@ export default function App() {
   // not a government-issued credential.
   const handleClaimCertificate = async (course: Course, _scorePercent: number) => {
     try {
+      // Ask the trusted status endpoint to calculate the complete course result
+      // before requesting issuance. This avoids expected 409 responses after an
+      // exam pass when assignments, chapter assessments or modules are still open.
+      const status = await getCourseStatus(course.id);
+      if (!status.courseCompleted || status.academicGrade?.passed !== true) {
+        console.info('Certificate not ready; trusted course requirements remain incomplete.', {
+          courseId: course.id,
+          courseCompleted: status.courseCompleted,
+          academicGrade: status.academicGrade,
+        });
+        return;
+      }
       const result = await issueTrustedCertificate(course.id);
       setCertificates((prev) => [result.certificate, ...prev.filter((item) => item.credentialId !== result.certificate.credentialId)]);
       const newNotif: AppNotification = {
@@ -580,17 +774,27 @@ export default function App() {
     setNotifications((prev) => [attemptNotification, ...prev]);
     const uid = firebaseAuth?.currentUser?.uid;
     if (uid) void saveLearnerNotification(uid, attemptNotification).catch(() => undefined);
+    // A passed final exam may be the last requirement. Ask the trusted issuer
+    // to evaluate the complete server-side record; it will decline safely if
+    // chapters, assignments, module exams or the overall grade are outstanding.
+    if (record.passed) void handleClaimCertificate(course, record.scorePercent);
   };
 
   // Enroll in course
-  const handleEnrollCourse = (courseId: string) => {
-    if (!learner.enrolledCourseIds.includes(courseId)) {
+  const handleEnrollCourse = async (courseId: string) => {
+    if (learner.enrolledCourseIds.includes(courseId)) return;
+
+    try {
+      if (firebaseAuth?.currentUser?.uid) {
+        await enrollInCourse(courseId);
+      }
+
       const enrolledCourseIds = [...learner.enrolledCourseIds, courseId];
       setLearner((prev) => ({ ...prev, enrolledCourseIds }));
-      void handlePersistLearnerProfile({ enrolledCourseIds }).catch((error) => {
-        setAuthNotice(getLearnerProfileErrorMessage(error));
-        setTimeout(() => setAuthNotice(null), 6000);
-      });
+      await handlePersistLearnerProfile({ enrolledCourseIds });
+    } catch (error) {
+      setAuthNotice(getLearnerProfileErrorMessage(error));
+      setTimeout(() => setAuthNotice(null), 6000);
     }
   };
 
@@ -716,12 +920,48 @@ export default function App() {
             }
           : {}),
       };
-      const persist = result.status === 'submitted'
-        ? saveAssignmentSubmission(uid, payload as Parameters<typeof saveAssignmentSubmission>[1])
-        : saveAssignmentMarking(uid, payload as Parameters<typeof saveAssignmentMarking>[1]);
-      void persist.catch((error) => {
-        console.warn('Assignment submission kept locally; cloud sync failed:', error);
+      void saveAssignmentSubmission(uid, {
+        assignmentId: assignment.id,
+        courseId: assignment.courseId,
+        content,
+        submittedAt,
+        attemptNumber,
+        status: 'submitted',
+      }).catch((error) => {
+        console.warn('Practice assignment kept locally; cloud sync failed:', error);
       });
+      // Store the authoritative rubric mark in the trusted course cycle as well.
+      // This is the record used by certificate eligibility; the practice copy above
+      // remains a learner-owned draft/history record only.
+      void submitTrustedAssignment(assignment.courseId, assignment.id, content)
+        .then(({ marking }) => {
+          setAssignmentSubmissions((current) => ({
+            ...current,
+            [assignment.id]: {
+              content,
+              attemptNumber,
+              status: marking.status,
+              scorePercent: marking.scorePercent,
+              marksAwarded: marking.marksAwarded,
+              totalMarks: marking.totalMarks,
+              markerFeedback: marking.markerFeedback,
+              submittedAt,
+              criterionScores: marking.criterionScores,
+            },
+          }));
+          // Assignment completion may be the final missing certificate requirement.
+          // Recheck only after the trusted server has returned its authoritative mark.
+          const course = courses.find((item) => item.id === assignment.courseId);
+          const passedExam = examAttempts.some((attempt) =>
+            attempt.courseId === assignment.courseId && attempt.passed && attempt.trusted
+          );
+          if (course && passedExam && marking.status === 'graded') {
+            void handleClaimCertificate(course, 0);
+          }
+        })
+        .catch((error) => {
+          console.warn('Trusted assignment marking is unavailable; local practice feedback remains visible:', error);
+        });
     }
 
     const feedbackNotification: AppNotification = {
@@ -976,6 +1216,7 @@ export default function App() {
             <MyLearningView
               learner={learner}
               courses={courses}
+              curriculumRepository={curriculumRepository}
               masteryRecords={masteryRecords}
               initialCourseId={learningTargetCourseId}
               onClearInitialCourse={() => setLearningTargetCourseId(null)}
@@ -983,6 +1224,7 @@ export default function App() {
               onNavigateToCertificates={() => handleNavigate('certifications')}
               onNavigateToCourses={() => handleNavigate('courses')}
               onClaimCertificate={handleClaimCertificate}
+              onCourseRetakeStarted={handleCourseRetakeStarted}
               onExamAttemptSubmitted={handleExamAttemptSubmitted}
               examAttempts={examAttempts.filter((attempt) => attempt.courseId === (learningTargetCourseId ?? ''))}
             />
@@ -991,6 +1233,7 @@ export default function App() {
           {currentView === 'courses' && (
             <ExploreCoursesView
               courses={courses}
+              curriculumRepository={curriculumRepository}
               learner={learner}
               onSelectCourse={setActiveCourse}
               onOpenLesson={handleOpenLesson}
@@ -1012,6 +1255,7 @@ export default function App() {
             <LibraryView
               resources={libraryResources}
               learner={learner}
+              curriculumRepository={curriculumRepository}
               onToggleBookmark={handleToggleBookmark}
             />
           )}
@@ -1024,6 +1268,7 @@ export default function App() {
             <BerryAiView
               learner={learner}
               courses={courses}
+              curriculumRepository={curriculumRepository}
               onOpenLesson={handleOpenLesson}
             />
           )}
