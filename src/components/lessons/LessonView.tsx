@@ -305,7 +305,8 @@ export const LessonView: React.FC<LessonViewProps> = ({
       } else if (activity.type === 'fill-blank') {
         answer = { response: activityTextResponses[activity.id] || '' };
       } else {
-        answer = { choiceId: activityAnswers[activity.id] || '' };
+        const selectedChoice = (activity.data.choices || []).find((choice) => choice.id === activityAnswers[activity.id]);
+        answer = { choiceId: activityAnswers[activity.id] || '', choiceLabel: selectedChoice?.label || '' } as typeof answer;
       }
       const result = await submitInteractiveActivity(course.id, lessonId, activity.id, answer);
       setActivitySubmissionResults((previous) => ({
@@ -313,6 +314,19 @@ export const LessonView: React.FC<LessonViewProps> = ({
         [activity.id]: result.submission.feedback + ` Interactive score: ${result.interactiveScorePercent}%.`,
       }));
       if (result.lessonCompleted) onSaveMastery(result.progress);
+      // The mastery questions may have been requested before the learner
+      // completed practice and therefore returned a 409 locked response.
+      // Reload them immediately after the trusted activity score is saved.
+      setQuizError(null);
+      setQuizLoading(true);
+      try {
+        const refreshedQuestions = await getLessonAssessment(course.id, lessonId);
+        setQuizQuestions(refreshedQuestions);
+      } catch (assessmentError) {
+        setQuizError(assessmentError instanceof Error ? assessmentError.message : 'Practice was saved, but the mastery assessment could not be refreshed.');
+      } finally {
+        setQuizLoading(false);
+      }
     } catch (error) {
       setActivitySubmissionResults((previous) => ({
         ...previous,
