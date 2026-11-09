@@ -33,7 +33,8 @@ import { getCourseExam, getCourseStatus, submitCourseExam, startCourseRetake } f
 import { clearExamDraft, readExamDraft, writeExamDraft } from '../../utils/examDraft';
 import { getCourseModules, getModuleChapters } from '../../utils/courseModules';
 import { ModuleExamPanel } from './ModuleExamPanel';
-import type { ModuleExamAttempt } from '../../services/assessments';
+import { ChapterAssessmentPanel } from './ChapterAssessmentPanel';
+import type { ModuleExamAttempt, ChapterAssessmentAttempt } from '../../services/assessments';
 
 interface MyLearningViewProps {
   learner: LearnerProfile;
@@ -85,6 +86,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
   const [trustedActivities, setTrustedActivities] = useState<Record<string, Record<string, { scorePercent: number; passed: boolean; feedback: string; answer?: { pairs?: Record<string, string>; order?: string[]; response?: string; choiceId?: string } }>>>({});
   const [trustedLessonAttempts, setTrustedLessonAttempts] = useState<Record<string, { answers: Record<string, number>; scorePercent: number; submittedAt: string; results: Record<string, { correct: boolean; correctAnswerIndex?: number; feedback?: string }> }>>({});
   const [moduleExamAttempts, setModuleExamAttempts] = useState<ModuleExamAttempt[]>([]);
+  const [chapterAssessmentAttempts, setChapterAssessmentAttempts] = useState<ChapterAssessmentAttempt[]>([]);
 
   useEffect(() => {
     if (!initialCourseId) return;
