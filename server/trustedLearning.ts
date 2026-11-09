@@ -888,7 +888,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
       curriculum: course.curriculum,
       issuedDate: new Date().toISOString(),
       scorePercent: Number((await ref.get()).data()?.examScorePercent || 0),
-      verificationUrl: `/api/certificates/verify/${credentialId}`,
+      verificationUrl: `/verify/certificate/${credentialId}`,
       authority: 'Berry Learning Platform',
       verified: true,
       uid,
@@ -934,13 +934,37 @@ router.get('/api/certificates/mine', requireFirebaseAuth, async (req: Authentica
   }
 });
 
+function escapePublicCertificateText(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] || '');
+}
+
+router.get('/verify/certificate/:credentialId', async (req, res) => {
+  try {
+    if (!adminDb) return res.status(503).type('html').send('<h1>Verification temporarily unavailable</h1>');
+    const snapshot = await adminDb.collection('trustedCertificates').doc(String(req.params.credentialId)).get();
+    const certificate = snapshot.data();
+    if (!snapshot.exists || certificate?.trusted !== true) return res.status(404).type('html').send('<!doctype html><html><head><meta charset="utf-8"><title>Berry certificate verification</title></head><body><main><h1>Certificate not found</h1><p>This credential could not be verified by Berry.</p></main></body></html>');
+    const valid = certificate.revoked !== true;
+    const title = valid ? 'Verified Berry learning record' : 'Revoked Berry learning record';
+    const publicRows = [
+      ['Learner', certificate.recipientName], ['Course', certificate.courseTitle], ['Credential ID', certificate.credentialId],
+      ['Issued', certificate.issuedDate], ['Final percentage', `${certificate.scorePercent}%`],
+      ['Grade', certificate.grade], ['Classification', certificate.classification],
+    ].map(([label, value]) => `<div class="row"><span>${escapePublicCertificateText(label)}</span><strong>${escapePublicCertificateText(value || '—')}</strong></div>`).join('');
+    return res.status(valid ? 200 : 410).type('html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{margin:0;background:#f5f3ff;color:#172033;font:16px system-ui,sans-serif}.card{max-width:680px;margin:8vh auto;padding:32px;background:#fff;border:1px solid #e2e8f0;border-radius:24px;box-shadow:0 12px 40px #312e8112}.brand{color:#7e22ce;font-weight:900;letter-spacing:.12em}.status{display:inline-block;margin:18px 0;padding:8px 12px;border-radius:999px;background:${valid?'#dcfce7':'#fee2e2'};color:${valid?'#166534':'#991b1b'};font-weight:800;font-size:13px}.row{display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid #f1f5f9}.row span{color:#64748b}.row strong{text-align:right}.note{margin-top:24px;color:#64748b;font-size:12px}@media(max-width:600px){.card{margin:16px;padding:22px}.row{font-size:13px}}</style></head><body><main class="card"><div class="brand">BERRY LEARNING PLATFORM</div><h1>${title}</h1><div class="status">${valid?'VALID CREDENTIAL':'REVOKED CREDENTIAL'}</div>${publicRows}<p class="note">This page verifies a Berry learning record only. It is not an external accreditation or government qualification. Only public certificate details are displayed.</p></main></body></html>`);
+  } catch (error) {
+    console.error('Public certificate page failed:', error);
+    return res.status(500).type('html').send('<h1>Unable to verify this certificate</h1>');
+  }
+});
+
 router.get('/api/certificates/verify/:credentialId', async (req, res) => {
   try {
     if (!adminDb) return res.status(503).json({ error: 'Certificate verification is temporarily unavailable.' });
     const snapshot = await adminDb.collection('trustedCertificates').doc(req.params.credentialId).get();
     if (!snapshot.exists || snapshot.data()?.trusted !== true) return res.status(404).json({ valid: false, error: 'Certificate not found or not verified.' });
     const certificate = snapshot.data()!;
-    return res.json({ valid: true, credentialId: certificate.credentialId, recipientName: certificate.recipientName, courseTitle: certificate.courseTitle, issuedDate: certificate.issuedDate, scorePercent: certificate.scorePercent, grade: certificate.grade, classification: certificate.classification, authority: certificate.authority });
+    return res.json({ valid: true, credentialId: certificate.credentialId, recipientName: certificate.recipientName, courseTitle: certificate.courseTitle, issuedDate: certificate.issuedDate, scorePercent: certificate.scorePercent, grade: certificate.grade, classification: certificate.classification, revoked: certificate.revoked === true, authority: certificate.authority });
   } catch (error) {
     console.error('Certificate verification failed:', error);
     return res.status(500).json({ error: 'Unable to verify this certificate.' });
