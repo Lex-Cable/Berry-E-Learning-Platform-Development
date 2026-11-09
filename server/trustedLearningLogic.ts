@@ -42,7 +42,7 @@ export function classifyAcademicGrade(scorePercent: number): AcademicGradeResult
   if (percentage >= 50) return { percentage, grade: 'D', classification: 'Pass', passed: true };
   return { percentage, grade: 'F', classification: 'Not passed', passed: false };
 }
-export function isPassingExamScore(scorePercent: number, configuredThreshold = ASSESSMENT_PASS_MARKS.finalExamination): boolean {
+export function isPassingExamScore(scorePercent: number, configuredThreshold: number = ASSESSMENT_PASS_MARKS.finalExamination): boolean {
   return Number.isFinite(scorePercent) && Number.isFinite(configuredThreshold) && scorePercent >= configuredThreshold;
 }
 export function calculateWeightedAcademicGrade(input: {
