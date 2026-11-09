@@ -46,11 +46,32 @@ export interface Course {
   objectives: string[];
   prerequisites: string[];
   chapters: Chapter[];
+  /** Explicit course modules. Older catalogue records are mapped into a stable legacy module. */
+  modules?: CourseModule[];
   exam?: CourseExam;
   isCompulsoryCBC?: boolean;
   isInternationalComparison?: boolean;
   seniorPathway?: SeniorPathway;
   advanceTrack?: AdvanceTrack;
+}
+
+export interface CourseModule {
+  id: string;
+  courseId: string;
+  title: string;
+  order: number;
+  description: string;
+  chapterIds: string[];
+  examination?: ModuleExaminationConfig;
+}
+
+export interface ModuleExaminationConfig {
+  id: string;
+  title: string;
+  passingScorePercent: number;
+  durationMinutes: number;
+  questionCount: number;
+  maximumAttempts: number;
 }
 
 export interface Chapter {
