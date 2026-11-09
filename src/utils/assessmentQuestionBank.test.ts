@@ -83,15 +83,20 @@ test('all shipped Berry course catalogues contain no repeated assessment prompts
       const examPrompts = (course.exam?.questions || []).map((question) => question.question.trim().toLowerCase());
       const allLessonPrompts = course.chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => [
         ...lesson.quizQuestions.map((question) => question.question.trim().toLowerCase()),
+        ...(lesson.chapterAssessmentQuestions || []).map((question) => question.question.trim().toLowerCase()),
         ...(lesson.moduleExamQuestions || []).map((question) => question.question.trim().toLowerCase()),
         ...lesson.activities.map((activity) => activity.instructions.trim().toLowerCase()),
       ]));
       assert.equal(new Set(allLessonPrompts).size, allLessonPrompts.length, `${course.id} repeated lesson/module/activity prompts`);
+      const chapterPrompts = course.chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => (lesson.chapterAssessmentQuestions || []).map((question) => question.question.trim().toLowerCase())));
       const modulePrompts = course.chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => (lesson.moduleExamQuestions || []).map((question) => question.question.trim().toLowerCase())));
+      assert.equal(new Set(chapterPrompts).size, chapterPrompts.length, `${course.id} repeated chapter assessment prompts`);
       assert.equal(new Set(modulePrompts).size, modulePrompts.length, `${course.id} repeated module prompts`);
+      assert.ok(chapterPrompts.every((prompt) => !modulePrompts.includes(prompt)), `${course.id} chapter/module prompt overlap`);
+      assert.ok(chapterPrompts.every((prompt) => !examPrompts.includes(prompt)), `${course.id} chapter/final prompt overlap`);
       assert.ok(modulePrompts.every((prompt) => !examPrompts.includes(prompt)), `${course.id} module/final prompt overlap`);
       assert.ok(modulePrompts.every((prompt) => !course.chapters.some((chapter) => chapter.lessons.some((lesson) => lesson.activities.some((activity) => activity.instructions.trim().toLowerCase() === prompt)))), `${course.id} interactive/module prompt overlap`);
-      assert.ok(modulePrompts.every((prompt) => !course.chapters.some((chapter) => chapter.lessons.some((lesson) => lesson.quizQuestions.some((question) => question.question.trim().toLowerCase() === prompt)))), `${course.id} mastery/module prompt overlap`);
+      assert.ok([...chapterPrompts, ...modulePrompts].every((prompt) => !course.chapters.some((chapter) => chapter.lessons.some((lesson) => lesson.quizQuestions.some((question) => question.question.trim().toLowerCase() === prompt)))), `${course.id} mastery/module prompt overlap`);
 
       assert.equal(new Set(examPrompts).size, examPrompts.length, `${course.id} repeated exam prompt`);
       for (const chapter of course.chapters) {
@@ -115,7 +120,8 @@ test('lesson source questions are partitioned into distinct mastery and module-e
     explanation: 'Water supports plant growth.', misconceptions: { 1: 'Metal is not needed.' }, learningObjective: 'Plant growth',
   }));
   const result = withCompleteAssessmentBanks([course])[0].chapters[0].lessons[0];
-  assert.equal(result.quizQuestions.length, 2);
+  assert.equal(result.quizQuestions.length, 1);
+  assert.equal(result.chapterAssessmentQuestions?.length, 1);
   assert.equal(result.moduleExamQuestions?.length, 2);
-  assert.equal(new Set([...result.quizQuestions, ...(result.moduleExamQuestions || [])].map((question) => question.question)).size, 4);
+  assert.equal(new Set([...result.quizQuestions, ...(result.chapterAssessmentQuestions || []), ...(result.moduleExamQuestions || [])].map((question) => question.question)).size, 4);
 });
