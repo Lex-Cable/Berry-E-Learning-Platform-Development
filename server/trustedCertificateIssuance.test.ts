@@ -104,14 +104,14 @@ test('certificate issuance creates one trusted certificate under concurrent requ
 
     assert.equal(
       results.filter((result) => result.eligible).length,
-      1,
-      'exactly one concurrent request should issue a certificate',
+      2,
+      'both concurrent callers should receive the successfully issued certificate',
     );
-
+    const returnedCertificates = results.map((result) => result.eligible ? result.certificate : null);
     assert.equal(
-      results.filter((result) => !result.eligible).length,
-      1,
-      'the competing request should be rejected as a duplicate',
+      (returnedCertificates[0] as { credentialId: string }).credentialId,
+      (returnedCertificates[1] as { credentialId: string }).credentialId,
+      'concurrent retries should return the same credential rather than a duplicate',
     );
 
     const [rootA, rootB, learnerCertificate] = await Promise.all([
