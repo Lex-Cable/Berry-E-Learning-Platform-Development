@@ -33,7 +33,7 @@ test('certificate issuance creates one trusted certificate under concurrent requ
     .collection('cycles').doc(String(cycle));
 
   const learnerCertificateRef = db.collection('users').doc(uid)
-    .collection('trustedCertificates').doc(courseId);
+    .collection('trustedCertificates').doc(`${courseId}_${cycle}`);
 
   const credentialIds = [
     `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`,
@@ -143,7 +143,7 @@ test('certificate is withheld when a required assignment is missing', async () =
   const courseId = 'incomplete-course';
   const cycle = 1;
   const cycleRef = db.collection('users').doc(uid).collection('trustedCourses').doc(courseId).collection('cycles').doc(String(cycle));
-  const learnerCertificateRef = db.collection('users').doc(uid).collection('trustedCertificates').doc(courseId);
+  const learnerCertificateRef = db.collection('users').doc(uid).collection('trustedCertificates').doc(`${courseId}_${cycle}`);
   const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
   const certificateRef = db.collection('trustedCertificates').doc(credentialId);
   try {
@@ -171,7 +171,7 @@ test('certificate is withheld when every component passes individually but weigh
   const courseId = 'low-grade-course';
   const cycle = 1;
   const cycleRef = db.collection('users').doc(uid).collection('trustedCourses').doc(courseId).collection('cycles').doc(String(cycle));
-  const learnerCertificateRef = db.collection('users').doc(uid).collection('trustedCertificates').doc(courseId);
+  const learnerCertificateRef = db.collection('users').doc(uid).collection('trustedCertificates').doc(`${courseId}_${cycle}`);
   const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
   const certificateRef = db.collection('trustedCertificates').doc(credentialId);
   try {
