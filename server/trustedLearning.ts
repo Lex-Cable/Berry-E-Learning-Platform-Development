@@ -445,7 +445,7 @@ router.get('/api/assessments/courses/:courseId/modules/:moduleId/exam/questions'
     const questionIds = shuffle(selected.map((question) => question.id));
     const sessionRef = ref.collection('moduleExamSessions').doc(module.id);
     const expiresAt = new Date(Date.now() + module.examination.durationMinutes * 60_000).toISOString();
-    await sessionRef.set({ moduleId: module.id, questionIds, expiresAt, createdAt: new Date().toISOString() });
+    await sessionRef.set({ moduleId: module.id, questionIds, expiresAt, attemptNumber: attempts.size + 1, sessionToken: randomUUID(), submitted: false, createdAt: new Date().toISOString() });
     const byId = new Map(bank.map((question) => [question.id, question]));
     return res.json({ moduleId: module.id, questions: safeQuestions(questionIds.map((id) => byId.get(id)!).filter(Boolean)), cycle, expiresAt, attemptNumber: attempts.size + 1, passingScorePercent: module.examination.passingScorePercent });
   } catch (error) {
@@ -479,15 +479,22 @@ router.post('/api/assessments/courses/:courseId/modules/:moduleId/exam/submit', 
     const passed = scorePercent >= passingScorePercent;
     const previousAttempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
     if (previousAttempts.size >= module.examination.maximumAttempts) return res.status(409).json({ error: 'The maximum number of module examination attempts has been reached.' });
-    const attemptRef = ref.collection('moduleExamAttempts').doc(randomUUID());
+    const attemptNumber = Number(sessionData.attemptNumber || previousAttempts.size + 1);
+    const attemptRef = ref.collection('moduleExamAttempts').doc(`attempt-${module.id}-${attemptNumber}`);
     const submittedAt = new Date().toISOString();
-    const attempt = { id: attemptRef.id, moduleId: module.id, courseId: context.course.id, cycle, attemptNumber: previousAttempts.size + 1, answers, scorePercent, passingScorePercent, passed, submittedAt, trusted: true, results: Object.fromEntries(questions.map((question) => [question.id, { correct: answers[question.id] === question.correctIndex, correctAnswerIndex: question.correctIndex, explanation: question.explanation }])) };
-    await adminDb!.runTransaction(async (transaction) => {
-      transaction.create(attemptRef, attempt);
+    const attempt = { id: attemptRef.id, moduleId: module.id, courseId: context.course.id, cycle, attemptNumber, sessionToken: sessionData.sessionToken, answers, scorePercent, passingScorePercent, passed, submittedAt, trusted: true, results: Object.fromEntries(questions.map((question) => [question.id, { correct: answers[question.id] === question.correctIndex, correctAnswerIndex: question.correctIndex, explanation: question.explanation }])) };
+    const savedAttempt = await adminDb!.runTransaction(async (transaction) => {
+      const [currentSession, existingAttempt] = await Promise.all([transaction.get(sessionRef), transaction.get(attemptRef)]);
+      if (existingAttempt.exists) return existingAttempt.data();
+      if (!currentSession.exists || currentSession.data()?.submitted === true || currentSession.data()?.sessionToken !== sessionData.sessionToken) throw new Error('MODULE_EXAM_SESSION_ALREADY_SUBMITTED');
+      const data = attempt;
+      transaction.create(attemptRef, data);
       transaction.set(sessionRef, { submittedAt, submitted: true }, { merge: true });
+      return data;
     });
-    return res.json({ attempt, passed, scorePercent, passingScorePercent });
+    return res.json({ attempt: savedAttempt, passed: savedAttempt?.passed === true, scorePercent: Number(savedAttempt?.scorePercent) || 0, passingScorePercent: Number(savedAttempt?.passingScorePercent) || passingScorePercent });
   } catch (error) {
+    if (error instanceof Error && error.message === 'MODULE_EXAM_SESSION_ALREADY_SUBMITTED') return res.status(409).json({ error: 'This module examination session has already been submitted.' });
     console.error('Module examination submission failed:', error);
     return res.status(500).json({ error: 'Unable to mark module examination.' });
   }
