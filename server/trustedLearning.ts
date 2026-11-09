@@ -839,6 +839,18 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const grade = weighted === null ? null : classifyAcademicGrade(weighted);
     const componentPass = chapterScores.length === totalLessons && chapterScores.every((score) => score >= 70) && assignmentsComplete && assignmentScores.length === requiredAssignments.length && assignmentScores.every((score) => score >= 50) && moduleScores.length === getCourseModules(course).length && moduleScores.every((score) => score >= 60) && finalScore !== null && finalScore >= 50 && cycleSnapshot.data()?.examPassed === true;
     const academicGrade = grade ? { ...grade, passed: componentPass && grade.percentage >= 60, componentsComplete, chapterAssessmentPercent: chapterScores.length ? chapterScores.reduce((sum,value)=>sum+value,0)/chapterScores.length : null, assignmentPercent: assignmentScores.length ? assignmentScores.reduce((sum,value)=>sum+value,0)/assignmentScores.length : null, moduleExaminationPercent: moduleScores.length ? moduleScores.reduce((sum,value)=>sum+value,0)/moduleScores.length : null, finalExaminationPercent: finalScore } : { percentage: null, grade: null, classification: 'Awaiting results', passed: false, componentsComplete: false, chapterAssessmentPercent: null, assignmentPercent: null, moduleExaminationPercent: null, finalExaminationPercent: finalScore };
+    const academicGradeRecord = {
+      learnerUid: uid, courseId: course.id, cycle, trusted: true, official: componentsComplete,
+      percentage: grade?.percentage ?? null, grade: grade?.grade ?? null, classification: grade?.classification ?? 'Awaiting results',
+      passed: academicGrade.passed, componentsComplete,
+      chapterAssessmentPercent: academicGrade.chapterAssessmentPercent,
+      assignmentPercent: academicGrade.assignmentPercent,
+      moduleExaminationPercent: academicGrade.moduleExaminationPercent,
+      finalExaminationPercent: academicGrade.finalExaminationPercent,
+      weights: course.assessmentWeights ?? { chapterAssessments: 10, assignments: 30, moduleExaminations: 25, finalExamination: 35 },
+      updatedAt: new Date().toISOString(),
+    };
+    await ref.collection('courseGrades').doc('official').set(academicGradeRecord, { merge: true });
     const assessmentHistory = [
       ...lessonAttemptsSnapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'chapter_assessment', title: String(d.lessonId || 'Chapter assessment'), submittedAt: String(d.submittedAt || ''), scorePercent: Number(d.scorePercent)||0, passed: Number(d.scorePercent)>=70, attemptNumber: Number(d.attemptNumber)||undefined }; }),
       ...assignmentAttemptSnapshots.flatMap((snapshot) => snapshot.docs.map((doc) => { const d=doc.data(); return { id: doc.id, type: 'assignment', title: String(d.assignmentId || 'Assignment'), submittedAt: String(d.submittedAt||''), scorePercent: Number(d.scorePercent)||0, passed: d.status==='graded' && Number(d.scorePercent)>=50, attemptNumber: Number(d.attemptNumber)||undefined }; })),
