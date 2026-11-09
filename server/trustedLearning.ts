@@ -100,6 +100,27 @@ async function previousTopicRequirementsMet(uid: string, course: PrivateCourse, 
     Number(assignmentData?.scorePercent) >= 50;
 }
 
+function chapterAssessmentQuestionBank(course: PrivateCourse, chapterId: string) {
+  const chapter = course.chapters.find((item) => item.id === chapterId);
+  if (!chapter) return null;
+  return chapter.lessons.flatMap((lesson) => lesson.chapterAssessmentQuestions || [])
+    .map((question) => ({ id: question.id, question: question.question, options: question.options, correctIndex: question.correctIndex, explanation: question.explanation, topic: question.learningObjective }));
+}
+
+async function chapterAssessmentRequirementsMet(uid: string, course: PrivateCourse, chapterId: string, cycle: number): Promise<{ met: boolean; unmet: string[] }> {
+  const chapter = course.chapters.find((item) => item.id === chapterId);
+  if (!chapter) return { met: false, unmet: ['chapter not found'] };
+  const ref = cycleRef(uid, course.id, cycle);
+  const unmet: string[] = [];
+  for (const lesson of chapter.lessons) {
+    const lessonRef = ref.collection('lessonProgress').doc(lesson.id);
+    const [progress, activities] = await Promise.all([lessonRef.get(), lessonRef.collection('activities').get()]);
+    if (progress.data()?.isMastered !== true) unmet.push(`Pass the lesson mastery and interactive practice for ${lesson.title}.`);
+    if (activities.size < lesson.activities.length) unmet.push(`Complete all interactive activities for ${lesson.title}.`);
+  }
+  return { met: unmet.length === 0, unmet };
+}
+
 function moduleExamQuestions(course: PrivateCourse, moduleId: string) {
   const module = getCourseModules(course).find((item) => item.id === moduleId);
   if (!module) return null;
@@ -128,6 +149,11 @@ async function moduleRequirementsMet(uid: string, course: PrivateCourse, moduleI
   const progressById = new Map(progress.docs.map((doc) => [doc.id, doc.data()]));
   const assignmentById = new Map(assignments.docs.map((doc) => [doc.id, doc.data()]));
   const unmet: string[] = [];
+  const chapterAttempts = await ref.collection('chapterAssessmentAttempts').get();
+  for (const chapter of chapters) {
+    const chapterPassed = chapterAttempts.docs.some((doc) => doc.data().chapterId === chapter.id && doc.data().passed === true && Number(doc.data().scorePercent) >= 70);
+    if (!chapterPassed) unmet.push(`Pass the chapter assessment for ${chapter.title} at 70% or higher.`);
+  }
   for (const chapter of chapters) for (const lesson of chapter.lessons) {
     if (progressById.get(lesson.id)?.isMastered !== true) unmet.push(`Complete the mastery assessment for ${lesson.title}.`);
     const assignment = assignmentById.get(`assignment-${course.id}-${lesson.id}`);
@@ -425,6 +451,96 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
   } catch (error) {
     console.error('Trusted interactive activity submission failed:', error);
     return res.status(500).json({ error: 'Unable to check and save this activity.' });
+  }
+});
+
+router.get('/api/assessments/courses/:courseId/chapters/:chapterId/assessment/questions', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const chapter = context.course.chapters.find((item) => item.id === req.params.chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found.' });
+    const bank = chapterAssessmentQuestionBank(context.course, chapter.id) || [];
+    const count = Math.min(20, bank.length);
+    if (!count) return res.status(422).json({ error: 'No distinct approved chapter-assessment questions are available for this chapter.' });
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    const requirements = await chapterAssessmentRequirementsMet(context.uid, context.course, chapter.id, cycle);
+    if (!requirements.met) return res.status(409).json({ error: 'Chapter assessment is locked.', unmet: requirements.unmet });
+    let attempts = await cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentAttempts').where('chapterId', '==', chapter.id).get();
+    if (attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= 70)) return res.status(409).json({ error: 'This chapter assessment has already been passed.' });
+    if (attempts.size >= 3) return res.status(409).json({ error: 'The three-attempt chapter assessment limit has been reached.' });
+    const sessionRef = cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentSessions').doc(chapter.id);
+    const byId = new Map(bank.map((question) => [question.id, question]));
+    const existing = await sessionRef.get();
+    if (existing.exists && existing.data()?.submitted !== true) {
+      const data = existing.data() || {};
+      const expiry = Date.parse(String(data.expiresAt || ''));
+      const ids = Array.isArray(data.questionIds) ? data.questionIds as string[] : [];
+      const activeQuestions = ids.map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+      if (Number.isFinite(expiry) && expiry > Date.now() && activeQuestions.length === ids.length && ids.length) return res.json({ chapterId: chapter.id, questions: safeQuestions(activeQuestions), cycle, expiresAt: String(data.expiresAt), attemptNumber: Number(data.attemptNumber || attempts.size + 1), passingScorePercent: 70 });
+      const expiredNumber = Number(data.attemptNumber || attempts.size + 1);
+      const expiredRef = cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentAttempts').doc(`attempt-${chapter.id}-${expiredNumber}`);
+      await adminDb!.runTransaction(async (transaction) => {
+        const [current, saved] = await Promise.all([transaction.get(sessionRef), transaction.get(expiredRef)]);
+        if (saved.exists || !current.exists || current.data()?.submitted === true || current.data()?.sessionToken !== data.sessionToken) return;
+        const submittedAt = new Date().toISOString();
+        transaction.create(expiredRef, { id: expiredRef.id, chapterId: chapter.id, courseId: context.course.id, cycle, attemptNumber: expiredNumber, answers: {}, scorePercent: 0, passingScorePercent: 70, passed: false, expired: true, submittedAt, trusted: true });
+        transaction.set(sessionRef, { submitted: true, expired: true, submittedAt }, { merge: true });
+      });
+      attempts = await cycleRef(context.uid, context.course.id, cycle).collection('chapterAssessmentAttempts').where('chapterId', '==', chapter.id).get();
+      if (attempts.size >= 3) return res.status(409).json({ error: 'The chapter assessment time expired and all attempts have been used.' });
+    }
+    const selected = rotateQuestionSet(bank, attempts.size, count);
+    const questionIds = shuffle(selected.map((question) => question.id));
+    const expiresAt = new Date(Date.now() + 45 * 60_000).toISOString();
+    await sessionRef.set({ chapterId: chapter.id, questionIds, attemptNumber: attempts.size + 1, sessionToken: randomUUID(), expiresAt, submitted: false, createdAt: new Date().toISOString() });
+    return res.json({ chapterId: chapter.id, questions: safeQuestions(questionIds.map((id) => byId.get(id)!).filter(Boolean)), cycle, expiresAt, attemptNumber: attempts.size + 1, passingScorePercent: 70 });
+  } catch (error) {
+    console.error('Chapter assessment session failed:', error);
+    return res.status(500).json({ error: 'Unable to prepare the chapter assessment.' });
+  }
+});
+
+router.post('/api/assessments/courses/:courseId/chapters/:chapterId/assessment/submit', requireFirebaseAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const context = await getEnrolledCourse(req, res, req.params.courseId);
+    if (!context) return;
+    const chapter = context.course.chapters.find((item) => item.id === req.params.chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found.' });
+    const cycle = await ensureCycle(context.uid, context.course.id);
+    const requirements = await chapterAssessmentRequirementsMet(context.uid, context.course, chapter.id, cycle);
+    if (!requirements.met) return res.status(409).json({ error: 'Chapter assessment requirements are not satisfied.', unmet: requirements.unmet });
+    const ref = cycleRef(context.uid, context.course.id, cycle);
+    const sessionRef = ref.collection('chapterAssessmentSessions').doc(chapter.id);
+    const session = await sessionRef.get();
+    const data = session.data() || {};
+    if (!session.exists || !Array.isArray(data.questionIds)) return res.status(409).json({ error: 'Start the chapter assessment before submitting.' });
+    if (data.submitted === true) return res.status(409).json({ error: 'This chapter assessment session has already been submitted.' });
+    if (!Number.isFinite(Date.parse(String(data.expiresAt || ''))) || Date.now() > Date.parse(String(data.expiresAt)) + 30_000) return res.status(409).json({ error: 'The chapter assessment time has expired.' });
+    const bank = chapterAssessmentQuestionBank(context.course, chapter.id) || [];
+    const byId = new Map(bank.map((question) => [question.id, question]));
+    const questions = (data.questionIds as string[]).map((id) => byId.get(id)).filter((question): question is NonNullable<typeof question> => Boolean(question));
+    if (!validAnswers(questions, req.body?.answers)) return res.status(400).json({ error: 'Submit one valid answer for every chapter assessment question.' });
+    const answers = req.body.answers as Record<string, number>;
+    const scorePercent = scoreAnswers(questions, answers);
+    const passed = scorePercent >= 70;
+    const attemptNumber = Number(data.attemptNumber || 1);
+    const attemptRef = ref.collection('chapterAssessmentAttempts').doc(`attempt-${chapter.id}-${attemptNumber}`);
+    const submittedAt = new Date().toISOString();
+    const attempt = { id: attemptRef.id, chapterId: chapter.id, courseId: context.course.id, cycle, attemptNumber, answers, scorePercent, passingScorePercent: 70, passed, submittedAt, sessionToken: data.sessionToken, trusted: true, results: Object.fromEntries(questions.map((question) => [question.id, { correct: answers[question.id] === question.correctIndex, correctAnswerIndex: question.correctIndex, explanation: question.explanation }])) };
+    const saved = await adminDb!.runTransaction(async (transaction) => {
+      const [current, existing] = await Promise.all([transaction.get(sessionRef), transaction.get(attemptRef)]);
+      if (existing.exists) return existing.data();
+      if (!current.exists || current.data()?.submitted === true || current.data()?.sessionToken !== data.sessionToken) throw new Error('CHAPTER_ASSESSMENT_SESSION_SUBMITTED');
+      transaction.create(attemptRef, attempt);
+      transaction.set(sessionRef, { submitted: true, submittedAt }, { merge: true });
+      return attempt;
+    });
+    return res.json({ attempt: saved, passed: saved?.passed === true, scorePercent: Number(saved?.scorePercent) || 0, passingScorePercent: 70 });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'CHAPTER_ASSESSMENT_SESSION_SUBMITTED') return res.status(409).json({ error: 'This chapter assessment session has already been submitted.' });
+    console.error('Chapter assessment submission failed:', error);
+    return res.status(500).json({ error: 'Unable to mark the chapter assessment.' });
   }
 });
 
