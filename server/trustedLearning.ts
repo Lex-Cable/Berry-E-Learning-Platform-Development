@@ -403,22 +403,25 @@ router.post('/api/assessments/courses/:courseId/lessons/:lessonId/activities/:ac
       ? Math.round(lesson.activities.reduce((total, item) => total + (scoresById.get(item.id) || 0), 0) / lesson.activities.length)
       : 100;
     const progressRef = cycleRef(uid, course.id, cycle).collection('lessonProgress').doc(lesson.id);
-    const progressSnapshot = await progressRef.get();
+    const assignmentRef = cycleRef(uid, course.id, cycle).collection('assignments').doc(`assignment-${course.id}-${lesson.id}`);
+    const [progressSnapshot, assignmentSnapshot] = await Promise.all([progressRef.get(), assignmentRef.get()]);
     const progress = progressSnapshot.data();
     const masteryThreshold = Math.max(80, lesson.masteryThresholdPercent || 80);
     const masteryPassed = Number(progress?.scorePercent || 0) >= masteryThreshold;
     const allActivitiesSubmitted = lesson.activities.every((item) => scoresById.has(item.id));
     const lessonPassed = masteryPassed && allActivitiesSubmitted && interactiveScorePercent >= 80;
+    const assignmentData = assignmentSnapshot.data();
+    const lessonCompleted = lessonPassed && assignmentData?.status === 'graded' && Number(assignmentData.scorePercent) >= 50;
     await progressRef.set({
       interactiveScorePercent,
       interactiveActivitiesCompleted: savedActivities.size,
-      isCompleted: false,
+      isCompleted: lessonCompleted,
       isMastered: lessonPassed,
       updatedAt: now,
     }, { merge: true });
     const finalProgress = (await progressRef.get()).data();
 
-    return res.json({ submission, interactiveScorePercent, interactiveActivitiesCompleted: savedActivities.size, lessonCompleted: lessonPassed, progress: finalProgress });
+    return res.json({ submission, interactiveScorePercent, interactiveActivitiesCompleted: savedActivities.size, lessonCompleted, progress: finalProgress });
   } catch (error) {
     console.error('Trusted interactive activity submission failed:', error);
     return res.status(500).json({ error: 'Unable to check and save this activity.' });
