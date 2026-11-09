@@ -71,6 +71,9 @@ test('explicit chapter and module banks are preserved when legacy or final pools
     options: ['Sunlight', 'Plastic'],
     correctIndex: 0,
     explanation: 'Plants need sunlight.',
+    misconceptions: {
+      1: 'Plastic does not support plant growth.',
+    },
     learningObjective: 'Identify plant needs',
   };
   lesson.chapterAssessmentQuestions = [authored];
@@ -159,7 +162,7 @@ test('PP1 Language trusted catalogue exposes distinct chapter and module examina
   const lesson = course.chapters.find((chapter) => chapter.id === 'pp1-lang-c1')?.lessons.find((item) => item.id === 'pp1-lang-l1');
   assert.ok(lesson, 'PP1 Language phonics lesson must exist');
   assert.equal(lesson.chapterAssessmentQuestions?.length, 5);
-  assert.equal(lesson.moduleExamQuestions?.length, 5);
+  assert.equal(lesson.moduleExamQuestions?.length, 4);
   assert.ok(lesson.chapterAssessmentQuestions?.every((question) => question.options.length >= 2 && question.correctIndex >= 0 && question.correctIndex < question.options.length));
   assert.ok(lesson.moduleExamQuestions?.every((question) => question.options.length >= 2 && question.correctIndex >= 0 && question.correctIndex < question.options.length));
 });

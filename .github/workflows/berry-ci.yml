@@ -2,9 +2,9 @@ name: Berry validation
 
 on:
   push:
-    branches: [Jaccie-Jay]
+    branches: [master, Jaccie-Jay]
   pull_request:
-    branches: [Jaccie-Jay]
+    branches: [master, Jaccie-Jay]
 
 permissions:
   contents: read
