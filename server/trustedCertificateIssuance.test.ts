@@ -136,3 +136,61 @@ test('certificate issuance creates one trusted certificate under concurrent requ
     ]);
   }
 });
+
+
+test('certificate is withheld when a required assignment is missing', async () => {
+  const uid = `certificate-incomplete-${randomUUID()}`;
+  const courseId = 'incomplete-course';
+  const cycle = 1;
+  const cycleRef = db.collection('users').doc(uid).collection('trustedCourses').doc(courseId).collection('cycles').doc(String(cycle));
+  const learnerCertificateRef = db.collection('users').doc(uid).collection('trustedCertificates').doc(courseId);
+  const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
+  const certificateRef = db.collection('trustedCertificates').doc(credentialId);
+  try {
+    await cycleRef.set({ cycle, examPassed: true, examScorePercent: 90 });
+    await cycleRef.collection('lessonProgress').doc('lesson-1').set({ lessonId: 'lesson-1', isCompleted: true, isMastered: true, scorePercent: 90, interactiveScorePercent: 90 });
+    await cycleRef.collection('chapterAssessmentAttempts').doc('chapter-1').set({ chapterId: 'chapter-1', scorePercent: 90, passed: true, trusted: true });
+    await cycleRef.collection('moduleExamAttempts').doc('module-1').set({ moduleId: 'module-1', scorePercent: 90, passed: true, trusted: true });
+    const result = await issueTrustedCertificateTransaction({
+      db, cycleRef, certificateRef, learnerCertificateRef,
+      certificate: { id: credentialId, credentialId, uid, courseId, recipientName: 'Test Learner', trusted: true },
+      totalLessons: 1, approvedAssignmentCount: 1, approvedChapterCount: 1, approvedModuleCount: 1, cycle,
+    });
+    assert.equal(result.eligible, false);
+    if (!result.eligible) assert.ok(result.unmet.some((item) => item.includes('topic assignments completed')));
+    assert.equal((await certificateRef.get()).exists, false);
+    assert.equal((await learnerCertificateRef.get()).exists, false);
+  } finally {
+    await db.recursiveDelete(db.collection('users').doc(uid));
+    await certificateRef.delete();
+  }
+});
+
+test('certificate is withheld when every component passes individually but weighted course grade is below 60%', async () => {
+  const uid = `certificate-low-grade-${randomUUID()}`;
+  const courseId = 'low-grade-course';
+  const cycle = 1;
+  const cycleRef = db.collection('users').doc(uid).collection('trustedCourses').doc(courseId).collection('cycles').doc(String(cycle));
+  const learnerCertificateRef = db.collection('users').doc(uid).collection('trustedCertificates').doc(courseId);
+  const credentialId = `BERRY-${randomUUID().replace(/-/g, '').toUpperCase()}`;
+  const certificateRef = db.collection('trustedCertificates').doc(credentialId);
+  try {
+    await cycleRef.set({ cycle, examPassed: true, examScorePercent: 50 });
+    await cycleRef.collection('lessonProgress').doc('lesson-1').set({ lessonId: 'lesson-1', isCompleted: true, isMastered: true, scorePercent: 80, interactiveScorePercent: 80 });
+    await cycleRef.collection('chapterAssessmentAttempts').doc('chapter-1').set({ chapterId: 'chapter-1', scorePercent: 70, passed: true, trusted: true });
+    await cycleRef.collection('moduleExamAttempts').doc('module-1').set({ moduleId: 'module-1', scorePercent: 60, passed: true, trusted: true });
+    await cycleRef.collection('assignments').doc('assignment-1').set({ assignmentId: 'assignment-1', status: 'graded', scorePercent: 50, trusted: true });
+    const result = await issueTrustedCertificateTransaction({
+      db, cycleRef, certificateRef, learnerCertificateRef,
+      certificate: { id: credentialId, credentialId, uid, courseId, recipientName: 'Test Learner', trusted: true },
+      totalLessons: 1, approvedAssignmentCount: 1, approvedChapterCount: 1, approvedModuleCount: 1, cycle,
+    });
+    assert.equal(result.eligible, false);
+    if (!result.eligible) assert.ok(result.unmet.some((item) => item.includes('overall weighted course grade')));
+    assert.equal((await certificateRef.get()).exists, false);
+    assert.equal((await learnerCertificateRef.get()).exists, false);
+  } finally {
+    await db.recursiveDelete(db.collection('users').doc(uid));
+    await certificateRef.delete();
+  }
+});
