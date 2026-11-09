@@ -152,6 +152,18 @@ test('lesson source questions are partitioned into distinct mastery and module-e
   assert.equal(new Set([...result.quizQuestions, ...(result.chapterAssessmentQuestions || []), ...(result.moduleExamQuestions || [])].map((question) => question.question)).size, 4);
 });
 
+test('PP1 Language trusted catalogue exposes distinct chapter and module examination banks', () => {
+  const rawCourse = SERVER_COURSES.find((course) => course.id === 'cbc-pp1-language');
+  assert.ok(rawCourse, 'PP1 Language must exist in the trusted catalogue');
+  const course = withCompleteAssessmentBanks([rawCourse as Course])[0];
+  const lesson = course.chapters.find((chapter) => chapter.id === 'pp1-lang-c1')?.lessons.find((item) => item.id === 'pp1-lang-l1');
+  assert.ok(lesson, 'PP1 Language phonics lesson must exist');
+  assert.equal(lesson.chapterAssessmentQuestions?.length, 5);
+  assert.equal(lesson.moduleExamQuestions?.length, 5);
+  assert.ok(lesson.chapterAssessmentQuestions?.every((question) => question.options.length >= 2 && question.correctIndex >= 0 && question.correctIndex < question.options.length));
+  assert.ok(lesson.moduleExamQuestions?.every((question) => question.options.length >= 2 && question.correctIndex >= 0 && question.correctIndex < question.options.length));
+});
+
 test('Grade 8 Pre-Technical Workshop has approved chapter and module assessment coverage', () => {
   const rawCourse = SERVER_COURSES.find((course) => course.id === 'cbc-g8-pretech');
   assert.ok(rawCourse, 'Grade 8 Pre-Technical course must exist in the trusted catalogue');
