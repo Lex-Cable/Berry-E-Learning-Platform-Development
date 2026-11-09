@@ -8,7 +8,7 @@ const course = {
     { id: 'chapter-a', courseId: 'course-a', title: 'A', order: 1, description: '', lessons: [{ id: 'lesson-a', chapterId: 'chapter-a', title: 'A1', order: 1, durationMinutes: 5, objectives: [], prerequisites: [], notesMarkdown: '', activities: [], quizQuestions: [], masteryThresholdPercent: 80 }] },
     { id: 'chapter-b', courseId: 'course-a', title: 'B', order: 2, description: '', lessons: [] },
   ],
-} as Course;
+} as unknown as Course;
 
 test('legacy courses map into one stable module without changing chapter or lesson IDs', () => {
   const first = getCourseModules(course);
