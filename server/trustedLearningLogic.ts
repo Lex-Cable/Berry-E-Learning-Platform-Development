@@ -1,4 +1,4 @@
-export interface TrustedProgressSnapshot { isCompleted?: boolean; isMastered?: boolean }
+export interface TrustedProgressSnapshot { isCompleted?: boolean; isMastered?: boolean; scorePercent?: number }
 export interface TrustedAssignmentSnapshot { status?: string; scorePercent?: number }
 export interface CertificateRequirements {
   totalLessons: number;
@@ -82,7 +82,9 @@ export function certificateUnmetRequirements(input: CertificateRequirements): st
   const summary = summarizeCourseProgress(input.progress, input.totalLessons);
   const unmet: string[] = [];
   if (!summary.courseCompleted) unmet.push(`course completion (${summary.completedCount}/${input.totalLessons} lessons)`);
-  if (input.progress.some((record) => record.isMastered !== true || Number((record as { scorePercent?: number }).scorePercent) < 70)) unmet.push('all chapter assessments must be passed at 70% or higher');
+  if (input.progress.some((record) => record.isMastered !== true)) unmet.push('all required lessons must meet the mastery and interactive-practice requirements');
+  if (input.chapterAssessments.length < input.approvedChapterCount) unmet.push(`chapter assessments completed (${input.chapterAssessments.length}/${input.approvedChapterCount})`);
+  input.chapterAssessments.forEach((assessment) => { if (!assessment.passed || assessment.scorePercent < 70) unmet.push(`chapter assessment ${assessment.chapterId} is not passed at 70% or higher`); });
   if (input.moduleExaminations.length < input.approvedModuleCount) unmet.push(`module examinations completed (${input.moduleExaminations.length}/${input.approvedModuleCount})`);
   input.moduleExaminations.forEach((exam) => { if (!exam.passed || exam.scorePercent < 60) unmet.push(`module examination ${exam.moduleId} is not passed at 60% or higher`); });
   if (!input.examPassed) unmet.push('final exam pass (50% or higher)');
