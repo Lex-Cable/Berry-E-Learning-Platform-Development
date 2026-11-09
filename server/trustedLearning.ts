@@ -115,8 +115,10 @@ async function chapterAssessmentRequirementsMet(uid: string, course: PrivateCour
   for (const lesson of chapter.lessons) {
     const lessonRef = ref.collection('lessonProgress').doc(lesson.id);
     const [progress, activities] = await Promise.all([lessonRef.get(), lessonRef.collection('activities').get()]);
-    if (progress.data()?.isMastered !== true || Number(progress.data()?.scorePercent || 0) < 80 || Number(progress.data()?.interactiveScorePercent || 0) < 80) unmet.push(`Pass the lesson mastery and interactive practice for ${lesson.title} at 80% or higher.`);
-    if (activities.size < lesson.activities.length || Number(progress.data()?.interactiveActivitiesCompleted || 0) < lesson.activities.length) unmet.push(`Complete all interactive activities for ${lesson.title}.`);
+    const interactivePassed = lesson.activities.length === 0 || Number(progress.data()?.interactiveScorePercent || 0) >= 80;
+    const activitiesComplete = lesson.activities.length === 0 || (activities.size >= lesson.activities.length && Number(progress.data()?.interactiveActivitiesCompleted || 0) >= lesson.activities.length);
+    if (progress.data()?.isMastered !== true || Number(progress.data()?.scorePercent || 0) < 80 || !interactivePassed) unmet.push(`Pass the lesson mastery and interactive practice for ${lesson.title} at 80% or higher.`);
+    if (!activitiesComplete) unmet.push(`Complete all interactive activities for ${lesson.title}.`);
   }
   return { met: unmet.length === 0, unmet };
 }
