@@ -58,7 +58,7 @@ import { auditCurriculumCoverage, findFallbackLesson } from './utils/curriculumC
 import { buildCurriculumRepository } from './curriculum/repository';
 import { INTERNATIONAL_STARTER_COURSES } from './data/internationalStarterCourses';
 import { certificateEligibilityForCourse, selectBestExamAttempt } from './utils/certificates';
-import { loadLearningCertificates, loadLearningProgress } from './services/learningProgress';
+import { loadLearningProgress } from './services/learningProgress';
 import { enrollInCourse, getCourseStatus, issueTrustedCertificate, loadTrustedCertificates, submitTrustedAssignment } from './services/assessments';
 import { getLearnerProfileErrorMessage, getOrCreateLearnerProfile, saveLearnerProfile } from './services/learnerProfile';
 import {
@@ -295,18 +295,18 @@ export default function App() {
   }, [learner.id, learner.enrolledCourseIds.join('|'), courses, isLoggedIn, authStateReady]);
 
 
+  // Trusted certificate issuance writes to users/{uid}/trustedCertificates.
+  // Load from the same authoritative collection; the legacy learningCertificates
+  // collection is not used for verified Berry credentials.
   useEffect(() => {
     const uid = firebaseAuth?.currentUser?.uid;
     if (!authStateReady || !isLoggedIn || !uid) return;
     let cancelled = false;
-    void loadLearningCertificates(uid).then((cloudCertificates) => {
-      if (cancelled || cloudCertificates.length === 0) return;
-      setCertificates((current) => [
-        ...cloudCertificates,
-        ...current.filter((item) => !cloudCertificates.some((cloudItem) => cloudItem.id === item.id)),
-      ]);
+    void loadTrustedCertificates().then((cloudCertificates) => {
+      if (cancelled) return;
+      setCertificates(cloudCertificates);
     }).catch((error) => {
-      console.warn('Could not load cloud learning certificates; keeping this device cache:', error);
+      console.warn('Could not load trusted Berry certificates:', error);
     });
     return () => { cancelled = true; };
   }, [learner.id, isLoggedIn, authStateReady]);
@@ -706,13 +706,18 @@ export default function App() {
   // not a government-issued credential.
   const handleClaimCertificate = async (course: Course, _scorePercent: number) => {
     try {
-      // Check trusted progress before asking the issuer to create a credential.
-      // Exam completion alone is not certificate eligibility, and attempting
-      // issuance early produced noisy 409 responses for otherwise valid learners.
-      // The trusted issuer is the sole authority for certificate eligibility.
-      // Do not duplicate its requirements in the browser: stale local state or
-      // a stricter client-only check previously prevented valid learners from
-      // ever requesting an otherwise eligible certificate.
+      // Ask the trusted status endpoint to calculate the complete course result
+      // before requesting issuance. This avoids expected 409 responses after an
+      // exam pass when assignments, chapter assessments or modules are still open.
+      const status = await getCourseStatus(course.id);
+      if (!status.courseCompleted || status.academicGrade?.passed !== true) {
+        console.info('Certificate not ready; trusted course requirements remain incomplete.', {
+          courseId: course.id,
+          courseCompleted: status.courseCompleted,
+          academicGrade: status.academicGrade,
+        });
+        return;
+      }
       const result = await issueTrustedCertificate(course.id);
       setCertificates((prev) => [result.certificate, ...prev.filter((item) => item.credentialId !== result.certificate.credentialId)]);
       const newNotif: AppNotification = {
