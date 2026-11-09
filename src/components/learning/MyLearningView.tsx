@@ -321,250 +321,35 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     return best === null || attempt.scorePercent > best ? attempt.scorePercent : best;
   }, null);
 
+  const renderCurriculumNavigation = () => activeCourse ? getCourseModules(activeCourse).map((module) => {
+    const modules = getCourseModules(activeCourse);
+    const moduleIndex = modules.findIndex((item) => item.id === module.id);
+    const previousModule = moduleIndex > 0 ? modules[moduleIndex - 1] : undefined;
+    const previousModulePassed = !previousModule || moduleExamAttempts.some((attempt) => attempt.moduleId === previousModule.id && attempt.passed && attempt.scorePercent >= 60);
+    return <section key={module.id} className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2"><div><p className="text-[9px] font-extrabold uppercase tracking-widest text-purple-600">Module {module.order}</p><h4 className="text-xs font-extrabold text-slate-900">{module.title}</h4></div>{getModuleChapters(activeCourse,module).map((chapter) => <div key={chapter.id} className="space-y-1"><p className="text-[10px] font-bold text-slate-500">{chapter.title}</p>{chapter.lessons.map((lesson) => {
+      const ordered = activeCourse.chapters.flatMap((item) => item.lessons);
+      const index = ordered.findIndex((item) => item.id === lesson.id);
+      const previous = index > 0 ? ordered[index - 1] : undefined;
+      const assignment = previous ? trustedAssignments[`assignment-${activeCourse.id}-${previous.id}`] : undefined;
+      const previousComplete = !previous || (currentMasteryRecords[previous.id]?.isMastered === true && currentMasteryRecords[previous.id]?.isCompleted === true && assignment?.status === 'graded' && Number(assignment.scorePercent) >= 50);
+      const canOpen = isLessonUnlocked(lesson, Object.keys(currentMasteryRecords).filter((id) => currentMasteryRecords[id]?.isCompleted), Object.keys(currentMasteryRecords).filter((id) => currentMasteryRecords[id]?.isMastered)) && previousComplete && previousModulePassed && !trustedAssignmentsLoading;
+      const active = activeLessonId === lesson.id;
+      return <button key={lesson.id} type="button" disabled={!canOpen && !active} onClick={() => setActiveLessonId(lesson.id)} className={`w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] ${active?'bg-purple-100 text-purple-900 font-bold':canOpen?'hover:bg-slate-50 text-slate-700':'text-slate-400 opacity-70'}`}><span>{currentMasteryRecords[lesson.id]?.isCompleted?'✓':canOpen?'▶':'🔒'}</span><span className="min-w-0 flex-1">{lesson.title}</span></button>;
+    })}</div>)}{module.examination && <div className="border-t border-slate-100 pt-2 text-[10px] text-slate-500">Module exam · {moduleExamAttempts.some((attempt) => attempt.moduleId === module.id && attempt.passed)?'Passed':'Pending'}</div>}</section>;
+  }) : null;
+
   // ==========================================
   // LEVEL 3: ACTIVE LESSON VIEW
   // ==========================================
   if (activeCourse && activeLessonId) {
     return (
-      <div className="space-y-4">
-        <button
-          onClick={() => setActiveLessonId(null)}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-xs transition-colors"
-        >
-          <ArrowLeft size={14} />
-          <span>Back to Course Syllabus ({activeCourse.subject})</span>
-        </button>
-
-        <LessonView
-          course={activeCourse}
-          lessonId={activeLessonId}
-          onNavigateLesson={(nextId) => setActiveLessonId(nextId)}
-          onBackToCourse={() => setActiveLessonId(null)}
-          masteryRecord={currentMasteryRecords[activeLessonId]}
-          savedActivityResults={trustedActivities[activeLessonId] || {}}
-          savedMasteryAnswers={trustedLessonAttempts[activeLessonId]?.answers || {}}
-          savedMasteryResults={trustedLessonAttempts[activeLessonId]?.results || {}}
-          savedMasterySubmitted={Boolean(trustedLessonAttempts[activeLessonId]?.submittedAt)}
-          onSaveMastery={(record) => {
-            setTrustedLessonProgress((current) => ({ ...current, [record.lessonId]: record }));
-            onSaveMastery(record);
-          }}
-          canAdvanceToNextLesson={currentMasteryRecords[activeLessonId]?.isMastered === true && currentMasteryRecords[activeLessonId]?.isCompleted === true}
-          userId={learner.id}
-        />
-      </div>
-    );
-  }
-
-  // ==========================================
-  // LEVEL 4: GRADE FINAL EXAM VIEW
-  // ==========================================
-  if (activeCourse && takingExam && activeCourse.exam) {
-    const exam = activeCourse.exam;
-
-    return (
-      <div className="space-y-6 pb-12 max-w-4xl mx-auto">
-        {/* Exam Navigation Header */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setTakingExam(false)}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-xs transition-colors"
-          >
-            <ArrowLeft size={14} />
-            <span>Back to Syllabus</span>
-          </button>
-
-          <span className="text-xs font-semibold text-slate-500">
-            {activeCourse.gradeLevel} • {activeCourse.subject}
-          </span>
+      <div className="space-y-4 max-w-7xl mx-auto">
+        <button onClick={() => setActiveLessonId(null)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-xs transition-colors"><ArrowLeft size={14}/><span>Back to Course Syllabus ({activeCourse.subject})</span></button>
+        <details className="lg:hidden rounded-2xl border border-slate-200 bg-white p-3"><summary className="cursor-pointer text-xs font-bold text-slate-800">Course curriculum · {activeCourse.title}</summary><div className="mt-3 space-y-3">{renderCurriculumNavigation()}</div></details>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
+          <div className="min-w-0"><LessonView course={activeCourse} lessonId={activeLessonId} onNavigateLesson={(nextId) => setActiveLessonId(nextId)} onBackToCourse={() => setActiveLessonId(null)} masteryRecord={currentMasteryRecords[activeLessonId]} savedActivityResults={trustedActivities[activeLessonId] || {}} savedMasteryAnswers={trustedLessonAttempts[activeLessonId]?.answers || {}} savedMasteryResults={trustedLessonAttempts[activeLessonId]?.results || {}} savedMasterySubmitted={Boolean(trustedLessonAttempts[activeLessonId]?.submittedAt)} onSaveMastery={(record) => { setTrustedLessonProgress((current) => ({ ...current, [record.lessonId]: record })); onSaveMastery(record); }} canAdvanceToNextLesson={currentMasteryRecords[activeLessonId]?.isMastered === true && currentMasteryRecords[activeLessonId]?.isCompleted === true} userId={learner.id}/></div>
+          <aside className="hidden lg:block lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto space-y-3"><div><h3 className="font-extrabold text-sm text-slate-900">Course curriculum</h3><p className="text-[10px] text-slate-500">Choose an available lesson. Locked lessons require completed prerequisites.</p></div>{renderCurriculumNavigation()}</aside>
         </div>
-
-        {/* Exam Header Banner */}
-        <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold">
-            <Award size={14} className="text-blue-600" />
-            <span>Berry Course Final Assessment</span>
-          </div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">{exam.title}</h2>
-          <p className="text-xs text-slate-500">
-            Passing threshold: <strong>50%</strong>. Two attempts are available. Passing this exam records
-            a Berry course assessment record. Berry records are not government-issued or externally accredited qualifications.
-          </p>
-        </div>
-
-        {/* Attempt history from persisted records */}
-        {courseExamAttempts.length > 0 && (
-          <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs text-xs space-y-2">
-            <span className="font-bold text-slate-800">Previous attempts ({courseExamAttempts.length})</span>
-            <div className="flex flex-wrap gap-2">
-              {courseExamAttempts.map((attempt) => (
-                <span
-                  key={attempt.id}
-                  className={`px-2.5 py-1 rounded-full font-bold ${
-                    attempt.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {attempt.scorePercent}% • {new Date(attempt.submittedAt).toLocaleDateString()} • {attempt.trusted ? 'Verified' : 'Legacy / unverified'} {attempt.passed ? 'passed' : 'not passed'}
-                </span>
-              ))}
-            </div>
-            {bestPreviousAttempt !== null && (
-              <p className="text-[11px] text-slate-500">Best passing score so far: {bestPreviousAttempt}%.</p>
-            )}
-          </div>
-        )}
-
-        {/* Results Card if submitted */}
-        {examSubmitted && (
-          <div
-            className={`p-6 md:p-8 rounded-3xl border shadow-sm space-y-4 ${
-              examPassed
-                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                : 'bg-amber-50/70 border-amber-200 text-amber-950'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg ${
-                    examPassed ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
-                  }`}
-                >
-                  {examScore}%
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-lg">
-                    {examPassed
-                      ? 'Congratulations! You Demonstrated Full Mastery! 🎉'
-                      : 'Exam Completed — Review Recommended'}
-                  </h3>
-                  <p className="text-xs opacity-90">
-                    {examPassed
-                      ? 'You passed this course assessment. Any Berry learning record is not an official Kenyan CBC qualification.'
-                      : `You scored ${examScore}%. You need 50% to pass the final examination. The overall course grade and all required components must also be passed for a certificate.`}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              {!examPassed && courseExamAttempts.length < 2 && <button type="button" onClick={async () => { setExamLoading(true); setExamError(null); setExamSubmitted(false); setExamAnswers({}); setExamResults({}); try { const next = await getCourseExam(activeCourse.id); setExamQuestions(next.questions); setExamExpiresAt(next.expiresAt); setExamTimeRemaining(Math.max(0, Math.ceil((Date.parse(next.expiresAt)-Date.now())/1000))); } catch (error) { setExamError(error instanceof Error ? error.message : 'Unable to start the next attempt.'); } finally { setExamLoading(false); } }} disabled={examLoading} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:bg-slate-50 shadow-xs"><RotateCcw size={14}/><span>{examLoading?'Preparing next attempt…':'Try final examination again'}</span></button>}
-              {(examPassed || courseExamAttempts.length >= 2) && <button onClick={handleStartFullRetake} disabled={retakeLoading} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:bg-slate-50 shadow-xs"><RotateCcw size={14}/><span>{retakeLoading?'Preparing full retake…':'Start Full Course Retake'}</span></button>}
-
-              {examPassed && onNavigateToCertificates && (
-                <button
-                  onClick={onNavigateToCertificates}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all active:scale-95"
-                >
-                  <Award size={16} />
-                  <span>View Berry Learning Record</span>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <div>
-            <p className="text-xs font-bold text-amber-900">Final exam time remaining</p>
-            <p className="text-[11px] text-amber-800">One-hour timed assessment</p>
-          </div>
-          <span role="timer" aria-live="off" className="font-mono text-xl font-black tabular-nums text-amber-950">
-            {String(Math.floor(examTimeRemaining / 3600)).padStart(2, '0')}:{String(Math.floor((examTimeRemaining % 3600) / 60)).padStart(2, '0')}:{String(examTimeRemaining % 60).padStart(2, '0')}
-          </span>
-        </div>
-
-        {/* Exam Questions */}
-        <div className="space-y-4">
-          {examLoading ? <p>Loading secure exam questions…</p> : examError && !examQuestions.length ? <p role="alert">{examError}</p> : examQuestions.map((q, idx) => {
-            const selectedOpt = examAnswers[q.id];
-            const result = examResults[q.id];
-            const isCorrect = result?.correct === true;
-
-            return (
-              <div
-                key={q.id}
-                className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-slate-100 font-bold text-slate-700 text-xs flex items-center justify-center">
-                      {idx + 1}
-                    </span>
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      {q.topic}
-                    </span>
-                  </div>
-
-                  {examSubmitted && (
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        isCorrect
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-rose-100 text-rose-800'
-                      }`}
-                    >
-                      {isCorrect ? 'Correct (+1)' : 'Incorrect'}
-                    </span>
-                  )}
-                </div>
-
-                <p className="font-bold text-sm text-slate-900">{q.question}</p>
-
-                <div className="space-y-2">
-                  {q.options.map((opt, optIdx) => {
-                    const isSelected = selectedOpt === optIdx;
-                    return (
-                      <button
-                        key={optIdx}
-                        disabled={examSubmitted}
-                        onClick={() =>
-                          setExamAnswers((prev) => ({ ...prev, [q.id]: optIdx }))
-                        }
-                        className={`w-full text-left p-3 rounded-2xl text-xs font-medium border transition-all flex items-center justify-between ${
-                          isSelected
-                            ? 'bg-purple-50 border-purple-400 text-purple-950 font-bold'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                        } ${
-                          examSubmitted && result?.correctAnswerIndex === optIdx
-                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold'
-                            : ''
-                        }`}
-                      >
-                        <span>{opt}</span>
-                        {isSelected && <Check size={14} className="text-purple-600" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {examSubmitted && (
-                  <div className="p-3 bg-slate-50 rounded-2xl text-xs text-slate-600 border border-slate-200/80">
-                    <span className="font-bold text-slate-800">Explanation: </span>
-                    {result?.explanation || 'Review the related lesson notes.'}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {examError && <p role="alert">{examError}</p>}
-        {/* Submit Bar */}
-        {!examSubmitted && (
-          <div className="p-4 bg-white rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
-            <span className="text-xs text-slate-500">
-              Answered: {Object.keys(examAnswers).length} of {examQuestions.length} questions
-            </span>
-            <button
-              onClick={handleSubmitExam}
-              disabled={examSubmitting || examLoading || (Object.keys(examAnswers).length < examQuestions.length && examTimeRemaining > 0) || !examQuestions.length}
-              className="px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all active:scale-95"
-            >
-              {examSubmitting ? 'Submitting securely…' : examTimeRemaining === 0 ? 'Submit Saved Answers' : 'Submit & Grade Exam'}
-            </button>
-          </div>
-        )}
       </div>
     );
   }
