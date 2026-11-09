@@ -90,6 +90,7 @@ test('all shipped Berry course catalogues contain no repeated assessment prompts
       const modulePrompts = course.chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => (lesson.moduleExamQuestions || []).map((question) => question.question.trim().toLowerCase())));
       assert.equal(new Set(modulePrompts).size, modulePrompts.length, `${course.id} repeated module prompts`);
       assert.ok(modulePrompts.every((prompt) => !examPrompts.includes(prompt)), `${course.id} module/final prompt overlap`);
+      assert.ok(modulePrompts.every((prompt) => !course.chapters.some((chapter) => chapter.lessons.some((lesson) => lesson.activities.some((activity) => activity.instructions.trim().toLowerCase() === prompt)))), `${course.id} interactive/module prompt overlap`);
       assert.ok(modulePrompts.every((prompt) => !course.chapters.some((chapter) => chapter.lessons.some((lesson) => lesson.quizQuestions.some((question) => question.question.trim().toLowerCase() === prompt)))), `${course.id} mastery/module prompt overlap`);
 
       assert.equal(new Set(examPrompts).size, examPrompts.length, `${course.id} repeated exam prompt`);
