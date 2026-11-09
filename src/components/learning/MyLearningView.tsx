@@ -169,6 +169,34 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
     return () => { cancelled = true; };
   }, [activeCourse?.id, activeLessonId, learner.id, learner.enrolledCourseIds.join('|')]);
 
+  // Re-evaluate certificate eligibility whenever a trusted course component changes.
+  // Chapter assessment or module examination may be the final outstanding item,
+  // so issuance must not depend only on final-exam or assignment callbacks.
+  const certificateCheckRef = useRef<string>('');
+  useEffect(() => {
+    if (!activeCourse || !onClaimCertificate || !learner.enrolledCourseIds.includes(activeCourse.id)) return;
+    let cancelled = false;
+    void getCourseStatus(activeCourse.id).then((status) => {
+      if (cancelled || !status.courseCompleted || status.academicGrade?.passed !== true) return;
+      const cycleKey = `${activeCourse.id}:${status.cycle}`;
+      if (certificateCheckRef.current === cycleKey) return;
+      certificateCheckRef.current = cycleKey;
+      onClaimCertificate(activeCourse, status.academicGrade.percentage ?? 0);
+    }).catch((error) => {
+      console.warn('Could not evaluate certificate eligibility yet:', error);
+    });
+    return () => { cancelled = true; };
+  }, [
+    activeCourse?.id,
+    learner.id,
+    learner.enrolledCourseIds.join('|'),
+    trustedAssignments,
+    trustedLessonProgress,
+    moduleExamAttempts,
+    chapterAssessmentAttempts,
+    examAttempts,
+  ]);
+
   // Grade filter (defaults to learner's current grade level, e.g. Grade 1, Grade 7, Grade 10, PP1, Bachelor Year 2)
   const [gradeFilter, setGradeFilter] = useState<string>('all');
 
