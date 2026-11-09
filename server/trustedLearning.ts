@@ -439,7 +439,8 @@ router.get('/api/assessments/courses/:courseId/modules/:moduleId/exam/questions'
     if (count < 1) return res.status(422).json({ error: 'No approved module examination questions are available.' });
     const ref = cycleRef(context.uid, context.course.id, cycle);
     const attempts = await ref.collection('moduleExamAttempts').where('moduleId', '==', module.id).get();
-    if (attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= module.examination.passingScorePercent)) return res.status(409).json({ error: 'This module examination has already been passed.' });
+    const modulePassingMark = Math.max(60, module.examination.passingScorePercent);
+    if (attempts.docs.some((doc) => doc.data().passed === true && Number(doc.data().scorePercent) >= modulePassingMark)) return res.status(409).json({ error: 'This module examination has already been passed.' });
     if (attempts.size >= module.examination.maximumAttempts) return res.status(409).json({ error: 'The maximum number of module examination attempts has been reached.' });
     const selected = rotateQuestionSet(bank, attempts.size, count);
     const questionIds = shuffle(selected.map((question) => question.id));
@@ -774,7 +775,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const progressRecords = progress.docs.map((doc) => doc.data());
     const summary = summarizeCourseProgress(progressRecords, totalLessons);
     const { courseMasteryPercent, courseCompleted } = summary;
-    const assignmentsList = assignments.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const assignmentsList = assignments.docs.map((doc) => ({ ...doc.data(), id: doc.id })) as Array<Record<string, unknown> & { id: string; status?: string; scorePercent?: unknown } >;
     const requiredAssignments = TRUSTED_ASSIGNMENTS.filter((assignment) => assignment.courseId === course.id);
     const requiredAssignmentRecords = requiredAssignments.map((required) => assignmentsList.find((record) => record.id === required.id)).filter((record) => record !== undefined);
     const assignmentsComplete = requiredAssignments.every((required) => {
