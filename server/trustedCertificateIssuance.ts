@@ -3,7 +3,7 @@ import { calculateWeightedCertificateScore, certificateUnmetRequirements, summar
 
 type IssueTrustedCertificateInput = {
   db: Firestore; cycleRef: DocumentReference; certificateRef: DocumentReference; learnerCertificateRef: DocumentReference;
-  certificate: object; totalLessons: number; approvedAssignmentCount: number; approvedModuleCount: number; cycle: number;
+  certificate: object; totalLessons: number; approvedAssignmentCount: number; approvedModuleCount: number; weights?: { chapterAssessments: number; assignments: number; moduleExaminations: number; finalExamination: number }; cycle: number;
 };
 export type TrustedCertificateIssuanceResult =
   | { eligible: false; unmet: string[]; cycle: number; courseMasteryPercent: number }
@@ -39,6 +39,7 @@ export async function issueTrustedCertificateTransaction(input: IssueTrustedCert
       assignmentScores: assignmentRecords.map((record) => Number(record.scorePercent)),
       moduleExaminationScores: Array.from(passedModules.values()),
       finalExamScorePercent: Number(cycleSnapshot.data()?.examScorePercent || 0),
+      weights: input.weights,
     });
     const grade = scorePercent === null ? null : classifyAcademicGrade(scorePercent);
     if (scorePercent === null || scorePercent < 60 || !grade?.passed) return { eligible: false, unmet: ['overall weighted course grade must be at least 60%'], cycle: input.cycle, courseMasteryPercent };
