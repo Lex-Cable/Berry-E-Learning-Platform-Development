@@ -628,6 +628,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
         </div>
 
         {/* Course introduction, objectives and assessment policy */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] gap-6 items-start">
+          <div className="space-y-6 min-w-0">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <section className="lg:col-span-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
             <div className="flex items-center gap-2 mb-3"><BookOpen size={17} className="text-purple-600" /><h3 className="font-extrabold text-slate-900">Course introduction</h3></div>
@@ -657,14 +659,14 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
               <div className="flex items-center gap-2">
                 <Award size={18} className="text-amber-400" />
                 <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
-                  Official CBC Competency Exam
+                  Official Course Final Examination
                 </span>
               </div>
               <h3 className="font-extrabold text-lg text-white">
                 {activeCourse.exam.title}
               </h3>
               <p className="text-xs text-purple-200">
-                Score {activeCourse.exam.passingScorePercent}% or higher to unlock the verified credential.
+                Score at least 50%. The overall course grade and every required component must also be passed for a certificate.
               </p>
             </div>
 
@@ -678,6 +680,8 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
           </div>
         )}
 
+          </div>
+          <aside className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
         {/* Course Syllabus / Table of Contents */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -718,6 +722,7 @@ export const MyLearningView: React.FC<MyLearningViewProps> = ({
             ))}
 
           </div>
+          </aside>
         </div>
       </div>
     );
