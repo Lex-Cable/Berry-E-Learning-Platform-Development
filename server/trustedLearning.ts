@@ -1057,7 +1057,7 @@ router.post('/api/certificates/courses/:courseId/issue', requireFirebaseAuth, as
     const certificateRef = adminDb!.collection('trustedCertificates').doc(credentialId);
     const learnerCertificateRef = adminDb!
       .collection('users').doc(uid)
-      .collection('trustedCertificates').doc(course.id);
+      .collection('trustedCertificates').doc(`${course.id}_${cycle}`);
 
     const certificate: CertificateRecord & { uid: string; trusted: true; cycle: number } = {
       id: credentialId,
