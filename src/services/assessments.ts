@@ -31,6 +31,10 @@ export const submitInteractiveActivity = (
   lessonCompleted: boolean;
   progress: LessonMasteryState;
 }>(`/api/assessments/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/activities/${encodeURIComponent(activityId)}/submit`, { answer });
+export type ModuleExamQuestion = ExamQuestion;
+export type ModuleExamAttempt = { id: string; moduleId: string; courseId: string; cycle: number; attemptNumber: number; answers: Record<string, number>; scorePercent: number; passingScorePercent: number; passed: boolean; submittedAt: string; trusted: true; results?: Record<string, { correct: boolean; correctAnswerIndex: number; explanation: string }> };
+export const getModuleExam = (courseId: string, moduleId: string) => request<{ moduleId: string; questions: ModuleExamQuestion[]; cycle: number; expiresAt: string; attemptNumber: number; passingScorePercent: number }>(`/api/assessments/courses/${encodeURIComponent(courseId)}/modules/${encodeURIComponent(moduleId)}/exam/questions`);
+export const submitModuleExam = (courseId: string, moduleId: string, answers: Record<string, number>) => request<{ attempt: ModuleExamAttempt; passed: boolean; scorePercent: number; passingScorePercent: number }>(`/api/assessments/courses/${encodeURIComponent(courseId)}/modules/${encodeURIComponent(moduleId)}/exam/submit`, { answers });
 export const getCourseExam=(courseId:string)=>request<{questions:ExamQuestion[];cycle:number;expiresAt:string}>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/questions`);
 export const submitCourseExam=(courseId:string,answers:Record<string,number>)=>request<ExamResult>(`/api/assessments/courses/${encodeURIComponent(courseId)}/exam/submit`,{answers});
 export const getCourseStatus=(courseId:string)=>request<CourseStatus>(`/api/learning/courses/${encodeURIComponent(courseId)}/status`);
