@@ -656,7 +656,6 @@ router.post('/api/learning/courses/:courseId/retake', requireFirebaseAuth, async
     if (!context) return;
     const { course, uid } = context;
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
-    const assignmentAttemptSnapshots = await Promise.all(assignments.docs.map((document) => document.ref.collection('attempts').get()));
     if (totalLessons === 0) return res.status(409).json({ error: 'This course has no lessons to retake.' });
     const stateRef = adminDb!.collection('users').doc(uid).collection('trustedCourses').doc(course.id);
     const nextCycle = await adminDb!.runTransaction(async (transaction) => {
@@ -771,6 +770,7 @@ router.get('/api/learning/courses/:courseId/status', requireFirebaseAuth, async 
     const examHistory = historySnapshots.flatMap((snapshot) => snapshot.docs.map((document) => document.data()))
       .sort((left, right) => String(left.submittedAt || '').localeCompare(String(right.submittedAt || '')));
     const totalLessons = course.chapters.reduce((count, chapter) => count + chapter.lessons.length, 0);
+    const assignmentAttemptSnapshots = await Promise.all(assignments.docs.map((document) => document.ref.collection('attempts').get()));
     const progressRecords = progress.docs.map((doc) => doc.data());
     const summary = summarizeCourseProgress(progressRecords, totalLessons);
     const { courseMasteryPercent, courseCompleted } = summary;
