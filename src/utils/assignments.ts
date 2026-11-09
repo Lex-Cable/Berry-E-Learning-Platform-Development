@@ -1,28 +1,15 @@
 import type { Assignment, AssignmentRubricCriterion, AssignmentSubmissionStatus, Course } from '../types';
 
-const REFLECTION_PROMPTS = [
-  'Explain the main idea from this lesson in your own words.',
-  'Which learning objective was most important, and why?',
-  'Describe the steps or process you learned.',
-  'Give a practical example of how this knowledge is used.',
-  'How would you explain this concept to someone younger than you?',
-  'What evidence or reasoning supports your answer?',
-  'Describe one mistake a learner might make and how to correct it.',
-  'Connect this lesson to something you learned previously.',
-  'What part of the lesson was most challenging, and how did you work through it?',
-  'Create a short real-life situation where this lesson would be useful.',
-  'What question do you still have about this topic?',
-  'What would you like to practise further, and what is your plan?',
-];
+
 
 function createSubjectAssignmentBrief(course: Course, chapter: Course['chapters'][number], lesson: Course['chapters'][number]['lessons'][number]): { title: string; instructions: string; rubric: AssignmentRubricCriterion[] } {
   const subject = `${course.subject} ${course.title}`.toLowerCase();
   const objectives = lesson.objectives.length ? lesson.objectives : [lesson.title];
-  const objectiveText = objectives.map((objective, index) => `${index + 1}. ${objective}`).join('\\n');
-  const context = `Course: ${course.title}\\nChapter: ${chapter.title}\\nLesson: ${lesson.title}\\nLearning objectives:\\n${objectiveText}`;
+  const objectiveText = objectives.map((objective, index) => `${index + 1}. ${objective}`).join('\n');
+  const context = `Course: ${course.title}\nChapter: ${chapter.title}\nLesson: ${lesson.title}\nLearning objectives:\n${objectiveText}`;
   if (/computer|software|programming|coding|computer science|web development|data science|algorithm/.test(subject)) return {
     title: `${course.subject} Practical Task: ${lesson.title}`,
-    instructions: `${context}\\n\\nPRACTICAL TASK\\nBuild a small program, algorithm, or working technical example that demonstrates the objectives above. Include the source code or pseudocode, explain the important steps, provide at least two test cases with expected and actual outputs, and identify one error or edge case you checked.\\n\\nDELIVERABLES\\n1. Source code or pseudocode.\\n2. Test cases and outputs.\\n3. A short explanation of your design decisions and how the work meets each objective.\\n4. Any relevant screenshots or project link.\\n\\nSubmit your own work and identify any tools or references used.`,
+    instructions: `${context}\n\nPRACTICAL TASK\nBuild a small program, algorithm, or working technical example that demonstrates the objectives above. Include the source code or pseudocode, explain the important steps, provide at least two test cases with expected and actual outputs, and identify one error or edge case you checked.\n\nDELIVERABLES\n1. Source code or pseudocode.\n2. Test cases and outputs.\n3. A short explanation of your design decisions and how the work meets each objective.\n4. Any relevant screenshots or project link.\n\nSubmit your own work and identify any tools or references used.`,
     rubric: [
       { id: 'technical-accuracy', description: 'Technical solution is correct and addresses the learning objectives', marks: 8, keywords: [...objectives, 'algorithm', 'code', 'function', 'output', 'logic'] },
       { id: 'testing-debugging', description: 'Provides meaningful test cases, expected outputs and debugging evidence', marks: 6, keywords: ['test', 'input', 'output', 'debug', 'error', 'edge case', 'expected'] },
@@ -31,7 +18,7 @@ function createSubjectAssignmentBrief(course: Course, chapter: Course['chapters'
   };
   if (/account|finance|bookkeep|business|management|econom|entrepreneur|marketing/.test(subject)) return {
     title: `${course.subject} Applied Case Assignment: ${lesson.title}`,
-    instructions: `${context}\\n\\nCASE STUDY TASK\\nPrepare a short professional case response applying the lesson objectives to a realistic organisation or business situation. Show all relevant calculations, schedules or statement extracts where applicable. Explain your assumptions, interpret the results, and make a justified recommendation.\\n\\nDELIVERABLES\\n1. A clearly labelled case analysis.\\n2. Calculations, tables or statement extracts with workings.\\n3. Interpretation of the results and the relevant business or financial implications.\\n4. A practical recommendation supported by evidence.\\n\\nState any assumptions and cite any external sources used.`,
+    instructions: `${context}\n\nCASE STUDY TASK\nPrepare a short professional case response applying the lesson objectives to a realistic organisation or business situation. Show all relevant calculations, schedules or statement extracts where applicable. Explain your assumptions, interpret the results, and make a justified recommendation.\n\nDELIVERABLES\n1. A clearly labelled case analysis.\n2. Calculations, tables or statement extracts with workings.\n3. Interpretation of the results and the relevant business or financial implications.\n4. A practical recommendation supported by evidence.\n\nState any assumptions and cite any external sources used.`,
     rubric: [
       { id: 'concept-accuracy', description: 'Applies the business, accounting or financial concepts accurately', marks: 8, keywords: [...objectives, 'account', 'revenue', 'expense', 'profit', 'cost', 'business', 'management'] },
       { id: 'analysis-calculations', description: 'Shows correct calculations, schedules and interpretation', marks: 6, keywords: ['calculation', 'total', 'balance', 'statement', 'analysis', 'result', 'ratio', 'variance'] },
@@ -40,7 +27,7 @@ function createSubjectAssignmentBrief(course: Course, chapter: Course['chapters'
   };
   if (/math|numeracy|algebra|geometry|statistics/.test(subject)) return {
     title: `${course.subject} Problem-Solving Assignment: ${lesson.title}`,
-    instructions: `${context}\\n\\nPROBLEM-SOLVING TASK\\nCreate and solve three worked examples that demonstrate the objectives above. Show every important step, explain the method used, check each answer using a second method where possible, and describe one common error to avoid.\\n\\nDELIVERABLES\\n1. Three clearly stated problems.\\n2. Complete working and final answers with units where relevant.\\n3. A check or verification for each answer.\\n4. A short explanation of the method and one common misconception.`,
+    instructions: `${context}\n\nPROBLEM-SOLVING TASK\nCreate and solve three worked examples that demonstrate the objectives above. Show every important step, explain the method used, check each answer using a second method where possible, and describe one common error to avoid.\n\nDELIVERABLES\n1. Three clearly stated problems.\n2. Complete working and final answers with units where relevant.\n3. A check or verification for each answer.\n4. A short explanation of the method and one common misconception.`,
     rubric: [
       { id: 'method', description: 'Chooses and applies an appropriate mathematical method', marks: 8, keywords: [...objectives, 'formula', 'method', 'equation', 'calculate', 'solve'] },
       { id: 'working', description: 'Shows accurate step-by-step calculations and answers', marks: 6, keywords: ['step', 'therefore', 'equals', 'substitute', 'calculate', 'answer', 'working'] },
@@ -49,7 +36,7 @@ function createSubjectAssignmentBrief(course: Course, chapter: Course['chapters'
   };
   if (/science|biology|chemistry|physics|agriculture|environment/.test(subject)) return {
     title: `${course.subject} Investigation Assignment: ${lesson.title}`,
-    instructions: `${context}\\n\\nINVESTIGATION TASK\\nDesign a short investigation or evidence-based explanation that demonstrates the objectives above. State the question, identify variables or factors, list materials, describe a safe method, present sample observations or a labelled model, and draw a conclusion supported by evidence. Do not claim to have conducted an experiment you did not perform.\\n\\nDELIVERABLES\\n1. Investigation question and prediction.\\n2. Variables, materials and safe method.\\n3. Observations, data table or labelled model.\\n4. Evidence-based conclusion and limitations.`,
+    instructions: `${context}\n\nINVESTIGATION TASK\nDesign a short investigation or evidence-based explanation that demonstrates the objectives above. State the question, identify variables or factors, list materials, describe a safe method, present sample observations or a labelled model, and draw a conclusion supported by evidence. Do not claim to have conducted an experiment you did not perform.\n\nDELIVERABLES\n1. Investigation question and prediction.\n2. Variables, materials and safe method.\n3. Observations, data table or labelled model.\n4. Evidence-based conclusion and limitations.`,
     rubric: [
       { id: 'scientific-understanding', description: 'Explains the scientific concepts and objectives accurately', marks: 8, keywords: [...objectives, 'process', 'organism', 'reaction', 'force', 'energy', 'system'] },
       { id: 'method-evidence', description: 'Uses an appropriate method and presents relevant evidence or data', marks: 6, keywords: ['method', 'variable', 'materials', 'observation', 'data', 'measure', 'evidence'] },
@@ -58,7 +45,7 @@ function createSubjectAssignmentBrief(course: Course, chapter: Course['chapters'
   };
   return {
     title: `${course.subject} Applied Learning Assignment: ${lesson.title}`,
-    instructions: `${context}\\n\\nAPPLICATION TASK\\nPrepare a structured response showing how the lesson objectives apply to a real situation, text, community issue or practical example relevant to this subject. Explain the key concepts, provide specific evidence, compare an alternative where appropriate, and finish with a reasoned conclusion.\\n\\nDELIVERABLES\\n1. A clear introduction and explanation of the relevant concepts.\\n2. A specific example, case or application.\\n3. Evidence and reasoning that support your analysis.\\n4. A conclusion and one area for further learning.\\n\\nUse your own words and cite any sources you rely on.`,
+    instructions: `${context}\n\nAPPLICATION TASK\nPrepare a structured response showing how the lesson objectives apply to a real situation, text, community issue or practical example relevant to this subject. Explain the key concepts, provide specific evidence, compare an alternative where appropriate, and finish with a reasoned conclusion.\n\nDELIVERABLES\n1. A clear introduction and explanation of the relevant concepts.\n2. A specific example, case or application.\n3. Evidence and reasoning that support your analysis.\n4. A conclusion and one area for further learning.\n\nUse your own words and cite any sources you rely on.`,
     rubric: [
       { id: 'understanding', description: 'Explains the key subject concepts and objectives accurately', marks: 8, keywords: [...objectives, 'concept', 'principle', 'explain', 'meaning'] },
       { id: 'application', description: 'Applies the learning to a relevant example with supporting evidence', marks: 6, keywords: ['example', 'for instance', 'such as', 'application', 'because', 'evidence', 'therefore'] },
@@ -67,7 +54,7 @@ function createSubjectAssignmentBrief(course: Course, chapter: Course['chapters'
   };
 }
 
-/** Creates one lesson-specific reflective assignment for every real lesson. */
+/** Creates one lesson-specific assignment using the course subject and approved lesson objectives. */
 export function buildCourseAssignments(courses: Course[]): Assignment[] {
   const seenCourseIds = new Set<string>();
   const assignments: Assignment[] = [];
@@ -76,15 +63,6 @@ export function buildCourseAssignments(courses: Course[]): Assignment[] {
     seenCourseIds.add(course.id);
     for (const chapter of course.chapters) {
       for (const lesson of chapter.lessons) {
-        const lessonWords = new Set<string>();
-        const addWords = (value: string) => value.toLowerCase().split(/[^a-z0-9']+/).forEach((word) => {
-          if (word.length >= 4) lessonWords.add(word);
-        });
-        addWords(course.subject);
-        addWords(chapter.title);
-        addWords(lesson.title);
-        lesson.objectives.forEach(addWords);
-        const keywords = Array.from(lessonWords).slice(0, 80);
         const brief = createSubjectAssignmentBrief(course, chapter, lesson);
         assignments.push({
           id: `assignment-${course.id}-${lesson.id}`,
