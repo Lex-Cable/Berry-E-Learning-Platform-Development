@@ -173,6 +173,9 @@ export interface CertificateRecord {
   curriculum: Curriculum;
   issuedDate: string;
   scorePercent: number;
+  grade?: 'A' | 'B' | 'C' | 'D' | 'F';
+  classification?: 'Distinction' | 'Merit' | 'Credit' | 'Pass' | 'Not passed';
+  verificationUrl?: string;
   authority: string;
   verified: boolean;
   seniorPathway?: SeniorPathway;
