@@ -121,6 +121,12 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activityDraftLoadedKey, setActivityDraftLoadedKey] = useState<string | null>(null);
   const [masteryDraftLoadedKey, setMasteryDraftLoadedKey] = useState<string | null>(null);
   const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
+  const [liveActivityScores, setLiveActivityScores] = useState<Record<string, number>>({});
+  const activityScores = { ...Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, result.scorePercent])), ...liveActivityScores };
+  const activityPracticeReady = lesson.activities.length === 0 || (
+    lesson.activities.every((activity) => Object.prototype.hasOwnProperty.call(activityScores, activity.id)) &&
+    lesson.activities.reduce((total, activity) => total + (activityScores[activity.id] || 0), 0) / lesson.activities.length >= 80
+  );
   const savedActivityResultsKey = JSON.stringify(savedActivityResults);
   const savedMasteryAnswersKey = JSON.stringify(savedMasteryAnswers);
   const savedMasteryResultsKey = JSON.stringify(savedMasteryResults);
@@ -182,12 +188,18 @@ export const LessonView: React.FC<LessonViewProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    setQuizLoading(true); setQuizError(null); setQuizQuestions([]);
+    setQuizQuestions([]);
+    if (!activityPracticeReady) {
+      setQuizLoading(false);
+      setQuizError(null);
+      return () => { cancelled = true; };
+    }
+    setQuizLoading(true); setQuizError(null);
     getLessonAssessment(course.id, lessonId).then((questions) => { if (!cancelled) setQuizQuestions(questions); })
       .catch((error) => { if (!cancelled) setQuizError(error instanceof Error ? error.message : 'Unable to load assessment.'); })
       .finally(() => { if (!cancelled) setQuizLoading(false); });
     return () => { cancelled = true; };
-  }, [course.id, lessonId]);
+  }, [course.id, lessonId, activityPracticeReady]);
 
   // Keep hands-on responses on this device so learners can leave a lesson
   // and return without losing an unfinished activity.
@@ -314,19 +326,10 @@ export const LessonView: React.FC<LessonViewProps> = ({
         [activity.id]: result.submission.feedback + ` Interactive score: ${result.interactiveScorePercent}%.`,
       }));
       if (result.lessonCompleted) onSaveMastery(result.progress);
-      // The mastery questions may have been requested before the learner
-      // completed practice and therefore returned a 409 locked response.
-      // Reload them immediately after the trusted activity score is saved.
-      setQuizError(null);
-      setQuizLoading(true);
-      try {
-        const refreshedQuestions = await getLessonAssessment(course.id, lessonId);
-        setQuizQuestions(refreshedQuestions);
-      } catch (assessmentError) {
-        setQuizError(assessmentError instanceof Error ? assessmentError.message : 'Practice was saved, but the mastery assessment could not be refreshed.');
-      } finally {
-        setQuizLoading(false);
-      }
+      // Update the local projection from the trusted server response. The
+      // assessment loader reacts only when every activity is saved and the
+      // aggregate practice score reaches 80%, avoiding premature 409 requests.
+      setLiveActivityScores((previous) => ({ ...previous, [activity.id]: result.submission.scorePercent }));
     } catch (error) {
       setActivitySubmissionResults((previous) => ({
         ...previous,
