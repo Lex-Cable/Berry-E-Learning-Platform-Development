@@ -6,6 +6,8 @@ export interface CertificateRequirements {
   examPassed: boolean;
   assignments: TrustedAssignmentSnapshot[];
   approvedAssignmentCount: number;
+  moduleExaminations: Array<{ moduleId: string; scorePercent: number; passed: boolean }>;
+  approvedModuleCount: number;
   certificateAlreadyIssued: boolean;
   interactiveScorePercent?: number;
   approvedInteractiveLessonCount?: number;
@@ -63,26 +65,24 @@ export function selectRequiredQuestionSet<T>(questions: T[], requiredCount: numb
 }
 
 export function calculateWeightedCertificateScore(input: {
-  assignmentScores: number[];
-  examScorePercent: number;
-  masteryScores: number[];
-  interactiveScores: number[];
-}): number {
-  const average = (values: number[]) => values.length
-    ? values.reduce((total, score) => total + Math.max(0, Math.min(100, Number(score) || 0)), 0) / values.length
-    : 0;
-  return Math.round(
-    average(input.assignmentScores) * 0.25 +
-    Math.max(0, Math.min(100, Number(input.examScorePercent) || 0)) * 0.35 +
-    average(input.masteryScores) * 0.20 +
-    average(input.interactiveScores) * 0.20
-  );
+  chapterAssessmentScores: number[]; assignmentScores: number[]; moduleExaminationScores: number[]; finalExamScorePercent: number;
+  weights?: { chapterAssessments: number; assignments: number; moduleExaminations: number; finalExamination: number };
+}): number | null {
+  const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const chapterAssessmentPercent = average(input.chapterAssessmentScores);
+  const assignmentPercent = average(input.assignmentScores);
+  const moduleExaminationPercent = average(input.moduleExaminationScores);
+  if (chapterAssessmentPercent === null || assignmentPercent === null || moduleExaminationPercent === null) return null;
+  return calculateWeightedAcademicGrade({ chapterAssessmentPercent, assignmentPercent, moduleExaminationPercent, finalExaminationPercent: input.finalExamScorePercent, weights: input.weights });
 }
 
 export function certificateUnmetRequirements(input: CertificateRequirements): string[] {
   const summary = summarizeCourseProgress(input.progress, input.totalLessons);
   const unmet: string[] = [];
   if (!summary.courseCompleted) unmet.push(`course completion (${summary.completedCount}/${input.totalLessons} lessons)`);
+  if (input.progress.some((record) => record.isMastered !== true || Number((record as { scorePercent?: number }).scorePercent) < 70)) unmet.push('all chapter assessments must be passed at 70% or higher');
+  if (input.moduleExaminations.length < input.approvedModuleCount) unmet.push(`module examinations completed (${input.moduleExaminations.length}/${input.approvedModuleCount})`);
+  input.moduleExaminations.forEach((exam) => { if (!exam.passed || exam.scorePercent < 60) unmet.push(`module examination ${exam.moduleId} is not passed at 60% or higher`); });
   if (!input.examPassed) unmet.push('final exam pass (50% or higher)');
   if (input.approvedAssignmentCount === 0) unmet.push('approved assignment and marking rubric not configured for this course');
   if (input.assignments.length < input.approvedAssignmentCount) unmet.push(`topic assignments completed (${input.assignments.length}/${input.approvedAssignmentCount})`);
