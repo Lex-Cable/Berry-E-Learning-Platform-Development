@@ -81,6 +81,17 @@ test('all shipped Berry course catalogues contain no repeated assessment prompts
       assert.ok((course.exam?.questions.length || 0) <= 30, `${course.id} final exam cap`);
       assert.equal(course.exam?.durationMinutes, 60, `${course.id} exam duration`);
       const examPrompts = (course.exam?.questions || []).map((question) => question.question.trim().toLowerCase());
+      const allLessonPrompts = course.chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => [
+        ...lesson.quizQuestions.map((question) => question.question.trim().toLowerCase()),
+        ...(lesson.moduleExamQuestions || []).map((question) => question.question.trim().toLowerCase()),
+        ...lesson.activities.map((activity) => activity.instructions.trim().toLowerCase()),
+      ]));
+      assert.equal(new Set(allLessonPrompts).size, allLessonPrompts.length, `${course.id} repeated lesson/module/activity prompts`);
+      const modulePrompts = course.chapters.flatMap((chapter) => chapter.lessons.flatMap((lesson) => (lesson.moduleExamQuestions || []).map((question) => question.question.trim().toLowerCase())));
+      assert.equal(new Set(modulePrompts).size, modulePrompts.length, `${course.id} repeated module prompts`);
+      assert.ok(modulePrompts.every((prompt) => !examPrompts.includes(prompt)), `${course.id} module/final prompt overlap`);
+      assert.ok(modulePrompts.every((prompt) => !course.chapters.some((chapter) => chapter.lessons.some((lesson) => lesson.quizQuestions.some((question) => question.question.trim().toLowerCase() === prompt)))), `${course.id} mastery/module prompt overlap`);
+
       assert.equal(new Set(examPrompts).size, examPrompts.length, `${course.id} repeated exam prompt`);
       for (const chapter of course.chapters) {
         for (const lesson of chapter.lessons) {
