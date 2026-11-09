@@ -17,6 +17,12 @@ export async function issueTrustedCertificateTransaction(input: IssueTrustedCert
       transaction.get(input.cycleRef.collection('moduleExamAttempts')),
       transaction.get(input.cycleRef.collection('chapterAssessmentAttempts')),
     ]);
+    // Idempotent retry: if a credential already exists for this learner/course
+    // cycle, return that exact trusted record instead of reporting a misleading
+    // 409 duplicate. The transaction still guarantees only one record is created.
+    if (existingCertificate.exists) {
+      return { eligible: true, certificate: existingCertificate.data() ?? {} };
+    }
     const progressRecords = progress.docs.map((document) => document.data());
     const assignmentRecords = assignments.docs.map((document) => document.data());
     const moduleRecords = moduleAttempts.docs.map((document) => document.data());
