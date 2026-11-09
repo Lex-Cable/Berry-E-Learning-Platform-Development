@@ -123,9 +123,10 @@ export const LessonView: React.FC<LessonViewProps> = ({
   const [activitySubmissionResults, setActivitySubmissionResults] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, `${result.feedback} Interactive score: ${result.scorePercent}%.`])));
   const [liveActivityScores, setLiveActivityScores] = useState<Record<string, number>>({});
   const activityScores = { ...Object.fromEntries(Object.entries(savedActivityResults).map(([id, result]) => [id, result.scorePercent])), ...liveActivityScores };
-  const activityPracticeReady = lesson.activities.length === 0 || (
-    lesson.activities.every((activity) => Object.prototype.hasOwnProperty.call(activityScores, activity.id)) &&
-    lesson.activities.reduce((total, activity) => total + (activityScores[activity.id] || 0), 0) / lesson.activities.length >= 80
+  const currentActivities = currentLesson?.activities ?? [];
+  const activityPracticeReady = currentActivities.length === 0 || (
+    currentActivities.every((activity) => Object.prototype.hasOwnProperty.call(activityScores, activity.id)) &&
+    currentActivities.reduce((total, activity) => total + (activityScores[activity.id] || 0), 0) / currentActivities.length >= 80
   );
   const savedActivityResultsKey = JSON.stringify(savedActivityResults);
   const savedMasteryAnswersKey = JSON.stringify(savedMasteryAnswers);
