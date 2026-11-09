@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Play,
   CheckCircle2,
@@ -16,6 +16,8 @@ import {
   Compass,
 } from 'lucide-react';
 import { LearnerProfile, Course, TaskItem, AppNotification, LessonMasteryState } from '../../types';
+import { firebaseAuth } from '../../lib/firebase';
+import { loadLastOpenedLesson } from '../../services/learningProgress';
 
 interface DashboardViewProps {
   learner: LearnerProfile;
@@ -41,8 +43,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Find current enrolled courses
   const enrolled = courses.filter((c) => learner.enrolledCourseIds.includes(c.id));
   const activeCourse = enrolled[0] || courses[0];
+  const [lastOpenedLessons, setLastOpenedLessons] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const localRecords: Record<string, string> = {};
+    for (const course of enrolled) {
+      try { const saved = localStorage.getItem(`berry_last_lesson_${learner.id}_${course.id}`); if (saved) localRecords[course.id] = saved; } catch { /* local resume is optional */ }
+    }
+    setLastOpenedLessons(localRecords);
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid) Promise.all(enrolled.map(async (course) => [course.id, await loadLastOpenedLesson(uid, course.id).catch(() => null)] as const))
+      .then((records) => { if (!cancelled) setLastOpenedLessons((current) => ({ ...current, ...Object.fromEntries(records.filter((record): record is readonly [string, string] => typeof record[1] === 'string')) })); });
+    return () => { cancelled = true; };
+  }, [learner.id, learner.enrolledCourseIds.join('|'), courses]);
   const activeCourseLessons = activeCourse?.chapters.flatMap((chapter) => chapter.lessons) || [];
-  const resumeLesson = activeCourseLessons.find((lesson) => masteryRecords[lesson.id]?.isCompleted !== true) || activeCourseLessons[0];
+  const savedResumeLesson = activeCourse ? activeCourseLessons.find((lesson) => lesson.id === lastOpenedLessons[activeCourse.id]) : undefined;
+  const resumeLesson = savedResumeLesson || activeCourseLessons.find((lesson) => masteryRecords[lesson.id]?.isCompleted !== true) || activeCourseLessons[0];
   const courseCompletionPercent = (course: Course) => {
     const lessons = course.chapters.flatMap((chapter) => chapter.lessons);
     return lessons.length ? Math.round((lessons.filter((lesson) => masteryRecords[lesson.id]?.isCompleted === true).length / lessons.length) * 100) : 0;
